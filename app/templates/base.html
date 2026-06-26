@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>{{ app_name }}</h1>
+      <p>Single-node KVM/libvirt manager</p>
+    </div>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/vms/new">Create VM</a>
+      <a href="/docs">API Docs</a>
+    </nav>
+  </header>
+  <main>
+    {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

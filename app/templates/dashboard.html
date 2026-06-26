@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="grid cards">
+  <div class="card"><strong>CPU</strong><span>{{ host.cpu_percent }}%</span><small>{{ host.cpu_count }} logical CPUs</small></div>
+  <div class="card"><strong>Memory</strong><span>{{ host.memory_percent }}%</span><small>{{ host.memory_used_mb }} / {{ host.memory_total_mb }} MB</small></div>
+  <div class="card"><strong>Disk</strong><span>{{ host.disk_percent }}%</span><small>{{ host.disk_used_gb }} / {{ host.disk_total_gb }} GB</small></div>
+  <div class="card"><strong>VMs</strong><span>{{ vms|length }}</span><small>libvirt domains</small></div>
+</section>
+
+<section>
+  <div class="section-title"><h2>Virtual Machines</h2><a class="button" href="/vms/new">Create VM</a></div>
+  <table>
+    <thead><tr><th>Name</th><th>State</th><th>vCPU</th><th>Memory</th><th>Disks</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for vm in vms %}
+      <tr>
+        <td>{{ vm.name }}</td>
+        <td><span class="pill">{{ vm.state }}</span></td>
+        <td>{{ vm.vcpus }}</td>
+        <td>{{ vm.memory_mb }} MB</td>
+        <td>{% for disk in vm.disks %}<small>{{ disk }}</small><br>{% endfor %}</td>
+        <td class="actions">
+          <form method="post" action="/ui/vms/{{ vm.name }}/start"><button>Start</button></form>
+          <form method="post" action="/ui/vms/{{ vm.name }}/shutdown"><button>Shutdown</button></form>
+          <form method="post" action="/ui/vms/{{ vm.name }}/reboot"><button>Reboot</button></form>
+          <form method="post" action="/ui/vms/{{ vm.name }}/force-stop"><button class="danger">Force Stop</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6">No VMs found. The empire starts with a single empty table.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="grid two">
+  <div>
+    <h2>Storage Pools</h2>
+    <table><thead><tr><th>Name</th><th>Active</th><th>Available</th></tr></thead><tbody>
+      {% for pool in pools %}<tr><td>{{ pool.name }}</td><td>{{ pool.active }}</td><td>{{ pool.available_gb }} GB</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <div>
+    <h2>Networks</h2>
+    <table><thead><tr><th>Name</th><th>Active</th><th>Bridge</th></tr></thead><tbody>
+      {% for net in networks %}<tr><td>{{ net.name }}</td><td>{{ net.active }}</td><td>{{ net.bridge }}</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</section>
+
+<section>
+  <h2>Recent Events</h2>
+  <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Message</th></tr></thead><tbody>
+    {% for event in events %}
+      <tr><td>{{ event.created_at }}</td><td>{{ event.actor }}</td><td>{{ event.action }}</td><td>{{ event.target }}</td><td>{{ event.message }}</td></tr>
+    {% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

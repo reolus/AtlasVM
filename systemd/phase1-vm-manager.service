@@ -1,0 +1,17 @@
+[Unit]
+Description=Phase One VM Manager
+After=network-online.target libvirtd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=phase1vm
+Group=phase1vm
+WorkingDirectory=/opt/phase1-vm-manager
+EnvironmentFile=/opt/phase1-vm-manager/.env
+ExecStart=/opt/phase1-vm-manager/.venv/bin/uvicorn app.main:app --host ${APP_HOST} --port ${APP_PORT}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
