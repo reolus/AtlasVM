@@ -2,8 +2,6 @@
 
 A small single-node virtualization manager for Debian/Ubuntu using FastAPI, libvirt, KVM/QEMU, Linux bridges, and a simple web UI.
 
-This is not a Proxmox replacement. It is the first practical brick in that wall, because apparently we needed another wall made of daemons.
-
 ## Features
 
 - Web dashboard
