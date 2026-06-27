@@ -568,6 +568,59 @@ def tasks_page(request: Request, db: Session = Depends(get_db), user: str = Depe
     return templates.TemplateResponse('tasks.html', {'request': request, 'app_name': settings.app_name, 'tasks': tasks})
 
 
+
+@app.post('/backups/restore')
+def restore_backup_as_new_vm(
+    backup_path: str = Form(...),
+    new_name: str = Form(...),
+    storage_pool: str = Form(''),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_operator),
+):
+    from urllib.parse import quote
+    from app.services.task_runner import enqueue_task
+    from app.services.backup_service import BackupService
+
+    backup_path = backup_path.strip()
+    new_name = new_name.strip()
+    storage_pool = storage_pool.strip() or None
+
+    if not backup_path:
+        return RedirectResponse(url='/backups?error=Backup path is required', status_code=303)
+
+    if not new_name:
+        return RedirectResponse(url='/backups?error=New VM name is required', status_code=303)
+
+    def restore_job():
+        service = BackupService()
+        if hasattr(service, 'restore_as_new_vm'):
+            return service.restore_as_new_vm(backup_path, new_name, storage_pool=storage_pool)
+        if hasattr(service, 'restore_backup_as_new_vm'):
+            return service.restore_backup_as_new_vm(backup_path, new_name, storage_pool=storage_pool)
+        if hasattr(service, 'restore_as_new'):
+            return service.restore_as_new(backup_path, new_name, storage_pool=storage_pool)
+        raise RuntimeError('BackupService has no restore-as-new method.')
+
+    try:
+        task = enqueue_task(
+            db=db,
+            user=user,
+            task_type='restore_backup',
+            target=new_name,
+            description=f'Restore backup as new VM: {new_name}',
+            func=restore_job,
+        )
+        return RedirectResponse(
+            url=f'/tasks?message={quote("Restore queued: " + new_name)}',
+            status_code=303,
+        )
+    except Exception as exc:
+        return RedirectResponse(
+            url=f'/backups?error={quote(str(exc))}',
+            status_code=303,
+        )
+
+
 @app.get('/backups', response_class=HTMLResponse)
 def backups_page(request: Request, user: str = Depends(require_user)):
     backups = BackupService().list_backups()
