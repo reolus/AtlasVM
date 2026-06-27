@@ -104,3 +104,16 @@ curl -u admin:'YOUR_PASSWORD' http://127.0.0.1:8443/api/v1/vms
 ## Development Notes
 
 Phase 2 still runs privileged as root because it manages libvirt, storage files, and console proxies. Phase 3 should introduce a narrower service user and polkit rules instead of letting root handle everything like a medieval king with a flamethrower.
+
+## Phase 3
+
+Phase 3 adds a host/ZFS health dashboard, VM edit workflows, offline clone, shutdown-first backups, backup listing, definition restore, ZFS visibility/actions, safer delete confirmations, and AtlasVM Doctor.
+
+Important routes:
+
+- `/doctor` - AtlasVM sanity checks
+- `/zfs` - ZFS pools, datasets, snapshots, scrub
+- `/backups` - Backup inventory and definition restore
+- `/vms/{name}` - VM detail, edit, backup, clone, ISO attach/eject, add disk
+
+See `docs/PHASE_THREE_DESIGN.md` and `docs/PHASE_THREE_UPGRADE.md`.

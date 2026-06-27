@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     console_port_base: int = 6080
     console_port_max: int = 6099
 
+    backup_compression: str = 'zstd'
+    backup_require_shutdown: bool = True
+    backup_keep_last: int = 5
+
 
 @lru_cache
 def get_settings() -> Settings:

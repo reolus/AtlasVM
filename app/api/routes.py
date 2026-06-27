@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.models import DeleteVMOptions, SnapshotCreate, VMCreate
+from app.api.models import DeleteVMOptions, SnapshotCreate, VMBackupRequest, VMCloneRequest, VMCreate, VMEdit
 from app.core.auth import require_user
 from app.core.database import EventLog, TaskLog, get_db
 from app.core.logging import log_event
 from app.core.tasks import finish_task, start_task
 from app.services.console_service import ConsoleService
 from app.services.host_service import get_host_summary
+from app.services.backup_service import BackupService
+from app.services.doctor_service import run_doctor
+from app.services import zfs_service
 from app.services.libvirt_service import LibvirtService, VMCreateRequest
 
 router = APIRouter(prefix='/api/v1')
@@ -22,12 +25,27 @@ def libvirt_or_500() -> LibvirtService:
 
 @router.get('/health')
 def health() -> dict:
-    return {'status': 'ok', 'product': 'AtlasVM', 'phase': 2}
+    return {'status': 'ok', 'product': 'AtlasVM', 'phase': 3}
 
 
 @router.get('/host')
 def host_summary(user: str = Depends(require_user)) -> dict:
     return get_host_summary()
+
+
+@router.get('/doctor')
+def doctor(user: str = Depends(require_user)) -> list[dict]:
+    return run_doctor()
+
+
+@router.get('/zfs')
+def zfs(user: str = Depends(require_user)) -> dict:
+    return {'pools': zfs_service.pool_status(), 'datasets': zfs_service.datasets(), 'snapshots': zfs_service.snapshots()}
+
+
+@router.get('/backups')
+def backups(user: str = Depends(require_user)) -> list[dict]:
+    return BackupService().list_backups()
 
 
 @router.get('/storage-pools')
@@ -135,6 +153,51 @@ def get_vm(name: str, user: str = Depends(require_user)) -> dict:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     finally:
         lv.close()
+
+
+@router.put('/vms/{name}')
+def edit_vm(name: str, payload: VMEdit, db: Session = Depends(get_db), user: str = Depends(require_user)) -> dict:
+    lv = libvirt_or_500()
+    task = start_task(db, user, 'edit_vm', name)
+    try:
+        vm = lv.update_vm_basic(name, payload.memory_mb, payload.vcpus, payload.description)
+        log_event(db, user, 'edit_vm', name, 'Updated VM basics')
+        finish_task(db, task, 'success', 'VM updated')
+        return vm
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        lv.close()
+
+
+@router.post('/vms/{name}/clone')
+def clone_vm(name: str, payload: VMCloneRequest, db: Session = Depends(get_db), user: str = Depends(require_user)) -> dict:
+    lv = libvirt_or_500()
+    task = start_task(db, user, 'clone_vm', name)
+    try:
+        vm = lv.clone_vm(name, payload.new_name, payload.storage_pool)
+        log_event(db, user, 'clone_vm', name, f"Cloned to {payload.new_name}")
+        finish_task(db, task, 'success', f"Cloned to {payload.new_name}")
+        return vm
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        lv.close()
+
+
+@router.post('/vms/{name}/backup')
+def backup_vm(name: str, payload: VMBackupRequest = VMBackupRequest(), db: Session = Depends(get_db), user: str = Depends(require_user)) -> dict:
+    task = start_task(db, user, 'backup_vm', name)
+    try:
+        result = BackupService().create_backup(name, payload.compress, payload.require_shutdown)
+        log_event(db, user, 'backup_vm', name, result.archive_path or result.backup_dir)
+        finish_task(db, task, 'success', result.archive_path or result.backup_dir)
+        return result.__dict__
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post('/vms/{name}/{action}')

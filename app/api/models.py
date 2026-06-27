@@ -23,3 +23,19 @@ class DeleteVMOptions(BaseModel):
 class SnapshotCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     description: str | None = None
+
+
+class VMEdit(BaseModel):
+    memory_mb: int = Field(default=2048, ge=256)
+    vcpus: int = Field(default=2, ge=1)
+    description: str | None = None
+
+
+class VMBackupRequest(BaseModel):
+    compress: bool = True
+    require_shutdown: bool = True
+
+
+class VMCloneRequest(BaseModel):
+    new_name: str = Field(min_length=1, max_length=64)
+    storage_pool: str | None = None

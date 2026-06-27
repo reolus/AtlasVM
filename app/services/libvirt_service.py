@@ -205,6 +205,155 @@ class LibvirtService:
             domain.create()
         return self._domain_summary(domain)
 
+    def node_info(self) -> dict[str, Any]:
+        info = self.conn.getInfo()
+        return {
+            'model': info[0],
+            'memory_mb': info[1],
+            'cpus': info[2],
+            'mhz': info[3],
+            'nodes': info[4],
+            'sockets': info[5],
+            'cores': info[6],
+            'threads': info[7],
+            'uri': self.settings.libvirt_uri,
+        }
+
+    def update_vm_basic(self, name: str, memory_mb: int, vcpus: int, description: str | None = None) -> dict[str, Any]:
+        domain = self.conn.lookupByName(name)
+        if domain.isActive():
+            raise RuntimeError('Basic VM edits require the VM to be shut down')
+        if memory_mb < 256:
+            raise ValueError('memory_mb must be at least 256')
+        if vcpus < 1:
+            raise ValueError('vcpus must be at least 1')
+        root = ET.fromstring(domain.XMLDesc())
+        memory_kib = str(memory_mb * 1024)
+        for tag in ('memory', 'currentMemory'):
+            elem = root.find(f'./{tag}')
+            if elem is None:
+                elem = ET.SubElement(root, tag)
+                elem.attrib['unit'] = 'KiB'
+            elem.text = memory_kib
+        vcpu = root.find('./vcpu')
+        if vcpu is None:
+            vcpu = ET.SubElement(root, 'vcpu')
+        vcpu.text = str(vcpus)
+        desc = root.find('./description')
+        if desc is None:
+            desc = ET.SubElement(root, 'description')
+        desc.text = description or ''
+        self._redefine_domain(domain, root)
+        return self.get_vm(name)
+
+    def attach_iso(self, name: str, iso_path: str) -> None:
+        if iso_path and not os.path.exists(iso_path):
+            raise ValueError(f'ISO path does not exist: {iso_path}')
+        domain = self.conn.lookupByName(name)
+        if domain.isActive():
+            raise RuntimeError('Attach/eject ISO from AtlasVM currently requires the VM to be shut down')
+        root = ET.fromstring(domain.XMLDesc())
+        devices = root.find('./devices')
+        if devices is None:
+            raise RuntimeError('Domain XML has no devices section')
+        for disk in list(devices.findall('./disk')):
+            if disk.attrib.get('device') == 'cdrom':
+                devices.remove(disk)
+        cdrom = ET.SubElement(devices, 'disk', {'type': 'file', 'device': 'cdrom'})
+        ET.SubElement(cdrom, 'driver', {'name': 'qemu', 'type': 'raw'})
+        ET.SubElement(cdrom, 'source', {'file': iso_path})
+        ET.SubElement(cdrom, 'target', {'dev': 'sda', 'bus': 'sata'})
+        ET.SubElement(cdrom, 'readonly')
+        self._redefine_domain(domain, root)
+
+    def eject_iso(self, name: str) -> None:
+        domain = self.conn.lookupByName(name)
+        if domain.isActive():
+            raise RuntimeError('Attach/eject ISO from AtlasVM currently requires the VM to be shut down')
+        root = ET.fromstring(domain.XMLDesc())
+        devices = root.find('./devices')
+        if devices is None:
+            return
+        changed = False
+        for disk in list(devices.findall('./disk')):
+            if disk.attrib.get('device') == 'cdrom':
+                devices.remove(disk)
+                changed = True
+        if changed:
+            self._redefine_domain(domain, root)
+
+    def add_disk(self, name: str, size_gb: int, storage_pool: str | None = None) -> str:
+        domain = self.conn.lookupByName(name)
+        if domain.isActive():
+            raise RuntimeError('Adding disks from AtlasVM currently requires the VM to be shut down')
+        if size_gb < 1:
+            raise ValueError('size_gb must be at least 1')
+        storage_pool = storage_pool or self.settings.default_storage_pool
+        pool = self.conn.storagePoolLookupByName(storage_pool)
+        if not pool.isActive():
+            pool.create()
+        pool.refresh(0)
+        target_path = ET.fromstring(pool.XMLDesc()).findtext('./target/path')
+        if not target_path:
+            raise RuntimeError(f'Storage pool has no target path: {storage_pool}')
+        existing = self._domain_disk_paths(domain)
+        disk_index = len(existing) + 1
+        disk_path = str(Path(target_path) / f'{name}-disk{disk_index}.qcow2')
+        subprocess.run(['qemu-img', 'create', '-f', 'qcow2', disk_path, f'{size_gb}G'], check=True)
+        root = ET.fromstring(domain.XMLDesc())
+        devices = root.find('./devices')
+        if devices is None:
+            raise RuntimeError('Domain XML has no devices section')
+        target_dev = f'vd{chr(ord("a") + disk_index)}'
+        disk = ET.SubElement(devices, 'disk', {'type': 'file', 'device': 'disk'})
+        ET.SubElement(disk, 'driver', {'name': 'qemu', 'type': 'qcow2'})
+        ET.SubElement(disk, 'source', {'file': disk_path})
+        ET.SubElement(disk, 'target', {'dev': target_dev, 'bus': 'virtio'})
+        self._redefine_domain(domain, root)
+        pool.refresh(0)
+        return disk_path
+
+    def clone_vm(self, source_name: str, new_name: str, storage_pool: str | None = None) -> dict[str, Any]:
+        if not re.match(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', new_name):
+            raise ValueError('VM name must start with a letter or number and may contain letters, numbers, hyphens, and underscores')
+        try:
+            self.conn.lookupByName(new_name)
+            raise ValueError(f'VM already exists: {new_name}')
+        except libvirt.libvirtError:
+            pass
+        source = self.conn.lookupByName(source_name)
+        if source.isActive():
+            raise RuntimeError('Clone currently requires the source VM to be shut down')
+        storage_pool = storage_pool or self.settings.default_storage_pool
+        pool = self.conn.storagePoolLookupByName(storage_pool)
+        if not pool.isActive():
+            pool.create()
+        pool.refresh(0)
+        target_path = ET.fromstring(pool.XMLDesc()).findtext('./target/path')
+        if not target_path:
+            raise RuntimeError(f'Storage pool has no target path: {storage_pool}')
+        root = ET.fromstring(source.XMLDesc())
+        root.find('./name').text = new_name
+        uuid = root.find('./uuid')
+        if uuid is not None:
+            root.remove(uuid)
+        for idx, disk in enumerate(root.findall('./devices/disk')):
+            if disk.attrib.get('device') != 'disk':
+                continue
+            src = disk.find('source')
+            if src is None or 'file' not in src.attrib:
+                continue
+            source_disk = src.attrib['file']
+            new_disk = str(Path(target_path) / f'{new_name}-disk{idx + 1}.qcow2')
+            subprocess.run(['qemu-img', 'convert', '-O', 'qcow2', source_disk, new_disk], check=True)
+            src.attrib['file'] = new_disk
+        xml = ET.tostring(root, encoding='unicode')
+        domain = self.conn.defineXML(xml)
+        if domain is None:
+            raise RuntimeError('libvirt failed to define cloned VM')
+        pool.refresh(0)
+        return self._domain_summary(domain)
+
     def create_snapshot(self, vm_name: str, snapshot_name: str, description: str | None = None) -> dict[str, Any]:
         domain = self.conn.lookupByName(vm_name)
         self._validate_snapshot_name(snapshot_name)
@@ -250,12 +399,14 @@ class LibvirtService:
                 return None
             port = graphics.attrib.get('port')
             if port and port != '-1':
-                return str(int(port) - 5900) if not port.startswith(':') else port
+                return f":{int(port) - 5900}"
         except Exception:
             pass
         try:
             result = subprocess.run(['virsh', 'vncdisplay', name], check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             value = result.stdout.strip()
+            if value and not value.startswith(':') and value.isdigit() and int(value) < 100:
+                return f':{value}'
             return value or None
         except Exception:
             return None
@@ -364,6 +515,17 @@ class LibvirtService:
           </devices>
         </domain>
         """
+
+    def _redefine_domain(self, domain: libvirt.virDomain, root: ET.Element) -> None:
+        xml = ET.tostring(root, encoding='unicode')
+        name = domain.name()
+        try:
+            domain.undefineFlags(libvirt.VIR_DOMAIN_UNDEFINE_NVRAM)
+        except Exception:
+            domain.undefine()
+        new_domain = self.conn.defineXML(xml)
+        if new_domain is None:
+            raise RuntimeError(f'libvirt failed to redefine VM {name}')
 
     def _domain_summary(self, domain: libvirt.virDomain, include_xml: bool = False, include_snapshots: bool = False) -> dict[str, Any]:
         state_code, _ = domain.state()

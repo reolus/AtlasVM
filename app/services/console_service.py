@@ -37,7 +37,7 @@ class ConsoleService:
             pid_file.write_text(str(process.pid))
 
         public_host = self.settings.console_public_host or request_host or 'localhost'
-        url = f'http://{public_host}:{proxy_port}/vnc.html?host={public_host}&port={proxy_port}&path=websockify&autoconnect=1&resize=scale'
+        url = f'http://{public_host}:{proxy_port}/vnc.html?host={public_host}&port={proxy_port}&autoconnect=1&resize=scale'
         return ConsoleSession(vm_name=vm_name, vnc_display=vnc_display, vnc_port=vnc_port, proxy_port=proxy_port, url=url, pid=self._read_pid(pid_file))
 
     def stop_novnc(self, vm_name: str) -> None:
@@ -45,14 +45,13 @@ class ConsoleService:
         self._kill_stale_pid(pid_file)
 
     def _novnc_command(self, proxy_port: int, vnc_port: int) -> list[str]:
-        candidates = [
-            '/usr/share/novnc/utils/novnc_proxy',
-            '/usr/share/novnc/utils/launch.sh',
+        return [
+            'websockify',
+            '--web',
+            '/usr/share/novnc',
+            f'{self.settings.console_bind_host}:{proxy_port}',
+            f'127.0.0.1:{vnc_port}',
         ]
-        for path in candidates:
-            if Path(path).exists():
-                return [path, '--listen', f'{self.settings.console_bind_host}:{proxy_port}', '--vnc', f'127.0.0.1:{vnc_port}']
-        return ['websockify', '--web', '/usr/share/novnc', f'{self.settings.console_bind_host}:{proxy_port}', f'127.0.0.1:{vnc_port}']
 
     def _choose_proxy_port(self, vm_name: str) -> int:
         base = self.settings.console_port_base
@@ -75,17 +74,11 @@ class ConsoleService:
 
     def _display_to_port(self, display: str) -> int:
         display = str(display).strip()
-
         if display.startswith(':'):
             return 5900 + int(display[1:])
-
         value = int(display)
-
-        # libvirt/virsh may return either ':0' or '0' for display zero.
-        # Treat small numbers as VNC display numbers, not TCP ports.
         if value < 100:
             return 5900 + value
-
         return value
 
     def _safe(self, name: str) -> str:

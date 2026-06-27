@@ -22,12 +22,63 @@
 
 <section class="grid two">
   <div>
+    <h2>Edit VM Basics</h2>
+    <p><small>Requires shutdown. AtlasVM is brave, not reckless. Yet.</small></p>
+    <form method="post" action="/ui/vms/{{ vm.name }}/edit">
+      <div class="grid two">
+        <label>Memory MB <input name="memory_mb" type="number" min="256" value="{{ vm.memory_mb }}" required></label>
+        <label>vCPUs <input name="vcpus" type="number" min="1" value="{{ vm.vcpus }}" required></label>
+      </div>
+      <label>Description <input name="description" value="{{ vm.description }}"></label>
+      <button>Save VM Settings</button>
+    </form>
+  </div>
+  <div>
+    <h2>Clone VM</h2>
+    <p><small>Requires shutdown. Clone copies disks with qemu-img.</small></p>
+    <form method="post" action="/ui/vms/{{ vm.name }}/clone">
+      <label>New VM Name <input name="new_name" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" required></label>
+      <label>Storage Pool
+        <select name="storage_pool"><option value="">Default</option>{% for pool in pools %}<option value="{{ pool.name }}">{{ pool.name }}</option>{% endfor %}</select>
+      </label>
+      <button>Clone VM</button>
+    </form>
+  </div>
+</section>
+
+<section class="grid two">
+  <div>
     <h2>Disks</h2>
-    <table><thead><tr><th>Path</th></tr></thead><tbody>{% for disk in vm.disks %}<tr><td><code>{{ disk }}</code></td></tr>{% endfor %}</tbody></table>
+    <table><thead><tr><th>Path</th></tr></thead><tbody>{% for disk in vm.disks %}<tr><td><code>{{ disk }}</code></td></tr>{% else %}<tr><td>No disks found.</td></tr>{% endfor %}</tbody></table>
+    <form class="inline-form" method="post" action="/ui/vms/{{ vm.name }}/disks/add">
+      <input name="size_gb" type="number" min="1" placeholder="Size GB" required>
+      <select name="storage_pool"><option value="">Default Pool</option>{% for pool in pools %}<option value="{{ pool.name }}">{{ pool.name }}</option>{% endfor %}</select>
+      <button>Add Disk</button>
+    </form>
   </div>
   <div>
     <h2>Interfaces</h2>
-    <table><thead><tr><th>MAC</th><th>Network</th><th>Model</th></tr></thead><tbody>{% for nic in vm.interfaces %}<tr><td>{{ nic.mac }}</td><td>{{ nic.network or nic.bridge }}</td><td>{{ nic.model }}</td></tr>{% endfor %}</tbody></table>
+    <table><thead><tr><th>MAC</th><th>Network</th><th>Model</th></tr></thead><tbody>{% for nic in vm.interfaces %}<tr><td>{{ nic.mac }}</td><td>{{ nic.network or nic.bridge }}</td><td>{{ nic.model }}</td></tr>{% else %}<tr><td colspan="3">No interfaces found.</td></tr>{% endfor %}</tbody></table>
+  </div>
+</section>
+
+<section class="grid two">
+  <div>
+    <h2>Installer Media</h2>
+    <form class="inline-form" method="post" action="/ui/vms/{{ vm.name }}/iso/attach">
+      <select name="iso_path" required>{% for iso in isos %}<option value="{{ iso.path }}">{{ iso.name }}</option>{% endfor %}</select>
+      <button>Attach ISO</button>
+    </form>
+    <form method="post" action="/ui/vms/{{ vm.name }}/iso/eject"><button>Eject ISO</button></form>
+  </div>
+  <div>
+    <h2>Backup</h2>
+    <form method="post" action="/ui/vms/{{ vm.name }}/backup">
+      <label class="check"><input name="require_shutdown" type="checkbox" value="true" checked> Require VM shutdown</label>
+      <label class="check"><input name="compress" type="checkbox" value="true" checked> Compress archive</label>
+      <button>Backup VM</button>
+    </form>
+    <table><thead><tr><th>Created</th><th>Archive</th></tr></thead><tbody>{% for backup in backups[:5] %}<tr><td>{{ backup.created_at }}</td><td>{{ backup.archive or backup.path }}</td></tr>{% else %}<tr><td colspan="2">No backups for this VM.</td></tr>{% endfor %}</tbody></table>
   </div>
 </section>
 
@@ -47,11 +98,12 @@
 
 <section>
   <h2>Danger Zone</h2>
-  <p>Deleting disks is permanent. This is the part where software politely asks you not to ruin your own afternoon.</p>
-  <div class="actions block-actions">
-    <form method="post" action="/ui/vms/{{ vm.name }}/delete"><button class="danger">Delete VM Only</button></form>
-    <form method="post" action="/ui/vms/{{ vm.name }}/delete-with-disks"><button class="danger">Delete VM and Disks</button></form>
-  </div>
+  <p>Type the VM name to confirm deletion. This is the tiny speed bump between you and an awkward restore exercise.</p>
+  <form method="post" action="/ui/vms/{{ vm.name }}/delete-confirm">
+    <label>Confirm VM Name <input name="confirm_name" placeholder="{{ vm.name }}" required></label>
+    <label class="check"><input name="delete_disks" type="checkbox" value="true"> Also delete disks</label>
+    <button class="danger">Delete VM</button>
+  </form>
 </section>
 
 <section>

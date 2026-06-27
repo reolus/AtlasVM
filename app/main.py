@@ -1,7 +1,7 @@
 from pathlib import Path
 from shutil import copyfileobj
 
-from fastapi import Request, Depends, FastAPI, File, Form, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -16,6 +16,9 @@ from app.core.logging import log_event
 from app.core.tasks import finish_task, start_task
 from app.services.console_service import ConsoleService
 from app.services.host_service import get_host_summary
+from app.services.backup_service import BackupService
+from app.services.doctor_service import run_doctor
+from app.services import zfs_service
 from app.services.libvirt_service import LibvirtService, VMCreateRequest
 
 settings = get_settings()
@@ -52,9 +55,11 @@ def _lv_data() -> tuple[list[dict], list[dict], list[dict], list[dict], str | No
 def dashboard(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     host = get_host_summary()
     vms, pools, networks, isos, error = _lv_data()
+    zfs = zfs_service.pool_status()
+    backups = BackupService().list_backups()[:5]
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(10).all()
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(10).all()
-    return templates.TemplateResponse('dashboard.html', {'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'events': events, 'tasks': tasks, 'error': error})
+    return templates.TemplateResponse('dashboard.html', {'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'zfs': zfs, 'backups': backups, 'events': events, 'tasks': tasks, 'error': error})
 
 
 @app.get('/vms/new', response_class=HTMLResponse)
@@ -87,12 +92,17 @@ def vm_detail(name: str, request: Request, user: str = Depends(require_user)):
     error = None
     try:
         vm = lv.get_vm(name)
+        isos = lv.list_isos()
+        pools = lv.list_storage_pools()
     except Exception as exc:
         vm = None
+        isos = []
+        pools = []
         error = str(exc)
     finally:
         lv.close()
-    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'error': error})
+    backups = BackupService().list_backups(name)
+    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error})
 
 
 @app.post('/ui/vms/{name}/{action}')
@@ -142,6 +152,119 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
     finally:
         lv.close()
     return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+@app.post('/ui/vms/{name}/edit')
+def vm_edit_basic(name: str, memory_mb: int = Form(...), vcpus: int = Form(...), description: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_user)):
+    lv = LibvirtService()
+    task = start_task(db, user, 'edit_vm', name)
+    try:
+        lv.update_vm_basic(name, memory_mb, vcpus, description)
+        log_event(db, user, 'edit_vm', name, f'Updated VM basics: {vcpus} vCPU, {memory_mb} MB')
+        finish_task(db, task, 'success', 'VM updated')
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        log_event(db, user, 'edit_vm_failed', name, str(exc))
+        raise
+    finally:
+        lv.close()
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+@app.post('/ui/vms/{name}/iso/attach')
+def vm_attach_iso(name: str, iso_path: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_user)):
+    lv = LibvirtService()
+    task = start_task(db, user, 'attach_iso', name)
+    try:
+        lv.attach_iso(name, iso_path)
+        log_event(db, user, 'attach_iso', name, iso_path)
+        finish_task(db, task, 'success', 'ISO attached')
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        raise
+    finally:
+        lv.close()
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+@app.post('/ui/vms/{name}/iso/eject')
+def vm_eject_iso(name: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+    lv = LibvirtService()
+    task = start_task(db, user, 'eject_iso', name)
+    try:
+        lv.eject_iso(name)
+        log_event(db, user, 'eject_iso', name, 'Ejected CD-ROM media')
+        finish_task(db, task, 'success', 'ISO ejected')
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        raise
+    finally:
+        lv.close()
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+@app.post('/ui/vms/{name}/disks/add')
+def vm_add_disk(name: str, size_gb: int = Form(...), storage_pool: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_user)):
+    lv = LibvirtService()
+    task = start_task(db, user, 'add_disk', name)
+    try:
+        disk = lv.add_disk(name, size_gb, storage_pool or None)
+        log_event(db, user, 'add_disk', name, disk)
+        finish_task(db, task, 'success', f'Added disk {disk}')
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        raise
+    finally:
+        lv.close()
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+@app.post('/ui/vms/{name}/clone')
+def vm_clone(name: str, new_name: str = Form(...), storage_pool: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_user)):
+    lv = LibvirtService()
+    task = start_task(db, user, 'clone_vm', name)
+    try:
+        vm = lv.clone_vm(name, new_name, storage_pool or None)
+        log_event(db, user, 'clone_vm', name, f'Cloned to {new_name}')
+        finish_task(db, task, 'success', f'Cloned to {new_name}')
+        return RedirectResponse(url=f"/vms/{vm['name']}", status_code=303)
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        raise
+    finally:
+        lv.close()
+
+
+@app.post('/ui/vms/{name}/backup')
+def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = Form(True), db: Session = Depends(get_db), user: str = Depends(require_user)):
+    task = start_task(db, user, 'backup_vm', name)
+    try:
+        result = BackupService().create_backup(name, compress=compress, require_shutdown=require_shutdown)
+        log_event(db, user, 'backup_vm', name, result.archive_path or result.backup_dir)
+        finish_task(db, task, 'success', result.archive_path or result.backup_dir)
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        log_event(db, user, 'backup_vm_failed', name, str(exc))
+        raise
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+@app.post('/ui/vms/{name}/delete-confirm')
+def vm_delete_confirm(name: str, confirm_name: str = Form(...), delete_disks: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_user)):
+    if confirm_name != name:
+        raise ValueError('Confirmation name did not match VM name')
+    lv = LibvirtService()
+    task = start_task(db, user, 'delete_vm', name)
+    try:
+        lv.delete_vm(name, delete_disks=delete_disks)
+        log_event(db, user, 'delete_vm', name, f'delete_disks={delete_disks}')
+        finish_task(db, task, 'success', f'Deleted VM. delete_disks={delete_disks}')
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        raise
+    finally:
+        lv.close()
+    return RedirectResponse(url='/', status_code=303)
 
 
 @app.post('/ui/vms/{name}/console')
@@ -320,3 +443,47 @@ def events_page(request: Request, db: Session = Depends(get_db), user: str = Dep
 def tasks_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(250).all()
     return templates.TemplateResponse('tasks.html', {'request': request, 'app_name': settings.app_name, 'tasks': tasks})
+
+
+@app.get('/backups', response_class=HTMLResponse)
+def backups_page(request: Request, user: str = Depends(require_user)):
+    backups = BackupService().list_backups()
+    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups, 'backup_path': settings.backup_path})
+
+
+@app.post('/backups/restore-definition')
+def restore_backup_definition(backup_dir: str = Form(...), new_name: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_user)):
+    task = start_task(db, user, 'restore_definition', backup_dir)
+    try:
+        result = BackupService().restore_definition(backup_dir, new_name or None)
+        log_event(db, user, 'restore_definition', result['name'], backup_dir)
+        finish_task(db, task, 'success', f"Restored definition as {result['name']}")
+        return RedirectResponse(url=f"/vms/{result['name']}", status_code=303)
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        raise
+
+
+@app.get('/zfs', response_class=HTMLResponse)
+def zfs_page(request: Request, user: str = Depends(require_user)):
+    return templates.TemplateResponse('zfs.html', {'request': request, 'app_name': settings.app_name, 'zfs': zfs_service.pool_status(), 'datasets': zfs_service.datasets(), 'snapshots': zfs_service.snapshots()})
+
+
+@app.post('/zfs/pools/{pool}/scrub')
+def zfs_scrub(pool: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+    result = zfs_service.scrub(pool)
+    log_event(db, user, 'zfs_scrub', pool, str(result))
+    return RedirectResponse(url='/zfs', status_code=303)
+
+
+@app.post('/zfs/snapshots')
+def zfs_snapshot(dataset: str = Form(...), snapshot_name: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_user)):
+    result = zfs_service.create_snapshot(dataset, snapshot_name)
+    log_event(db, user, 'zfs_snapshot', dataset, result['snapshot'])
+    return RedirectResponse(url='/zfs', status_code=303)
+
+
+@app.get('/doctor', response_class=HTMLResponse)
+def doctor_page(request: Request, user: str = Depends(require_user)):
+    checks = run_doctor()
+    return templates.TemplateResponse('doctor.html', {'request': request, 'app_name': settings.app_name, 'checks': checks})

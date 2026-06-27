@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <h2>ZFS Pools</h2>
+  {% if zfs.error %}<div class="alert">{{ zfs.error }}</div>{% endif %}
+  <table><thead><tr><th>Name</th><th>Health</th><th>Size</th><th>Allocated</th><th>Free</th><th>Actions</th></tr></thead><tbody>
+    {% for pool in zfs.pools or [] %}
+      <tr><td>{{ pool.name }}</td><td><span class="pill {{ 'success' if pool.health == 'ONLINE' else 'failed' }}">{{ pool.health }}</span></td><td>{{ pool.size }}</td><td>{{ pool.allocated }}</td><td>{{ pool.free }}</td><td><form method="post" action="/zfs/pools/{{ pool.name }}/scrub"><button>Start Scrub</button></form></td></tr>
+    {% else %}<tr><td colspan="6">No ZFS pools visible.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+<section>
+  <h2>Datasets</h2>
+  <form class="inline-form" method="post" action="/zfs/snapshots"><input name="dataset" placeholder="pool/dataset" required><input name="snapshot_name" placeholder="snapshot-name" required><button>Create Snapshot</button></form>
+  <table><thead><tr><th>Name</th><th>Used</th><th>Available</th><th>Referenced</th><th>Mountpoint</th></tr></thead><tbody>
+    {% for ds in datasets %}<tr><td>{{ ds.name }}</td><td>{{ ds.used }}</td><td>{{ ds.available }}</td><td>{{ ds.referenced }}</td><td><code>{{ ds.mountpoint }}</code></td></tr>{% else %}<tr><td colspan="5">No datasets found.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+<section>
+  <h2>Recent ZFS Snapshots</h2>
+  <table><thead><tr><th>Name</th><th>Used</th><th>Referenced</th><th>Created</th></tr></thead><tbody>
+    {% for snap in snapshots %}<tr><td>{{ snap.name }}</td><td>{{ snap.used }}</td><td>{{ snap.referenced }}</td><td>{{ snap.creation }}</td></tr>{% else %}<tr><td colspan="4">No snapshots found.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}
