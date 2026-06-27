@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <h2>Networks</h2>
+  <table><thead><tr><th>Name</th><th>Active</th><th>Autostart</th><th>Bridge</th><th>CIDR</th><th>Actions</th></tr></thead><tbody>
+    {% for net in networks %}
+      <tr>
+        <td>{{ net.name }}</td><td>{{ net.active }}</td><td>{{ net.autostart }}</td><td>{{ net.bridge }}</td><td>{{ net.cidr }}</td>
+        <td class="actions">
+          <form method="post" action="/networks/{{ net.name }}/start"><button>Start</button></form>
+          <form method="post" action="/networks/{{ net.name }}/stop"><button class="danger">Stop</button></form>
+          <form method="post" action="/networks/{{ net.name }}/autostart-on"><button>Autostart On</button></form>
+          <form method="post" action="/networks/{{ net.name }}/autostart-off"><button>Autostart Off</button></form>
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="6">No libvirt networks found.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

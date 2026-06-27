@@ -1,26 +1,43 @@
 :root { font-family: Arial, sans-serif; color: #17202a; background: #f4f6f8; }
 body { margin: 0; }
-header { background: #111827; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
-header h1 { margin: 0; font-size: 1.4rem; }
+header { background: #0f172a; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+header h1 { margin: 0; font-size: 1.45rem; letter-spacing: .03rem; }
 header p { margin: .2rem 0 0; color: #cbd5e1; }
-nav a { color: white; margin-left: 1rem; text-decoration: none; }
+nav a { color: white; margin-left: .85rem; text-decoration: none; font-size: .95rem; }
 main { padding: 2rem; }
 .grid { display: grid; gap: 1rem; }
-.cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.cards { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .two { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-.card, .form-card, section { background: white; border: 1px solid #dde3ea; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+.three { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.card, .form-card, section { background: white; border: 1px solid #dde3ea; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
 .card strong { display: block; color: #475569; }
-.card span { display: block; font-size: 2rem; margin-top: .5rem; }
-.card small { color: #64748b; }
-.section-title { display: flex; justify-content: space-between; align-items: center; }
+.card span { display: block; font-size: 1.6rem; margin-top: .5rem; overflow-wrap: anywhere; }
+.card small { color: #64748b; overflow-wrap: anywhere; }
+.section-title { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: .6rem; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
 th { color: #475569; font-size: .9rem; }
-.pill { background: #e5e7eb; border-radius: 999px; padding: .2rem .6rem; }
+a { color: #1d4ed8; }
+code, pre { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: .1rem .3rem; }
+pre { padding: 1rem; overflow: auto; max-height: 520px; }
+.pill { background: #e5e7eb; border-radius: 999px; padding: .2rem .6rem; display: inline-block; }
+.pill.running, .pill.success { background: #dcfce7; color: #14532d; }
+.pill.shutoff, .pill.failed { background: #fee2e2; color: #7f1d1d; }
+.pill.paused, .pill.running { font-weight: 600; }
 .actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.block-actions { margin-top: 1rem; }
 .actions form { margin: 0; }
-button, .button { background: #1f2937; color: white; border: none; border-radius: 5px; padding: .45rem .7rem; cursor: pointer; text-decoration: none; display: inline-block; }
+button, .button { background: #1f2937; color: white; border: none; border-radius: 6px; padding: .48rem .72rem; cursor: pointer; text-decoration: none; display: inline-block; font-size: .9rem; }
+button:hover, .button:hover { background: #334155; }
 button.danger { background: #991b1b; }
+button.danger:hover { background: #7f1d1d; }
+.button.muted { background: #475569; }
 .alert { background: #fee2e2; border: 1px solid #fecaca; color: #7f1d1d; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
 label { display: block; margin: .8rem 0; }
-input, select { display: block; width: 100%; max-width: 420px; padding: .5rem; border: 1px solid #cbd5e1; border-radius: 5px; margin-top: .25rem; }
+label.check { display: flex; align-items: center; gap: .5rem; }
+input, select { display: block; width: 100%; box-sizing: border-box; padding: .55rem; border: 1px solid #cbd5e1; border-radius: 6px; margin-top: .25rem; }
+label.check input { width: auto; margin: 0; }
+.inline-form { display: flex; gap: .5rem; flex-wrap: wrap; align-items: end; margin-bottom: 1rem; }
+.inline-form input { max-width: 340px; }
+.console-frame { width: 100%; height: 720px; border: 1px solid #cbd5e1; border-radius: 8px; background: #0b1020; }
+small { color: #64748b; }

@@ -1,0 +1,17 @@
+[Unit]
+Description=AtlasVM Virtualization Manager
+After=network-online.target libvirtd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/atlasvm
+EnvironmentFile=/etc/atlasvm/atlasvm.env
+ExecStart=/opt/atlasvm/.venv/bin/uvicorn app.main:app --host ${ATLASVM_HOST} --port ${ATLASVM_PORT}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

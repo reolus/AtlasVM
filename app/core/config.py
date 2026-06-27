@@ -3,17 +3,37 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Phase One VM Manager"
-    app_host: str = "0.0.0.0"
-    app_port: int = 8443
-    app_username: str = "admin"
-    app_password: str = "change-this-password"
-    database_url: str = "sqlite:///./phase1_vm_manager.db"
-    libvirt_uri: str = "qemu:///system"
-    default_storage_pool: str = "default"
-    default_network: str = "default"
+    model_config = SettingsConfigDict(
+        env_file='.env',
+        env_file_encoding='utf-8',
+        env_prefix='ATLASVM_',
+        extra='ignore',
+        case_sensitive=False,
+    )
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    app_name: str = 'AtlasVM'
+    host: str = '0.0.0.0'
+    port: int = 8443
+
+    username: str = 'admin'
+    password: str = 'change-this-password'
+
+    database_url: str = 'sqlite:///./atlasvm.db'
+    libvirt_uri: str = 'qemu:///system'
+
+    default_storage_pool: str = 'atlasvm-default'
+    iso_pool: str = 'atlasvm-iso'
+    default_network: str = 'default'
+
+    vm_disk_path: str = '/atlasvm-vmdata/vm-disks'
+    iso_path: str = '/atlasvm-vmdata/iso'
+    template_path: str = '/atlasvm-vmdata/templates'
+    backup_path: str = '/atlasvm-vmdata/backups'
+
+    console_bind_host: str = '0.0.0.0'
+    console_public_host: str = ''
+    console_port_base: int = 6080
+    console_port_max: int = 6099
 
 
 @lru_cache

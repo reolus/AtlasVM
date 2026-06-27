@@ -1,35 +1,68 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="/opt/phase1-vm-manager"
-APP_USER="phase1vm"
+APP_DIR="/opt/atlasvm"
+ENV_FILE="/etc/atlasvm/atlasvm.env"
+SERVICE_FILE="/etc/systemd/system/atlasvm.service"
 
+echo "Installing AtlasVM Phase 2 host packages..."
 apt update
-apt install -y python3 python3-venv python3-pip qemu-kvm libvirt-daemon-system libvirt-clients libvirt-dev pkg-config gcc virtinst bridge-utils genisoimage qemu-utils qemu-utils
+apt install -y \
+  qemu-system-x86 qemu-utils \
+  libvirt-daemon-system libvirt-clients virtinst libosinfo-bin \
+  ovmf swtpm \
+  bridge-utils dnsmasq-base iproute2 iptables nftables \
+  python3 python3-venv python3-pip python3-dev python3-libvirt \
+  build-essential pkg-config libvirt-dev libxml2-dev libxslt1-dev zlib1g-dev \
+  git curl unzip sudo \
+  zfsutils-linux lvm2 thin-provisioning-tools parted gdisk smartmontools \
+  htop iotop iftop nload lsof ncdu jq tree rsync net-tools tcpdump ethtool lm-sensors \
+  nginx openssl acl polkitd pkexec \
+  novnc websockify
 
-if ! id "$APP_USER" >/dev/null 2>&1; then
-  useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER"
+systemctl enable --now libvirtd virtlogd virtlockd
+
+mkdir -p /etc/atlasvm /var/lib/atlasvm /var/log/atlasvm /run/atlasvm
+mkdir -p /srv/atlasvm/imports /srv/atlasvm/uploads /srv/atlasvm/tmp
+
+if [ ! -f "$ENV_FILE" ]; then
+  cp .env.example "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
 fi
 
-usermod -aG libvirt,kvm "$APP_USER"
-mkdir -p "$APP_DIR"
-cp -R . "$APP_DIR"
-chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+if [ ! -d "$APP_DIR" ]; then
+  mkdir -p "$APP_DIR"
+fi
+rsync -a --delete --exclude '.git' ./ "$APP_DIR/"
 
 cd "$APP_DIR"
-python3 -m venv .venv
-. .venv/bin/activate
-pip install --upgrade pip
+rm -rf .venv
+/usr/bin/python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+pip install --upgrade pip wheel
 pip install -r requirements.txt
 
-if [ ! -f .env ]; then
-  cp .env.example .env
-  echo "Edit $APP_DIR/.env and change APP_PASSWORD before starting the service."
-fi
+cat > "$SERVICE_FILE" <<'SERVICE'
+[Unit]
+Description=AtlasVM Virtualization Manager
+After=network-online.target libvirtd.service
+Wants=network-online.target
 
-.venv/bin/python scripts/init_db.py
-cp systemd/phase1-vm-manager.service /etc/systemd/system/phase1-vm-manager.service
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/atlasvm
+EnvironmentFile=/etc/atlasvm/atlasvm.env
+ExecStart=/opt/atlasvm/.venv/bin/uvicorn app.main:app --host ${ATLASVM_HOST} --port ${ATLASVM_PORT}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
 systemctl daemon-reload
-systemctl enable phase1-vm-manager
+systemctl enable atlasvm
 
-echo "Installed. Edit $APP_DIR/.env, then run: systemctl start phase1-vm-manager"
+echo "AtlasVM installed. Edit $ENV_FILE, then run: systemctl start atlasvm"

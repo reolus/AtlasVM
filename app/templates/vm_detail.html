@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+{% if vm %}
+<section>
+  <div class="section-title"><h2>{{ vm.name }}</h2><span class="pill {{ vm.state }}">{{ vm.state }}</span></div>
+  <p>{{ vm.description or 'No description provided. Naturally, the machine must discover its purpose alone.' }}</p>
+  <div class="grid cards">
+    <div class="card"><strong>vCPU</strong><span>{{ vm.vcpus }}</span></div>
+    <div class="card"><strong>Memory</strong><span>{{ vm.memory_mb }} MB</span></div>
+    <div class="card"><strong>Autostart</strong><span>{{ vm.autostart }}</span></div>
+    <div class="card"><strong>UUID</strong><small>{{ vm.uuid }}</small></div>
+  </div>
+  <div class="actions block-actions">
+    <form method="post" action="/ui/vms/{{ vm.name }}/console"><button>Open Console</button></form>
+    <form method="post" action="/ui/vms/{{ vm.name }}/start"><button>Start</button></form>
+    <form method="post" action="/ui/vms/{{ vm.name }}/shutdown"><button>Shutdown</button></form>
+    <form method="post" action="/ui/vms/{{ vm.name }}/reboot"><button>Reboot</button></form>
+    <form method="post" action="/ui/vms/{{ vm.name }}/force-stop"><button class="danger">Force Stop</button></form>
+    {% if vm.autostart %}<form method="post" action="/ui/vms/{{ vm.name }}/autostart-off"><button>Disable Autostart</button></form>{% else %}<form method="post" action="/ui/vms/{{ vm.name }}/autostart-on"><button>Enable Autostart</button></form>{% endif %}
+  </div>
+</section>
+
+<section class="grid two">
+  <div>
+    <h2>Disks</h2>
+    <table><thead><tr><th>Path</th></tr></thead><tbody>{% for disk in vm.disks %}<tr><td><code>{{ disk }}</code></td></tr>{% endfor %}</tbody></table>
+  </div>
+  <div>
+    <h2>Interfaces</h2>
+    <table><thead><tr><th>MAC</th><th>Network</th><th>Model</th></tr></thead><tbody>{% for nic in vm.interfaces %}<tr><td>{{ nic.mac }}</td><td>{{ nic.network or nic.bridge }}</td><td>{{ nic.model }}</td></tr>{% endfor %}</tbody></table>
+  </div>
+</section>
+
+<section>
+  <h2>Snapshots</h2>
+  <form class="inline-form" method="post" action="/ui/vms/{{ vm.name }}/snapshots">
+    <input name="snapshot_name" placeholder="before-update" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}">
+    <input name="description" placeholder="Description">
+    <button>Create Snapshot</button>
+  </form>
+  <table><thead><tr><th>Name</th><th>Description</th><th>Actions</th></tr></thead><tbody>
+    {% for snap in vm.snapshots %}
+      <tr><td>{{ snap.name }}</td><td>{{ snap.description }}</td><td class="actions"><form method="post" action="/ui/vms/{{ vm.name }}/snapshots/{{ snap.name }}/revert"><button class="danger">Revert</button></form><form method="post" action="/ui/vms/{{ vm.name }}/snapshots/{{ snap.name }}/delete"><button>Delete</button></form></td></tr>
+    {% else %}<tr><td colspan="3">No snapshots. Time travel has not yet been monetized here.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+
+<section>
+  <h2>Danger Zone</h2>
+  <p>Deleting disks is permanent. This is the part where software politely asks you not to ruin your own afternoon.</p>
+  <div class="actions block-actions">
+    <form method="post" action="/ui/vms/{{ vm.name }}/delete"><button class="danger">Delete VM Only</button></form>
+    <form method="post" action="/ui/vms/{{ vm.name }}/delete-with-disks"><button class="danger">Delete VM and Disks</button></form>
+  </div>
+</section>
+
+<section>
+  <h2>Raw libvirt XML</h2>
+  <details><summary>Show XML</summary><pre>{{ vm.xml }}</pre></details>
+</section>
+{% endif %}
+{% endblock %}

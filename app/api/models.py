@@ -6,11 +6,20 @@ class VMCreate(BaseModel):
     memory_mb: int = Field(default=2048, ge=256)
     vcpus: int = Field(default=2, ge=1)
     disk_gb: int = Field(default=20, ge=1)
-    storage_pool: str = "default"
-    network: str = "default"
+    storage_pool: str = 'atlasvm-default'
+    network: str = 'default'
     iso_path: str | None = None
-    os_variant: str = "generic"
+    os_variant: str = 'generic'
+    description: str | None = None
+    start_after_create: bool = False
+    autostart: bool = False
+    firmware: str = 'bios'
 
 
 class DeleteVMOptions(BaseModel):
     delete_disks: bool = False
+
+
+class SnapshotCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    description: str | None = None

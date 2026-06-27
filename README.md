@@ -1,118 +1,106 @@
-# Phase One VM Manager
+# AtlasVM Phase 2
 
-A small single-node virtualization manager for Debian/Ubuntu using FastAPI, libvirt, KVM/QEMU, Linux bridges, and a simple web UI.
+AtlasVM is a single-node KVM/libvirt virtualization manager built on FastAPI. Phase 2 turns the original proof of concept into a usable host manager with browser console support, ISO management, VM detail pages, snapshots, storage visibility, network visibility, task history, and audit logging.
 
-This is not a Proxmox replacement. It is the first practical brick in that wall, because apparently we needed another wall made of daemons.
+This is not a Proxmox replacement yet. It is a product foundation. A small one. With sharp edges. Naturally.
 
-## Features
+## Phase 2 Features
 
-- Web dashboard
-- Local username/password login
-- Host resource summary
-- List virtual machines
-- Create basic KVM virtual machines
-- Start, shutdown, force stop, reboot, and delete VMs
-- Attach ISO media
-- Create and delete qcow2 disks
-- List libvirt storage pools
-- List Linux bridges detected from libvirt networks
-- Task/event log stored in SQLite
-- API-first design
-- Systemd unit example
+- Dashboard with host and VM summary
+- VM creation wizard with ISO picker, firmware option, autostart, and start-after-create
+- VM details page
+- VM power actions: start, shutdown, reboot, force stop
+- VM delete with or without disks
+- Browser console launch using noVNC/websockify
+- ISO library with upload and delete
+- Storage pool list/detail/refresh
+- Network list and start/stop/autostart actions
+- Basic libvirt snapshot create/list/revert/delete
+- Task log
+- Audit/event log
+- REST API under `/api/v1`
+- Debian install script and systemd service
 
-## Target platform
+## Host Requirements
 
-Test target:
+Recommended host layout:
 
-- Debian 12 or Ubuntu Server 22.04/24.04
+- Debian 13
 - KVM-capable CPU
-- libvirt/QEMU installed
-- Python 3.11+
+- libvirt/QEMU
+- ZFS or directory-backed storage pool for VM disks
+- ISO directory such as `/atlasvm-vmdata/iso`
+- VM disk directory such as `/atlasvm-vmdata/vm-disks`
 
-## Quick install
+## Install
+
+From the repo directory on the AtlasVM host:
 
 ```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip qemu-kvm libvirt-daemon-system libvirt-clients libvirt-dev pkg-config gcc virtinst bridge-utils genisoimage qemu-utils
-sudo usermod -aG libvirt,kvm $USER
-newgrp libvirt
-
-cd phase1_vm_manager
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python scripts/init_db.py
-uvicorn app.main:app --host 0.0.0.0 --port 8443
+sudo ./scripts/install_debian.sh
+sudo nano /etc/atlasvm/atlasvm.env
+sudo systemctl start atlasvm
+sudo systemctl status atlasvm --no-pager
 ```
 
 Open:
 
 ```text
-http://SERVER-IP:8443
+http://ATLASVM-IP:8443
 ```
 
-Default login is controlled in `.env`.
+## Important Debian Python Note
 
-## Important safety note
-
-This app manages local virtualization through libvirt. Do not expose it directly to the internet. Put it behind a VPN, reverse proxy with TLS, or both. Humanity already has enough problems without unauthenticated VM control panels floating around.
-
-## Project structure
-
-```text
-app/
-  main.py                 FastAPI app
-  api/                    REST endpoints
-  core/                   config, database, auth helpers
-  services/               libvirt and VM logic
-  templates/              Jinja2 HTML pages
-  static/                 CSS
-scripts/
-  init_db.py              initializes SQLite database
-  install_debian.sh       rough Debian installer
-systemd/
-  phase1-vm-manager.service
-```
-
-## API examples
-
-List VMs:
+The app expects Debian's packaged libvirt bindings:
 
 ```bash
-curl -u admin:change-this-password http://localhost:8443/api/v1/vms
+apt install -y python3-libvirt
+python3 -m venv --system-site-packages .venv
 ```
 
-Create a VM:
+Do not install `libvirt-python` from pip unless you enjoy debugging compiler output instead of your product.
+
+## noVNC Console
+
+Install:
 
 ```bash
-curl -u admin:change-this-password -X POST http://localhost:8443/api/v1/vms \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name":"test-vm",
-    "memory_mb":2048,
-    "vcpus":2,
-    "disk_gb":20,
-    "storage_pool":"default",
-    "network":"default",
-    "iso_path":"/var/lib/libvirt/images/debian.iso"
-  }'
+apt install -y novnc websockify
 ```
 
-Start VM:
+AtlasVM starts a noVNC proxy per VM when the Console button is clicked. The VM must have VNC graphics in libvirt XML. AtlasVM-created VMs include this by default.
+
+Console ports default to `6080-6099`. Change these in `/etc/atlasvm/atlasvm.env` if needed.
+
+## Environment
+
+Example:
+
+```env
+ATLASVM_APP_NAME=AtlasVM
+ATLASVM_HOST=0.0.0.0
+ATLASVM_PORT=8443
+ATLASVM_USERNAME=admin
+ATLASVM_PASSWORD=change-this-password
+ATLASVM_DATABASE_URL=sqlite:///./atlasvm.db
+ATLASVM_LIBVIRT_URI=qemu:///system
+ATLASVM_DEFAULT_STORAGE_POOL=atlasvm-default
+ATLASVM_ISO_POOL=atlasvm-iso
+ATLASVM_DEFAULT_NETWORK=default
+ATLASVM_VM_DISK_PATH=/atlasvm-vmdata/vm-disks
+ATLASVM_ISO_PATH=/atlasvm-vmdata/iso
+ATLASVM_CONSOLE_PORT_BASE=6080
+ATLASVM_CONSOLE_PORT_MAX=6099
+```
+
+## Smoke Test
 
 ```bash
-curl -u admin:change-this-password -X POST http://localhost:8443/api/v1/vms/test-vm/start
+curl -u admin:'YOUR_PASSWORD' http://127.0.0.1:8443/api/v1/health
+curl -u admin:'YOUR_PASSWORD' http://127.0.0.1:8443/api/v1/host
+curl -u admin:'YOUR_PASSWORD' http://127.0.0.1:8443/api/v1/vms
 ```
 
-## Roadmap for Phase Two
+## Development Notes
 
-- noVNC console proxy
-- Cloud-init template support
-- VM clone workflow
-- Scheduled snapshots
-- ZFS and LVM-thin abstractions
-- Better RBAC
-- Audit trail export
-- Host network bridge creation
-- Backup/restore jobs
+Phase 2 still runs privileged as root because it manages libvirt, storage files, and console proxies. Phase 3 should introduce a narrower service user and polkit rules instead of letting root handle everything like a medieval king with a flamethrower.
