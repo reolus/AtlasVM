@@ -2,13 +2,9 @@
 
 AtlasVM is a single-node KVM/libvirt virtualization manager built on FastAPI. Phase 2 turns the original proof of concept into a usable host manager with browser console support, ISO management, VM detail pages, snapshots, storage visibility, network visibility, task history, and audit logging.
 
-<<<<<<< HEAD
 This is not a Proxmox replacement yet. It is a product foundation. A small one. With sharp edges. Naturally.
 
 ## Phase 2 Features
-=======
-## Features
->>>>>>> d2e4da4b0ad9bc1ea58a133ecddebaa09ee9d088
 
 - Dashboard with host and VM summary
 - VM creation wizard with ISO picker, firmware option, autostart, and start-after-create

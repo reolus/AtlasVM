@@ -4,7 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-<<<<<<< HEAD
         env_file='.env',
         env_file_encoding='utf-8',
         env_prefix='ATLASVM_',
@@ -35,30 +34,6 @@ class Settings(BaseSettings):
     console_public_host: str = ''
     console_port_base: int = 6080
     console_port_max: int = 6099
-=======
-        env_file=".env",
-        env_prefix="ATLASVM_",
-        extra="ignore",
-        case_sensitive=False,
-    )
-
-    app_name: str = "AtlasVM"
-    host: str = "0.0.0.0"
-    port: int = 8443
-
-    username: str = "admin"
-    password: str = "changeme"
-
-    libvirt_uri: str = "qemu:///system"
-
-    default_storage_pool: str = "atlasvm-default"
-    iso_pool: str = "atlasvm-iso"
-
-    vm_disk_path: str = "/atlasvm-vmdata/vm-disks"
-    iso_path: str = "/atlasvm-vmdata/iso"
-
-    database_url: str = "sqlite:///./atlasvm.db"
->>>>>>> d2e4da4b0ad9bc1ea58a133ecddebaa09ee9d088
 
 
 @lru_cache

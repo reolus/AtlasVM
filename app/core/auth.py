@@ -1,7 +1,6 @@
 import secrets
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-
 from app.core.config import get_settings
 
 security = HTTPBasic()
@@ -9,7 +8,6 @@ security = HTTPBasic()
 
 def require_user(credentials: HTTPBasicCredentials = Depends(security)) -> str:
     settings = get_settings()
-<<<<<<< HEAD
     username_ok = secrets.compare_digest(credentials.username.encode('utf8'), settings.username.encode('utf8'))
     password_ok = secrets.compare_digest(credentials.password.encode('utf8'), settings.password.encode('utf8'))
     if not username_ok or not password_ok:
@@ -17,24 +15,5 @@ def require_user(credentials: HTTPBasicCredentials = Depends(security)) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Invalid AtlasVM credentials',
             headers={'WWW-Authenticate': 'Basic'},
-=======
-
-    username_ok = secrets.compare_digest(
-        credentials.username.encode("utf8"),
-        settings.username.encode("utf8"),
-    )
-
-    password_ok = secrets.compare_digest(
-        credentials.password.encode("utf8"),
-        settings.password.encode("utf8"),
-    )
-
-    if not username_ok or not password_ok:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid AtlasVM credentials",
-            headers={"WWW-Authenticate": "Basic"},
->>>>>>> d2e4da4b0ad9bc1ea58a133ecddebaa09ee9d088
         )
-
     return credentials.username
