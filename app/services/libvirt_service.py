@@ -384,6 +384,18 @@ class LibvirtService:
         uuid = root.find('./uuid')
         if uuid is not None:
             root.remove(uuid)
+        # Phase 5: fresh clone cleanup. New VM gets fresh MACs and loses template marker.
+        desc = root.find('./description')
+        if desc is not None and desc.text:
+            desc.text = desc.text.replace('[ATLASVM_TEMPLATE]', '').strip()
+        for iface in root.findall('./devices/interface'):
+            mac = iface.find('mac')
+            if mac is not None:
+                iface.remove(mac)
+        for graphics in root.findall('./devices/graphics'):
+            if graphics.attrib.get('type') == 'vnc':
+                graphics.attrib['port'] = '-1'
+                graphics.attrib['autoport'] = 'yes'
         for idx, disk in enumerate(root.findall('./devices/disk')):
             if disk.attrib.get('device') != 'disk':
                 continue
@@ -400,6 +412,100 @@ class LibvirtService:
             raise RuntimeError('libvirt failed to define cloned VM')
         pool.refresh(0)
         return self._domain_summary(domain)
+
+
+    def set_template(self, name: str, enabled: bool = True) -> dict[str, Any]:
+        domain = self.conn.lookupByName(name)
+        if domain.isActive():
+            raise RuntimeError('Converting a VM to or from a template requires the VM to be shut down')
+        root = ET.fromstring(domain.XMLDesc())
+        desc = root.find('./description')
+        if desc is None:
+            desc = ET.SubElement(root, 'description')
+        description = desc.text or ''
+        marker = '[ATLASVM_TEMPLATE]'
+        if enabled and marker not in description:
+            desc.text = (description + '\n' + marker).strip()
+        elif not enabled:
+            desc.text = description.replace(marker, '').strip()
+        self._redefine_domain(domain, root)
+        return self.get_vm(name)
+
+    def list_templates(self) -> list[dict[str, Any]]:
+        return [vm for vm in self.list_vms() if vm.get('is_template')]
+
+    def clone_template(self, template_name: str, new_name: str, storage_pool: str | None = None, start_after_create: bool = False) -> dict[str, Any]:
+        template = self.get_vm(template_name)
+        if not template.get('is_template'):
+            raise RuntimeError(f'VM is not marked as a template: {template_name}')
+        vm = self.clone_vm(template_name, new_name, storage_pool)
+        self.set_template(new_name, False)
+        if start_after_create:
+            self.start_vm(new_name)
+            vm = self.get_vm(new_name)
+        return vm
+
+    def vm_metrics(self, name: str) -> dict[str, Any]:
+        domain = self.conn.lookupByName(name)
+        state_code, _ = domain.state()
+        metrics: dict[str, Any] = {
+            'name': name,
+            'state': self._state_name(state_code),
+            'active': bool(domain.isActive()),
+            'cpu_time_ns': None,
+            'memory_actual_mb': None,
+            'memory_rss_mb': None,
+            'disks': [],
+            'interfaces': [],
+        }
+        try:
+            info = domain.info()
+            metrics['cpu_time_ns'] = info[4]
+            metrics['max_memory_mb'] = round(info[1] / 1024)
+            metrics['memory_mb'] = round(info[2] / 1024)
+            metrics['vcpus'] = info[3]
+        except Exception:
+            pass
+        try:
+            balloon = domain.memoryStats()
+            if 'actual' in balloon:
+                metrics['memory_actual_mb'] = round(balloon['actual'] / 1024, 2)
+            if 'rss' in balloon:
+                metrics['memory_rss_mb'] = round(balloon['rss'] / 1024, 2)
+        except Exception:
+            pass
+        try:
+            root = ET.fromstring(domain.XMLDesc())
+            for disk in root.findall('./devices/disk'):
+                if disk.attrib.get('device') != 'disk':
+                    continue
+                target = disk.find('target')
+                source = disk.find('source')
+                dev = target.attrib.get('dev') if target is not None else None
+                path = source.attrib.get('file') if source is not None else None
+                item = {'device': dev, 'path': path, 'rd_bytes': None, 'wr_bytes': None, 'rd_requests': None, 'wr_requests': None}
+                if dev:
+                    try:
+                        stats = domain.blockStats(dev)
+                        item.update({'rd_requests': stats[0], 'rd_bytes': stats[1], 'wr_requests': stats[2], 'wr_bytes': stats[3]})
+                    except Exception:
+                        pass
+                metrics['disks'].append(item)
+            for iface in root.findall('./devices/interface'):
+                target = iface.find('target')
+                mac = iface.find('mac')
+                dev = target.attrib.get('dev') if target is not None else None
+                item = {'device': dev, 'mac': mac.attrib.get('address') if mac is not None else None, 'rx_bytes': None, 'tx_bytes': None, 'rx_packets': None, 'tx_packets': None}
+                if dev:
+                    try:
+                        stats = domain.interfaceStats(dev)
+                        item.update({'rx_bytes': stats[0], 'rx_packets': stats[1], 'tx_bytes': stats[4], 'tx_packets': stats[5]})
+                    except Exception:
+                        pass
+                metrics['interfaces'].append(item)
+        except Exception:
+            pass
+        return metrics
 
     def create_snapshot(self, vm_name: str, snapshot_name: str, description: str | None = None) -> dict[str, Any]:
         domain = self.conn.lookupByName(vm_name)
@@ -579,6 +685,9 @@ class LibvirtService:
         info = domain.info()
         xml = domain.XMLDesc()
         root = ET.fromstring(xml)
+        description_text = root.findtext('./description') or ''
+        is_template = '[ATLASVM_TEMPLATE]' in description_text
+        clean_description = description_text.replace('[ATLASVM_TEMPLATE]', '').strip()
         result = {
             'name': domain.name(),
             'uuid': domain.UUIDString(),
@@ -590,7 +699,8 @@ class LibvirtService:
             'max_memory_mb': round(info[1] / 1024),
             'vcpus': info[3],
             'cpu_time_ns': info[4],
-            'description': root.findtext('./description') or '',
+            'description': clean_description,
+            'is_template': is_template,
             'disks': self._domain_disk_paths(domain),
             'interfaces': self._domain_interfaces(domain),
             'graphics': self._domain_graphics(domain),

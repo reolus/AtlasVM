@@ -14,6 +14,7 @@ from app.core.config import get_settings
 from app.core.database import EventLog, TaskLog, UserAccount, get_db, init_db
 from app.core.logging import log_event
 from app.core.tasks import finish_task, start_task
+from app.core.job_queue import enqueue_task
 from app.core.security import hash_password
 from app.services.console_service import ConsoleService
 from app.services.host_service import get_host_summary
@@ -73,6 +74,35 @@ def _view_context(request: Request, user: str | None = None) -> dict:
         'error': request.query_params.get('error'),
     }
 
+
+
+
+def _job_backup_vm(name: str, compress: bool, require_shutdown: bool) -> str:
+    result = BackupService().create_backup(name, compress=compress, require_shutdown=require_shutdown)
+    return result.archive_path or result.backup_dir
+
+
+def _job_clone_vm(source_name: str, new_name: str, storage_pool: str | None = None) -> str:
+    lv = LibvirtService()
+    try:
+        vm = lv.clone_vm(source_name, new_name, storage_pool)
+        return f"Cloned {source_name} to {vm['name']}"
+    finally:
+        lv.close()
+
+
+def _job_clone_template(template_name: str, new_name: str, storage_pool: str | None = None, start_after_create: bool = False) -> str:
+    lv = LibvirtService()
+    try:
+        vm = lv.clone_template(template_name, new_name, storage_pool, start_after_create=start_after_create)
+        return f"Cloned template {template_name} to {vm['name']}"
+    finally:
+        lv.close()
+
+
+def _job_restore_backup_as_new(backup_dir: str, new_name: str, storage_pool: str | None = None) -> str:
+    result = BackupService().restore_as_new_vm(backup_dir, new_name, storage_pool)
+    return f"Restored backup as {result['name']} with disks: {result.get('disks', '')}"
 
 def _write_env_values(updates: dict[str, str]) -> None:
     env_path = Path('.env')
@@ -139,18 +169,20 @@ def vm_detail(name: str, request: Request, error_msg: str | None = Query(None, a
     current_iso = None
     try:
         vm = lv.get_vm(name)
+        metrics = lv.vm_metrics(name)
         current_iso = lv.current_iso(name) if hasattr(lv, 'current_iso') else None
         isos = lv.list_isos()
         pools = lv.list_storage_pools()
     except Exception as exc:
         vm = None
+        metrics = None
         isos = []
         pools = []
         error = str(exc)
     finally:
         lv.close()
     backups = BackupService().list_backups(name)
-    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error, 'success': success, 'current_iso': current_iso})
+    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error, 'success': success, 'current_iso': current_iso, 'metrics': metrics})
 
 
 @app.post('/ui/vms/{name}/{action}')
@@ -271,32 +303,22 @@ def vm_add_disk(name: str, size_gb: int = Form(...), storage_pool: str = Form(''
 
 @app.post('/ui/vms/{name}/clone')
 def vm_clone(name: str, new_name: str = Form(...), storage_pool: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
-    lv = LibvirtService()
-    task = start_task(db, user, 'clone_vm', name)
     try:
-        vm = lv.clone_vm(name, new_name, storage_pool or None)
-        log_event(db, user, 'clone_vm', name, f'Cloned to {new_name}')
-        finish_task(db, task, 'success', f'Cloned to {new_name}')
-        return RedirectResponse(url=f"/vms/{vm['name']}", status_code=303)
+        task_id = enqueue_task(user, 'clone_vm', name, _job_clone_vm, name, new_name, storage_pool or None)
+        log_event(db, user, 'queue_clone_vm', name, f'Queued clone to {new_name}; task={task_id}')
+        return _redirect('/tasks', message=f'Clone queued as task {task_id}')
     except Exception as exc:
-        finish_task(db, task, 'failed', str(exc))
-        raise
-    finally:
-        lv.close()
+        return _redirect(f'/vms/{name}', error=str(exc))
 
 
 @app.post('/ui/vms/{name}/backup')
 def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = Form(True), db: Session = Depends(get_db), user: str = Depends(require_operator)):
-    task = start_task(db, user, 'backup_vm', name)
     try:
-        result = BackupService().create_backup(name, compress=compress, require_shutdown=require_shutdown)
-        log_event(db, user, 'backup_vm', name, result.archive_path or result.backup_dir)
-        finish_task(db, task, 'success', result.archive_path or result.backup_dir)
+        task_id = enqueue_task(user, 'backup_vm', name, _job_backup_vm, name, compress, require_shutdown)
+        log_event(db, user, 'queue_backup_vm', name, f'Queued backup; task={task_id}')
+        return _redirect('/tasks', message=f'Backup queued as task {task_id}')
     except Exception as exc:
-        finish_task(db, task, 'failed', str(exc))
-        log_event(db, user, 'backup_vm_failed', name, str(exc))
-        raise
-    return RedirectResponse(url=f'/vms/{name}', status_code=303)
+        return _redirect(f'/vms/{name}', error=str(exc))
 
 
 @app.post('/ui/vms/{name}/delete-confirm')
@@ -372,6 +394,57 @@ def snapshot_action(name: str, snapshot: str, action: str, db: Session = Depends
     finally:
         lv.close()
     return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+
+@app.get('/templates', response_class=HTMLResponse)
+def templates_page(request: Request, user: str = Depends(require_user)):
+    lv = LibvirtService()
+    try:
+        templates_list = lv.list_templates()
+        pools = lv.list_storage_pools()
+        vms = lv.list_vms()
+    finally:
+        lv.close()
+    context = _view_context(request, user)
+    context.update({'templates': templates_list, 'pools': pools, 'vms': vms})
+    return templates.TemplateResponse('templates.html', context)
+
+
+@app.post('/ui/vms/{name}/template')
+def vm_set_template(name: str, enabled: str = Form('true'), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    lv = LibvirtService()
+    try:
+        flag = str(enabled).lower() in {'true', '1', 'yes', 'on'}
+        lv.set_template(name, flag)
+        log_event(db, user, 'set_template', name, f'enabled={flag}')
+        return _redirect(f'/vms/{name}', message=('VM marked as template' if flag else 'VM converted back to normal VM'))
+    except Exception as exc:
+        return _redirect(f'/vms/{name}', error=str(exc))
+    finally:
+        lv.close()
+
+
+@app.post('/templates/{name}/clone')
+def template_clone(name: str, new_name: str = Form(...), storage_pool: str = Form(''), start_after_create: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    try:
+        task_id = enqueue_task(user, 'clone_template', name, _job_clone_template, name, new_name, storage_pool or None, start_after_create)
+        log_event(db, user, 'queue_clone_template', name, f'Queued clone to {new_name}; task={task_id}')
+        return _redirect('/tasks', message=f'Template clone queued as task {task_id}')
+    except Exception as exc:
+        return _redirect('/templates', error=str(exc))
+
+
+@app.get('/vms/{name}/metrics', response_class=HTMLResponse)
+def vm_metrics_page(name: str, request: Request, user: str = Depends(require_user)):
+    lv = LibvirtService()
+    try:
+        metrics = lv.vm_metrics(name)
+    finally:
+        lv.close()
+    context = _view_context(request, user)
+    context.update({'metrics': metrics})
+    return templates.TemplateResponse('vm_metrics.html', context)
 
 
 @app.get('/isos', response_class=HTMLResponse)
@@ -512,6 +585,23 @@ def restore_backup_definition(backup_dir: str = Form(...), new_name: str = Form(
     except Exception as exc:
         finish_task(db, task, 'failed', str(exc))
         raise
+
+
+
+@app.post('/backups/restore-as-new')
+def restore_backup_as_new(
+    backup_dir: str = Form(...),
+    new_name: str = Form(...),
+    storage_pool: str = Form(''),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_operator),
+):
+    try:
+        task_id = enqueue_task(user, 'restore_backup_as_new', backup_dir, _job_restore_backup_as_new, backup_dir, new_name, storage_pool or None)
+        log_event(db, user, 'queue_restore_backup_as_new', new_name, f'Queued restore from {backup_dir}; task={task_id}')
+        return _redirect('/tasks', message=f'Restore queued as task {task_id}')
+    except Exception as exc:
+        return _redirect('/backups', error=str(exc))
 
 
 @app.get('/zfs', response_class=HTMLResponse)

@@ -93,3 +93,7 @@ small { color: #64748b; }
 .inline-form.compact { margin: 0; gap: .35rem; }
 .inline-form.compact input, .inline-form.compact select { max-width: 170px; margin-top: 0; }
 .inline-form.compact button { padding: .42rem .58rem; }
+
+.pill.queued { background: #e0f2fe; color: #075985; }
+.pill.running { background: #dcfce7; color: #14532d; }
+.task-message { white-space: pre-wrap; max-width: 520px; max-height: 180px; overflow: auto; }

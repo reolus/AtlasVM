@@ -9,8 +9,11 @@
     <div class="card"><strong>Memory</strong><span>{{ vm.memory_mb }} MB</span></div>
     <div class="card"><strong>Autostart</strong><span>{{ vm.autostart }}</span></div>
     <div class="card"><strong>UUID</strong><small>{{ vm.uuid }}</small></div>
+    <div class="card"><strong>Template Status</strong><span>{{ 'Template' if vm.is_template else 'Normal VM' }}</span></div>
   </div>
   <div class="actions block-actions">
+    <a class="button muted" href="/vms/{{ vm.name }}/metrics">Metrics</a>
+    {% if vm.is_template %}<form method="post" action="/ui/vms/{{ vm.name }}/template"><input type="hidden" name="enabled" value="false"><button>Convert to VM</button></form>{% else %}<form method="post" action="/ui/vms/{{ vm.name }}/template"><input type="hidden" name="enabled" value="true"><button>Convert to Template</button></form>{% endif %}
     <form method="post" action="/ui/vms/{{ vm.name }}/console" target="_blank"><button>Open Console</button></form>
     <form method="post" action="/ui/vms/{{ vm.name }}/start"><button>Start</button></form>
     <form method="post" action="/ui/vms/{{ vm.name }}/shutdown"><button>Shutdown</button></form>
@@ -19,6 +22,18 @@
     {% if vm.autostart %}<form method="post" action="/ui/vms/{{ vm.name }}/autostart-off"><button>Disable Autostart</button></form>{% else %}<form method="post" action="/ui/vms/{{ vm.name }}/autostart-on"><button>Enable Autostart</button></form>{% endif %}
   </div>
 </section>
+
+{% if metrics %}
+<section>
+  <div class="section-title"><h2>Live Metrics</h2><a class="button muted" href="/vms/{{ vm.name }}/metrics">Open Metrics Detail</a></div>
+  <div class="grid cards">
+    <div class="card"><strong>CPU Time</strong><small>{{ metrics.cpu_time_ns or 'n/a' }} ns</small></div>
+    <div class="card"><strong>Memory RSS</strong><span>{{ metrics.memory_rss_mb or 'n/a' }} MB</span></div>
+    <div class="card"><strong>Disks</strong><span>{{ metrics.disks|length }}</span></div>
+    <div class="card"><strong>NICs</strong><span>{{ metrics.interfaces|length }}</span></div>
+  </div>
+</section>
+{% endif %}
 
 <section class="grid two">
   <div>

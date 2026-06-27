@@ -114,6 +114,110 @@ class BackupService:
         archive_zst.unlink(missing_ok=True)
         archive_gz.unlink(missing_ok=True)
 
+
+    def restore_as_new_vm(self, backup_dir: str, new_name: str, storage_pool: str | None = None) -> dict[str, str]:
+        """Restore a backup as a new VM with copied disks, new name, no UUID, and regenerated MAC addresses."""
+        import re
+        import uuid
+        import xml.etree.ElementTree as ET
+
+        if not re.match(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', new_name):
+            raise ValueError('New VM name must start with a letter or number and may contain letters, numbers, hyphens, and underscores')
+
+        backup_path = Path(backup_dir).resolve()
+        root_path = self.backup_root.resolve()
+        if root_path not in backup_path.parents:
+            raise ValueError('Backup path is outside the AtlasVM backup root')
+
+        metadata_path = backup_path / 'metadata.json'
+        xml_path = next(backup_path.glob('*.xml'), None)
+        if not metadata_path.exists() or xml_path is None:
+            raise ValueError('Backup directory does not contain metadata.json and VM XML')
+
+        metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
+        lv = LibvirtService()
+        try:
+            try:
+                lv.conn.lookupByName(new_name)
+                raise ValueError(f'VM already exists: {new_name}')
+            except Exception as exc:
+                if 'VM already exists' in str(exc):
+                    raise
+
+            storage_pool = storage_pool or self.settings.default_storage_pool
+            pool = lv.conn.storagePoolLookupByName(storage_pool)
+            if not pool.isActive():
+                pool.create()
+            pool.refresh(0)
+            pool_xml = ET.fromstring(pool.XMLDesc())
+            target_dir = pool_xml.findtext('./target/path')
+            if not target_dir:
+                raise RuntimeError(f'Storage pool has no target path: {storage_pool}')
+
+            domain_xml = xml_path.read_text(encoding='utf-8')
+            domain_root = ET.fromstring(domain_xml)
+            name_elem = domain_root.find('./name')
+            if name_elem is None:
+                name_elem = ET.SubElement(domain_root, 'name')
+            name_elem.text = new_name
+
+            uuid_elem = domain_root.find('./uuid')
+            if uuid_elem is not None:
+                domain_root.remove(uuid_elem)
+
+            # Remove VNC fixed ports so libvirt can assign fresh console ports.
+            for graphics in domain_root.findall('./devices/graphics'):
+                if graphics.attrib.get('type') == 'vnc':
+                    graphics.attrib['port'] = '-1'
+                    graphics.attrib['autoport'] = 'yes'
+
+            # Remove MACs so libvirt generates fresh ones.
+            for iface in domain_root.findall('./devices/interface'):
+                mac = iface.find('mac')
+                if mac is not None:
+                    iface.remove(mac)
+
+            copied = []
+            disk_records = [d for d in metadata.get('disks', []) if d.get('copied') and d.get('target')]
+            disk_index = 1
+            for disk_elem in domain_root.findall('./devices/disk'):
+                if disk_elem.attrib.get('device') != 'disk':
+                    continue
+                source = disk_elem.find('source')
+                if source is None:
+                    continue
+                record = disk_records[disk_index - 1] if disk_index - 1 < len(disk_records) else None
+                if record is None:
+                    continue
+                backup_disk = Path(record['target'])
+                if not backup_disk.exists():
+                    raise FileNotFoundError(f'Backup disk missing: {backup_disk}')
+                dest = Path(target_dir) / f'{new_name}-disk{disk_index}.qcow2'
+                if dest.exists():
+                    raise FileExistsError(f'Destination disk already exists: {dest}')
+                self._copy_disk(backup_disk, dest)
+                source.attrib.clear()
+                source.attrib['file'] = str(dest)
+                driver = disk_elem.find('driver')
+                if driver is not None:
+                    driver.attrib['type'] = 'qcow2'
+                copied.append(str(dest))
+                disk_index += 1
+
+            # Clear template marker during restore.
+            desc = domain_root.find('./description')
+            if desc is not None and desc.text:
+                desc.text = desc.text.replace('[ATLASVM_TEMPLATE]', '').strip()
+
+            new_xml = ET.tostring(domain_root, encoding='unicode')
+            domain = lv.conn.defineXML(new_xml)
+            if domain is None:
+                raise RuntimeError('libvirt failed to define restored VM')
+            pool.refresh(0)
+            return {'status': 'ok', 'name': domain.name(), 'disks': ', '.join(copied)}
+        finally:
+            lv.close()
+
     def restore_definition(self, backup_dir: str, new_name: str | None = None) -> dict[str, str]:
         backup_path = Path(backup_dir).resolve()
         metadata_path = backup_path / 'metadata.json'

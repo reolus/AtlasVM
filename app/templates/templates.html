@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <div class="section-title"><h2>Templates</h2><span class="pill">Phase 5C</span></div>
+  {% if message %}<div class="notice success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  <p>Templates are powered-off VMs marked for repeat cloning. Full clones are used first because linked-clone cleverness can wait its turn in the machinery of disappointment.</p>
+  <table><thead><tr><th>Template</th><th>CPU</th><th>Memory</th><th>Clone</th></tr></thead><tbody>
+    {% for item in templates %}
+      <tr>
+        <td><a href="/vms/{{ item.name }}">{{ item.name }}</a></td><td>{{ item.vcpus }}</td><td>{{ item.memory_mb }} MB</td>
+        <td><form class="inline-form" method="post" action="/templates/{{ item.name }}/clone"><input name="new_name" placeholder="new-vm-name" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}"><select name="storage_pool"><option value="">Default Pool</option>{% for pool in pools %}<option value="{{ pool.name }}">{{ pool.name }}</option>{% endfor %}</select><label class="check"><input type="checkbox" name="start_after_create" value="true"> Start</label><button>Clone</button></form></td>
+      </tr>
+    {% else %}<tr><td colspan="4">No templates yet. Convert a stopped VM from its VM detail page.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+<section>
+  <h2>All VMs</h2>
+  <table><thead><tr><th>Name</th><th>State</th><th>Template</th></tr></thead><tbody>
+    {% for vm in vms %}<tr><td><a href="/vms/{{ vm.name }}">{{ vm.name }}</a></td><td><span class="pill {{ vm.state }}">{{ vm.state }}</span></td><td>{{ 'Yes' if vm.is_template else 'No' }}</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}
