@@ -144,3 +144,13 @@ Phase 6 adds ZFS-native storage maturity features:
 - Manual backup retention pruning from the Backups page.
 
 See `docs/PHASE_SIX_DESIGN.md` and `docs/PHASE_SIX_UPGRADE.md`.
+
+
+## Phase 7: Network Management
+
+Phase 7 adds create/edit/delete workflows for libvirt networks, including NAT, isolated, routed, and bridge-backed modes. The Networks page now includes detail pages with DHCP leases, attached VMs, bridge information, CIDR, autostart state, and raw network XML.
+
+See:
+
+- `docs/PHASE_SEVEN_DESIGN.md`
+- `docs/PHASE_SEVEN_UPGRADE.md`

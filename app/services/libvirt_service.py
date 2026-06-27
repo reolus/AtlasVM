@@ -139,25 +139,125 @@ class LibvirtService:
     def list_networks(self) -> list[dict[str, Any]]:
         networks = []
         for net in self.conn.listAllNetworks(0):
-            bridge = None
-            cidr = None
             try:
-                bridge = net.bridgeName() if net.isActive() else None
-                root = ET.fromstring(net.XMLDesc())
-                ip = root.find('./ip')
-                if ip is not None:
-                    cidr = f"{ip.attrib.get('address')}/{ip.attrib.get('netmask')}"
+                networks.append(self.get_network(net.name(), include_leases=False, include_vms=False))
             except Exception:
-                pass
-            networks.append({
-                'name': net.name(),
-                'uuid': net.UUIDString(),
-                'active': bool(net.isActive()),
-                'bridge': bridge,
-                'autostart': bool(net.autostart()),
-                'cidr': cidr,
-            })
+                networks.append({
+                    'name': net.name(),
+                    'uuid': net.UUIDString(),
+                    'active': bool(net.isActive()),
+                    'autostart': bool(net.autostart()),
+                    'bridge': None,
+                    'mode': 'unknown',
+                    'cidr': None,
+                    'dhcp_start': None,
+                    'dhcp_end': None,
+                    'vm_count': 0,
+                })
         return sorted(networks, key=lambda n: n['name'])
+
+    def get_network(self, name: str, include_leases: bool = True, include_vms: bool = True) -> dict[str, Any]:
+        net = self.conn.networkLookupByName(name)
+        root = ET.fromstring(net.XMLDesc())
+        bridge_el = root.find('./bridge')
+        forward_el = root.find('./forward')
+        ip_el = root.find('./ip')
+        domain_el = root.find('./domain')
+
+        bridge = None
+        try:
+            bridge = net.bridgeName() if net.isActive() else None
+        except Exception:
+            pass
+        if not bridge and bridge_el is not None:
+            bridge = bridge_el.attrib.get('name')
+
+        mode = 'isolated'
+        if forward_el is not None:
+            mode = forward_el.attrib.get('mode') or 'nat'
+
+        cidr = None
+        address = None
+        netmask = None
+        prefix = None
+        dhcp_start = None
+        dhcp_end = None
+        if ip_el is not None:
+            address = ip_el.attrib.get('address')
+            netmask = ip_el.attrib.get('netmask')
+            prefix = ip_el.attrib.get('prefix')
+            cidr = self._format_cidr(address, netmask, prefix)
+            dhcp_range = ip_el.find('./dhcp/range')
+            if dhcp_range is not None:
+                dhcp_start = dhcp_range.attrib.get('start')
+                dhcp_end = dhcp_range.attrib.get('end')
+
+        leases = []
+        if include_leases:
+            leases = self.network_leases(name)
+
+        attached_vms = []
+        if include_vms:
+            attached_vms = self.vms_using_network(name)
+
+        return {
+            'name': net.name(),
+            'uuid': net.UUIDString(),
+            'active': bool(net.isActive()),
+            'autostart': bool(net.autostart()),
+            'bridge': bridge,
+            'mode': mode,
+            'cidr': cidr,
+            'address': address,
+            'netmask': netmask,
+            'prefix': prefix,
+            'dhcp_start': dhcp_start,
+            'dhcp_end': dhcp_end,
+            'domain': domain_el.attrib.get('name') if domain_el is not None else None,
+            'leases': leases,
+            'attached_vms': attached_vms,
+            'vm_count': len(attached_vms),
+            'xml': net.XMLDesc(),
+        }
+
+    def network_leases(self, name: str) -> list[dict[str, Any]]:
+        net = self.conn.networkLookupByName(name)
+        if not net.isActive():
+            return []
+        leases = []
+        try:
+            for lease in net.DHCPLeases():
+                leases.append({
+                    'hostname': lease.get('hostname'),
+                    'mac': lease.get('mac'),
+                    'ipaddr': lease.get('ipaddr'),
+                    'prefix': lease.get('prefix'),
+                    'expirytime': lease.get('expirytime'),
+                    'type': lease.get('type'),
+                    'clientid': lease.get('clientid'),
+                })
+        except Exception:
+            return []
+        return leases
+
+    def vms_using_network(self, network_name: str) -> list[dict[str, Any]]:
+        attached = []
+        for domain in self.conn.listAllDomains(0):
+            try:
+                summary = self._domain_summary(domain)
+                matches = []
+                for iface in summary.get('interfaces', []):
+                    if iface.get('network') == network_name:
+                        matches.append(iface)
+                if matches:
+                    attached.append({
+                        'name': summary['name'],
+                        'state': summary['state'],
+                        'interfaces': matches,
+                    })
+            except Exception:
+                continue
+        return sorted(attached, key=lambda v: v['name'])
 
     def network_action(self, name: str, action: str) -> None:
         net = self.conn.networkLookupByName(name)
@@ -171,6 +271,132 @@ class LibvirtService:
             net.setAutostart(0)
         else:
             raise ValueError(f'Unsupported network action: {action}')
+
+    def create_network(
+        self,
+        name: str,
+        mode: str = 'nat',
+        bridge_name: str | None = None,
+        cidr: str | None = None,
+        dhcp_start: str | None = None,
+        dhcp_end: str | None = None,
+        domain_name: str | None = None,
+        autostart: bool = True,
+        start: bool = True,
+    ) -> dict[str, Any]:
+        self._validate_network_name(name)
+        try:
+            self.conn.networkLookupByName(name)
+            raise ValueError(f'Network already exists: {name}')
+        except libvirt.libvirtError:
+            pass
+        xml = self._build_network_xml(name, mode, bridge_name, cidr, dhcp_start, dhcp_end, domain_name)
+        net = self.conn.networkDefineXML(xml)
+        if net is None:
+            raise RuntimeError('libvirt failed to define the network')
+        net.setAutostart(1 if autostart else 0)
+        if start:
+            net.create()
+        return self.get_network(name)
+
+    def update_network(
+        self,
+        name: str,
+        mode: str = 'nat',
+        bridge_name: str | None = None,
+        cidr: str | None = None,
+        dhcp_start: str | None = None,
+        dhcp_end: str | None = None,
+        domain_name: str | None = None,
+        autostart: bool = True,
+        start_after_define: bool = False,
+    ) -> dict[str, Any]:
+        net = self.conn.networkLookupByName(name)
+        if net.isActive():
+            raise RuntimeError('Stop the network before editing it. AtlasVM will not redefine an active libvirt network.')
+        xml = self._build_network_xml(name, mode, bridge_name, cidr, dhcp_start, dhcp_end, domain_name)
+        net.undefine()
+        new_net = self.conn.networkDefineXML(xml)
+        if new_net is None:
+            raise RuntimeError('libvirt failed to redefine the network')
+        new_net.setAutostart(1 if autostart else 0)
+        if start_after_define:
+            new_net.create()
+        return self.get_network(name)
+
+    def delete_network(self, name: str) -> None:
+        if name == self.settings.default_network:
+            raise RuntimeError('Refusing to delete the configured default network.')
+        attached = self.vms_using_network(name)
+        if attached:
+            vm_names = ', '.join(v['name'] for v in attached)
+            raise RuntimeError(f'Refusing to delete network because VMs are attached: {vm_names}')
+        net = self.conn.networkLookupByName(name)
+        if net.isActive():
+            net.destroy()
+        net.undefine()
+
+    def _build_network_xml(
+        self,
+        name: str,
+        mode: str,
+        bridge_name: str | None,
+        cidr: str | None,
+        dhcp_start: str | None,
+        dhcp_end: str | None,
+        domain_name: str | None,
+    ) -> str:
+        import ipaddress
+
+        mode = (mode or 'nat').strip().lower()
+        if mode not in {'nat', 'isolated', 'route', 'bridge'}:
+            raise ValueError('Network mode must be nat, isolated, route, or bridge.')
+
+        self._validate_network_name(name)
+        root = ET.Element('network')
+        ET.SubElement(root, 'name').text = name
+
+        if mode in {'nat', 'route'}:
+            ET.SubElement(root, 'forward', {'mode': mode})
+        elif mode == 'bridge':
+            ET.SubElement(root, 'forward', {'mode': 'bridge'})
+
+        if bridge_name:
+            bridge_attrs = {'name': bridge_name.strip()}
+            ET.SubElement(root, 'bridge', bridge_attrs)
+
+        if domain_name:
+            ET.SubElement(root, 'domain', {'name': domain_name.strip()})
+
+        if mode != 'bridge' and cidr:
+            network = ipaddress.ip_network(cidr.strip(), strict=False)
+            gateway = str(next(network.hosts(), network.network_address + 1))
+            ip_el = ET.SubElement(root, 'ip', {'address': gateway, 'netmask': str(network.netmask)})
+            if dhcp_start and dhcp_end:
+                dhcp_el = ET.SubElement(ip_el, 'dhcp')
+                ET.SubElement(dhcp_el, 'range', {'start': dhcp_start.strip(), 'end': dhcp_end.strip()})
+        elif mode in {'nat', 'route', 'isolated'} and not cidr:
+            raise ValueError('CIDR is required for NAT, routed, and isolated networks.')
+
+        return ET.tostring(root, encoding='unicode')
+
+    def _validate_network_name(self, name: str) -> None:
+        if not name or not re.match(r'^[A-Za-z0-9_.:-]+$', name):
+            raise ValueError('Network name may only contain letters, numbers, underscore, dot, colon, and dash.')
+
+    def _format_cidr(self, address: str | None, netmask: str | None, prefix: str | None) -> str | None:
+        if not address:
+            return None
+        try:
+            import ipaddress
+            if prefix:
+                return f'{address}/{prefix}'
+            if netmask:
+                network = ipaddress.ip_network(f'{address}/{netmask}', strict=False)
+                return f'{address}/{network.prefixlen}'
+        except Exception:
+            pass
+        return f'{address}/{netmask}' if netmask else address
 
     def list_vms(self) -> list[dict[str, Any]]:
         domains = self.conn.listAllDomains(0)

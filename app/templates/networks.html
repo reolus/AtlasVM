@@ -1,19 +1,51 @@
 {% extends "base.html" %}
 {% block content %}
 <section>
-  <h2>Networks</h2>
-  <table><thead><tr><th>Name</th><th>Active</th><th>Autostart</th><th>Bridge</th><th>CIDR</th><th>Actions</th></tr></thead><tbody>
-    {% for net in networks %}
+  <div class="section-title">
+    <div>
+      <h2>Networks</h2>
+      <p>Manage libvirt NAT, isolated, routed, and bridge-backed networks.</p>
+    </div>
+    <a class="button" href="/networks/new">Create Network</a>
+  </div>
+
+  <table>
+    <thead>
       <tr>
-        <td>{{ net.name }}</td><td>{{ net.active }}</td><td>{{ net.autostart }}</td><td>{{ net.bridge }}</td><td>{{ net.cidr }}</td>
+        <th>Name</th>
+        <th>Mode</th>
+        <th>Active</th>
+        <th>Autostart</th>
+        <th>Bridge</th>
+        <th>CIDR</th>
+        <th>VMs</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for net in networks %}
+      <tr>
+        <td><a href="/networks/{{ net.name }}">{{ net.name }}</a></td>
+        <td><span class="pill">{{ net.mode or 'unknown' }}</span></td>
+        <td><span class="pill {{ 'running' if net.active else 'shutoff' }}">{{ 'Active' if net.active else 'Stopped' }}</span></td>
+        <td>{{ 'Yes' if net.autostart else 'No' }}</td>
+        <td><code>{{ net.bridge or '-' }}</code></td>
+        <td><code>{{ net.cidr or '-' }}</code></td>
+        <td>{{ net.vm_count or 0 }}</td>
         <td class="actions">
-          <form method="post" action="/networks/{{ net.name }}/start"><button>Start</button></form>
+          <a class="button muted" href="/networks/{{ net.name }}">Details</a>
+          {% if net.active %}
           <form method="post" action="/networks/{{ net.name }}/stop"><button class="danger">Stop</button></form>
-          <form method="post" action="/networks/{{ net.name }}/autostart-on"><button>Autostart On</button></form>
-          <form method="post" action="/networks/{{ net.name }}/autostart-off"><button>Autostart Off</button></form>
+          {% else %}
+          <form method="post" action="/networks/{{ net.name }}/start"><button>Start</button></form>
+          {% endif %}
+          <a class="button muted" href="/networks/{{ net.name }}/edit">Edit</a>
         </td>
       </tr>
-    {% else %}<tr><td colspan="6">No libvirt networks found.</td></tr>{% endfor %}
-  </tbody></table>
+      {% else %}
+      <tr><td colspan="8">No libvirt networks found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </section>
 {% endblock %}

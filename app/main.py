@@ -142,8 +142,7 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: str = Depen
     backups = BackupService().list_backups()[:5]
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(10).all()
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(10).all()
-    return templates.TemplateResponse('dashboard.html', {'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'zfs': zfs, 'backups': backups,
-            'events': events, 'tasks': tasks, 'error': error})
+    return templates.TemplateResponse('dashboard.html', {'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'zfs': zfs, 'backups': backups, 'events': events, 'tasks': tasks, 'error': error})
 
 
 @app.get('/vms/new', response_class=HTMLResponse)
@@ -190,8 +189,7 @@ def vm_detail(name: str, request: Request, error_msg: str | None = Query(None, a
     finally:
         lv.close()
     backups = BackupService().list_backups(name)
-    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups,
-            'error': error, 'success': success, 'current_iso': current_iso, 'metrics': metrics})
+    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error, 'success': success, 'current_iso': current_iso, 'metrics': metrics})
 
 
 @app.post('/ui/vms/{name}/{action}')
@@ -541,17 +539,130 @@ def storage_refresh(name: str, db: Session = Depends(get_db), user: str = Depend
 
 
 @app.get('/networks', response_class=HTMLResponse)
-def networks_page(request: Request, user: str = Depends(require_user)):
+def networks_page(request: Request, user: str = Depends(require_viewer)):
     lv = LibvirtService()
-    error = None
     try:
         networks = lv.list_networks()
     except Exception as exc:
         networks = []
-        error = str(exc)
+        return templates.TemplateResponse('networks.html', {**_view_context(request, user), 'networks': networks, 'error': str(exc)})
     finally:
         lv.close()
-    return templates.TemplateResponse('networks.html', {'request': request, 'app_name': settings.app_name, 'networks': networks, 'error': error})
+    return templates.TemplateResponse('networks.html', {**_view_context(request, user), 'networks': networks})
+
+
+@app.get('/networks/new', response_class=HTMLResponse)
+def network_new_page(request: Request, user: str = Depends(require_admin)):
+    return templates.TemplateResponse('network_form.html', {**_view_context(request, user), 'network': None, 'action': '/networks/new', 'mode': 'create'})
+
+
+@app.post('/networks/new')
+def network_create(
+    request: Request,
+    name: str = Form(...),
+    mode: str = Form('nat'),
+    bridge_name: str = Form(''),
+    cidr: str = Form(''),
+    dhcp_start: str = Form(''),
+    dhcp_end: str = Form(''),
+    domain_name: str = Form(''),
+    autostart: bool = Form(False),
+    start_network: bool = Form(False),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    lv = LibvirtService()
+    try:
+        lv.create_network(
+            name=name.strip(),
+            mode=mode,
+            bridge_name=bridge_name.strip() or None,
+            cidr=cidr.strip() or None,
+            dhcp_start=dhcp_start.strip() or None,
+            dhcp_end=dhcp_end.strip() or None,
+            domain_name=domain_name.strip() or None,
+            autostart=autostart,
+            start=start_network,
+        )
+        log_event(db, user, 'network_create', name, f'Created {mode} network')
+        return _redirect(f'/networks/{name.strip()}', message='Network created.')
+    except Exception as exc:
+        return _redirect('/networks/new', error=str(exc))
+    finally:
+        lv.close()
+
+
+@app.get('/networks/{name}', response_class=HTMLResponse)
+def network_detail_page(name: str, request: Request, user: str = Depends(require_viewer)):
+    lv = LibvirtService()
+    try:
+        network = lv.get_network(name)
+    except Exception as exc:
+        return _redirect('/networks', error=str(exc))
+    finally:
+        lv.close()
+    return templates.TemplateResponse('network_detail.html', {**_view_context(request, user), 'network': network})
+
+
+@app.get('/networks/{name}/edit', response_class=HTMLResponse)
+def network_edit_page(name: str, request: Request, user: str = Depends(require_admin)):
+    lv = LibvirtService()
+    try:
+        network = lv.get_network(name)
+    except Exception as exc:
+        return _redirect('/networks', error=str(exc))
+    finally:
+        lv.close()
+    return templates.TemplateResponse('network_form.html', {**_view_context(request, user), 'network': network, 'action': f'/networks/{name}/edit', 'mode': 'edit'})
+
+
+@app.post('/networks/{name}/edit')
+def network_edit(
+    name: str,
+    request: Request,
+    mode: str = Form('nat'),
+    bridge_name: str = Form(''),
+    cidr: str = Form(''),
+    dhcp_start: str = Form(''),
+    dhcp_end: str = Form(''),
+    domain_name: str = Form(''),
+    autostart: bool = Form(False),
+    start_network: bool = Form(False),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    lv = LibvirtService()
+    try:
+        lv.update_network(
+            name=name,
+            mode=mode,
+            bridge_name=bridge_name.strip() or None,
+            cidr=cidr.strip() or None,
+            dhcp_start=dhcp_start.strip() or None,
+            dhcp_end=dhcp_end.strip() or None,
+            domain_name=domain_name.strip() or None,
+            autostart=autostart,
+            start_after_define=start_network,
+        )
+        log_event(db, user, 'network_edit', name, f'Edited {mode} network')
+        return _redirect(f'/networks/{name}', message='Network updated.')
+    except Exception as exc:
+        return _redirect(f'/networks/{name}/edit', error=str(exc))
+    finally:
+        lv.close()
+
+
+@app.post('/networks/{name}/delete')
+def network_delete(name: str, db: Session = Depends(get_db), user: str = Depends(require_admin)):
+    lv = LibvirtService()
+    try:
+        lv.delete_network(name)
+        log_event(db, user, 'network_delete', name, 'Deleted network')
+        return _redirect('/networks', message=f'Network deleted: {name}')
+    except Exception as exc:
+        return _redirect(f'/networks/{name}', error=str(exc))
+    finally:
+        lv.close()
 
 
 @app.post('/networks/{name}/{action}')
@@ -560,9 +671,11 @@ def networks_action(name: str, action: str, db: Session = Depends(get_db), user:
     try:
         lv.network_action(name, action)
         log_event(db, user, f'network_{action}', name, 'Network action completed')
+        return _redirect(f'/networks/{name}', message=f'Network action completed: {action}')
+    except Exception as exc:
+        return _redirect(f'/networks/{name}', error=str(exc))
     finally:
         lv.close()
-    return RedirectResponse(url='/networks', status_code=303)
 
 
 @app.get('/events', response_class=HTMLResponse)
@@ -580,17 +693,11 @@ def tasks_page(request: Request, db: Session = Depends(get_db), user: str = Depe
 @app.get('/backups', response_class=HTMLResponse)
 def backups_page(request: Request, user: str = Depends(require_user)):
     backups = BackupService().list_backups()
-    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups,
-            'backup_path': settings.backup_path, 'retention': BackupService().retention_policy(), 'message': request.query_params.get('message'), 'error': request.query_params.get('error')})
+    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups, 'backup_path': settings.backup_path, 'retention': BackupService().retention_policy(), 'message': request.query_params.get('message'), 'error': request.query_params.get('error')})
 
 
 @app.post('/backups/restore-definition')
 def restore_backup_definition(backup_dir: str = Form(...), new_name: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
-    settings = get_settings()
-    retention = {
-        'keep_last': getattr(settings, 'backup_keep_last', 7),
-        'scope': 'all',
-    }
     task = start_task(db, user, 'restore_definition', backup_dir)
     try:
         result = BackupService().restore_definition(backup_dir, new_name or None)
