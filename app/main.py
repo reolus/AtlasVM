@@ -1,7 +1,7 @@
 from pathlib import Path
 from shutil import copyfileobj
 
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
+from fastapi import Query, Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -39,6 +39,7 @@ def _lv_data() -> tuple[list[dict], list[dict], list[dict], list[dict], str | No
     networks: list[dict] = []
     isos: list[dict] = []
     error = None
+    current_iso = None
     try:
         lv = LibvirtService()
         vms = lv.list_vms()
@@ -92,6 +93,7 @@ def vm_detail(name: str, request: Request, user: str = Depends(require_user)):
     error = None
     try:
         vm = lv.get_vm(name)
+        current_iso = lv.current_iso(name)
         isos = lv.list_isos()
         pools = lv.list_storage_pools()
     except Exception as exc:
@@ -102,7 +104,7 @@ def vm_detail(name: str, request: Request, user: str = Depends(require_user)):
     finally:
         lv.close()
     backups = BackupService().list_backups(name)
-    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error})
+    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error, 'current_iso': current_iso})
 
 
 @app.post('/ui/vms/{name}/{action}')
@@ -141,6 +143,18 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
             finish_task(db, task, 'success', f'Console opened: {session.url}')
             log_event(db, user, 'open_console', name, session.url)
             return RedirectResponse(url=session.url, status_code=303)
+        elif action == 'backup':
+            from app.services.backup_service import BackupService
+            backup_service = BackupService()
+
+            # Generic /ui/vms/{name}/{action} route does not receive form fields cleanly.
+            # Keep this as a safe default and use the dedicated /vms/{name}/backup route below.
+            result = backup_service.create_backup(name, require_shutdown=True)
+
+            finish_task(db, task, 'success', f'Backup completed: {result}')
+            log_event(db, user, 'backup', name, f'Backup completed: {result}')
+            return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
         else:
             raise ValueError(f'Unsupported action: {action}')
         log_event(db, user, action, name, f'UI action: {action}')
@@ -176,9 +190,12 @@ def vm_attach_iso(name: str, iso_path: str = Form(...), db: Session = Depends(ge
     lv = LibvirtService()
     task = start_task(db, user, 'attach_iso', name)
     try:
-        lv.attach_iso(name, iso_path)
-        log_event(db, user, 'attach_iso', name, iso_path)
-        finish_task(db, task, 'success', 'ISO attached')
+        if not iso_path:
+            lv.eject_iso(name)
+        else:
+            lv.attach_iso(name, iso_path)
+            log_event(db, user, 'attach_iso', name, iso_path)
+            finish_task(db, task, 'success', 'ISO attached')
     except Exception as exc:
         finish_task(db, task, 'failed', str(exc))
         raise
@@ -368,6 +385,108 @@ def delete_iso(filename: str, db: Session = Depends(get_db), user: str = Depends
         lv.close()
     return RedirectResponse(url='/isos', status_code=303)
 
+
+
+
+@app.post('/vms/{name}/edit')
+def vm_edit(
+    name: str,
+    memory_mb: int = Form(...),
+    vcpus: int = Form(...),
+    description: str = Form(''),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_user),
+):
+    lv = LibvirtService()
+    task = start_task(db, user, 'edit_vm', name)
+
+    try:
+        if hasattr(lv, 'update_vm'):
+            lv.update_vm(name, memory_mb=memory_mb, vcpus=vcpus, description=description)
+        elif hasattr(lv, 'edit_vm'):
+            lv.edit_vm(name, memory_mb=memory_mb, vcpus=vcpus, description=description)
+        else:
+            raise RuntimeError('LibvirtService has no update_vm or edit_vm method')
+
+        finish_task(db, task, 'success', 'VM settings updated')
+        log_event(db, user, 'edit_vm', name, f'memory_mb={memory_mb}, vcpus={vcpus}')
+        return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        log_event(db, user, 'edit_vm_failed', name, str(exc))
+
+        # Do not throw a raw 500 for normal operator mistakes.
+        # Send the admin back to the VM page with a readable message.
+        from urllib.parse import quote
+        message = quote(str(exc))
+        return RedirectResponse(url=f'/vms/{name}?error={message}', status_code=303)
+
+    finally:
+        lv.close()
+
+
+@app.post('/vms/{name}/backup')
+def vm_backup(
+    name: str,
+    shutdown_only: bool = Form(False),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_user),
+):
+    from app.services.backup_service import BackupService
+
+    task = start_task(db, user, 'backup', name)
+    try:
+        backup_service = BackupService()
+        try:
+            result = backup_service.create_backup(name, require_shutdown=shutdown_only)
+        except TypeError as exc:
+            if "unexpected keyword argument 'shutdown_only'" not in str(exc):
+                raise
+            result = backup_service.create_backup(name)
+        finish_task(db, task, 'success', f'Backup completed: {result}')
+        log_event(db, user, 'backup', name, f'Backup completed: {result}')
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        log_event(db, user, 'backup_failed', name, str(exc))
+        raise
+
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+@app.post('/vms/{name}/snapshots')
+def vm_create_snapshot(
+    name: str,
+    snapshot_name: str = Form(''),
+    description: str = Form(''),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_user),
+):
+    from datetime import datetime
+
+    lv = LibvirtService()
+    if not snapshot_name:
+        snapshot_name = f"snap-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+    task = start_task(db, user, 'snapshot_create', name)
+    try:
+        if hasattr(lv, 'create_snapshot'):
+            result = lv.create_snapshot(name, snapshot_name, description)
+        elif hasattr(lv, 'snapshot_create'):
+            result = lv.snapshot_create(name, snapshot_name, description)
+        else:
+            raise RuntimeError('LibvirtService has no create_snapshot or snapshot_create method')
+
+        finish_task(db, task, 'success', f'Snapshot created: {snapshot_name}')
+        log_event(db, user, 'snapshot_create', name, f'Snapshot created: {snapshot_name}')
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        log_event(db, user, 'snapshot_create_failed', name, str(exc))
+        raise
+    finally:
+        lv.close()
+
+    return RedirectResponse(url=f'/vms/{name}#snapshots', status_code=303)
 
 @app.get('/storage', response_class=HTMLResponse)
 def storage_page(request: Request, user: str = Depends(require_user)):

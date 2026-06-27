@@ -35,7 +35,7 @@ class BackupService:
         try:
             vm = lv.get_vm(vm_name)
             if require_shutdown and vm.get('state') == 'running':
-                raise RuntimeError('Shutdown-only backup is enabled. Stop the VM before backing it up.')
+                raise RuntimeError('Shutdown-only backup is enabled. Stop the VM before backing it up, or uncheck shutdown-only backup.')
             safe_name = self._safe(vm_name)
             stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
             dest = self.backup_root / safe_name / stamp
