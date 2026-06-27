@@ -1,22 +1,30 @@
 # AtlasVM Phase 4 Design
 
-Phase 4 begins the production-hardening pass for AtlasVM.
+Phase 4 turns AtlasVM from a single-admin lab interface into a more controlled management surface.
 
-## Included in this build
+## Completed in this package
 
-- AtlasVM logo integrated into the web interface and packaged as `/static/atlasvm-logo.png`.
-- Local user database with PBKDF2 password hashing.
-- Automatic seeding of the first admin user from the existing `ATLASVM_USERNAME` and `ATLASVM_PASSWORD` settings.
-- Admin-only user management page at `/users`.
-- Read-only platform settings page at `/settings`.
-- VM detail page now passes `current_iso` and shows the loaded installer ISO.
-- Template-safe ISO dropdown behavior so the page does not explode when no media is loaded.
-- Phase 4 docs for upgrade and operating notes.
+- AtlasVM logo integrated into the shared web header and favicon.
+- Database-backed local users with PBKDF2 password hashing.
+- Role helpers: viewer, operator, admin.
+- Role enforcement for core routes.
+- User administration: create, disable/enable, delete, change role, reset password.
+- Guardrails preventing removal of the last active administrator.
+- Editable settings page that writes safe platform settings to `.env`.
+- Flash-style success/error messages through redirects.
+- Backup delete action and backup restore-definition workflow retained.
+- Improved Users, Settings, and Backup templates.
 
-## Deferred Phase 4 work
+## Roles
 
-The next hardening pass should add true background task execution, CSRF/session-based auth, viewer/operator enforcement, cloud-init templates, ZFS-native VM snapshot workflows, live guest-agent-aware backups, VM metrics, and editable platform settings.
+- Viewer: read-only UI access.
+- Operator: VM operations, snapshots, backups, ISO upload/delete, storage refresh, ZFS actions.
+- Admin: users, settings, network changes, VM deletion, and everything below.
 
-## Security note
+## Still intended for a later phase
 
-This build still supports HTTP Basic authentication for compatibility. The local user table is a step toward real user management, not the final destination. The next security pass should move to signed sessions and CSRF-protected forms.
+- True asynchronous background job worker.
+- Live application-consistent backup using QEMU guest agent freeze/thaw.
+- Full ZFS-native VM replication.
+- Cloud-init template provisioning.
+- Network creation/editing wizard.

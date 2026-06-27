@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.models import VMCreate
 from app.api.routes import router
-from app.core.auth import require_admin, require_user
+from app.core.auth import get_user_role, require_admin, require_operator, require_user, require_viewer
 from app.core.config import get_settings
 from app.core.database import EventLog, TaskLog, UserAccount, get_db, init_db
 from app.core.logging import log_event
@@ -52,6 +52,51 @@ def _lv_data() -> tuple[list[dict], list[dict], list[dict], list[dict], str | No
     return vms, pools, networks, isos, error
 
 
+def _redirect(url: str, message: str | None = None, error: str | None = None) -> RedirectResponse:
+    from urllib.parse import quote
+    if message:
+        sep = '&' if '?' in url else '?'
+        url = f"{url}{sep}message={quote(message)}"
+    if error:
+        sep = '&' if '?' in url else '?'
+        url = f"{url}{sep}error={quote(error)}"
+    return RedirectResponse(url=url, status_code=303)
+
+
+def _view_context(request: Request, user: str | None = None) -> dict:
+    return {
+        'request': request,
+        'app_name': settings.app_name,
+        'current_user': user,
+        'current_role': get_user_role(user) if user else None,
+        'message': request.query_params.get('message'),
+        'error': request.query_params.get('error'),
+    }
+
+
+def _write_env_values(updates: dict[str, str]) -> None:
+    env_path = Path('.env')
+    existing_lines = env_path.read_text(encoding='utf-8').splitlines() if env_path.exists() else []
+    normalized = {f'ATLASVM_{k.upper()}': str(v) for k, v in updates.items()}
+    found: set[str] = set()
+    output: list[str] = []
+    for line in existing_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#') or '=' not in line:
+            output.append(line)
+            continue
+        key = line.split('=', 1)[0].strip()
+        if key in normalized:
+            output.append(f'{key}={normalized[key]}')
+            found.add(key)
+        else:
+            output.append(line)
+    for key, value in normalized.items():
+        if key not in found:
+            output.append(f'{key}={value}')
+    env_path.write_text('\n'.join(output).rstrip() + '\n', encoding='utf-8')
+
+
 @app.get('/', response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     host = get_host_summary()
@@ -70,7 +115,7 @@ def new_vm_form(request: Request, user: str = Depends(require_user)):
 
 
 @app.post('/vms/new')
-def create_vm_form(name: str = Form(...), memory_mb: int = Form(...), vcpus: int = Form(...), disk_gb: int = Form(...), storage_pool: str = Form(...), network: str = Form(...), iso_path: str = Form(''), description: str = Form(''), firmware: str = Form('bios'), start_after_create: bool = Form(False), autostart: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def create_vm_form(name: str = Form(...), memory_mb: int = Form(...), vcpus: int = Form(...), disk_gb: int = Form(...), storage_pool: str = Form(...), network: str = Form(...), iso_path: str = Form(''), description: str = Form(''), firmware: str = Form('bios'), start_after_create: bool = Form(False), autostart: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'create_vm', name)
     try:
@@ -109,10 +154,12 @@ def vm_detail(name: str, request: Request, error_msg: str | None = Query(None, a
 
 
 @app.post('/ui/vms/{name}/{action}')
-def vm_action(request: Request, name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+def vm_action(request: Request, name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, action, name)
     try:
+        if action in {'delete', 'delete-with-disks'} and get_user_role(user) != 'admin':
+            raise PermissionError('AtlasVM administrator rights are required for VM deletion')
         if action == 'start':
             lv.start_vm(name)
         elif action == 'shutdown':
@@ -158,7 +205,7 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
 
 
 @app.post('/ui/vms/{name}/edit')
-def vm_edit_basic(name: str, memory_mb: int = Form(...), vcpus: int = Form(...), description: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def vm_edit_basic(name: str, memory_mb: int = Form(...), vcpus: int = Form(...), description: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'edit_vm', name)
     try:
@@ -175,7 +222,7 @@ def vm_edit_basic(name: str, memory_mb: int = Form(...), vcpus: int = Form(...),
 
 
 @app.post('/ui/vms/{name}/iso/attach')
-def vm_attach_iso(name: str, iso_path: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def vm_attach_iso(name: str, iso_path: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'attach_iso', name)
     try:
@@ -191,7 +238,7 @@ def vm_attach_iso(name: str, iso_path: str = Form(...), db: Session = Depends(ge
 
 
 @app.post('/ui/vms/{name}/iso/eject')
-def vm_eject_iso(name: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+def vm_eject_iso(name: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'eject_iso', name)
     try:
@@ -207,7 +254,7 @@ def vm_eject_iso(name: str, db: Session = Depends(get_db), user: str = Depends(r
 
 
 @app.post('/ui/vms/{name}/disks/add')
-def vm_add_disk(name: str, size_gb: int = Form(...), storage_pool: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def vm_add_disk(name: str, size_gb: int = Form(...), storage_pool: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'add_disk', name)
     try:
@@ -223,7 +270,7 @@ def vm_add_disk(name: str, size_gb: int = Form(...), storage_pool: str = Form(''
 
 
 @app.post('/ui/vms/{name}/clone')
-def vm_clone(name: str, new_name: str = Form(...), storage_pool: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def vm_clone(name: str, new_name: str = Form(...), storage_pool: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'clone_vm', name)
     try:
@@ -239,7 +286,7 @@ def vm_clone(name: str, new_name: str = Form(...), storage_pool: str = Form(''),
 
 
 @app.post('/ui/vms/{name}/backup')
-def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = Form(True), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = Form(True), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     task = start_task(db, user, 'backup_vm', name)
     try:
         result = BackupService().create_backup(name, compress=compress, require_shutdown=require_shutdown)
@@ -253,7 +300,7 @@ def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = 
 
 
 @app.post('/ui/vms/{name}/delete-confirm')
-def vm_delete_confirm(name: str, confirm_name: str = Form(...), delete_disks: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def vm_delete_confirm(name: str, confirm_name: str = Form(...), delete_disks: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_admin)):
     if confirm_name != name:
         raise ValueError('Confirmation name did not match VM name')
     lv = LibvirtService()
@@ -291,7 +338,7 @@ def vm_console_page(name: str, request: Request, url: str = '', user: str = Depe
 
 
 @app.post('/ui/vms/{name}/snapshots')
-def create_snapshot_form(name: str, snapshot_name: str = Form(...), description: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def create_snapshot_form(name: str, snapshot_name: str = Form(...), description: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'create_snapshot', name)
     try:
@@ -307,7 +354,7 @@ def create_snapshot_form(name: str, snapshot_name: str = Form(...), description:
 
 
 @app.post('/ui/vms/{name}/snapshots/{snapshot}/{action}')
-def snapshot_action(name: str, snapshot: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+def snapshot_action(name: str, snapshot: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, f'{action}_snapshot', name)
     try:
@@ -342,7 +389,7 @@ def iso_library(request: Request, user: str = Depends(require_user)):
 
 
 @app.post('/isos/upload')
-def upload_iso(file: UploadFile = File(...), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def upload_iso(file: UploadFile = File(...), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     filename = Path(file.filename or '').name
     if not filename.lower().endswith(('.iso', '.img')):
         raise ValueError('Only .iso and .img files are allowed')
@@ -362,7 +409,7 @@ def upload_iso(file: UploadFile = File(...), db: Session = Depends(get_db), user
 
 
 @app.post('/isos/{filename}/delete')
-def delete_iso(filename: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+def delete_iso(filename: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     try:
         lv.delete_iso(filename)
@@ -401,7 +448,7 @@ def storage_detail(name: str, request: Request, user: str = Depends(require_user
 
 
 @app.post('/storage/{name}/refresh')
-def storage_refresh(name: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+def storage_refresh(name: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     try:
         lv.refresh_storage_pool(name)
@@ -426,7 +473,7 @@ def networks_page(request: Request, user: str = Depends(require_user)):
 
 
 @app.post('/networks/{name}/{action}')
-def networks_action(name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+def networks_action(name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_admin)):
     lv = LibvirtService()
     try:
         lv.network_action(name, action)
@@ -455,7 +502,7 @@ def backups_page(request: Request, user: str = Depends(require_user)):
 
 
 @app.post('/backups/restore-definition')
-def restore_backup_definition(backup_dir: str = Form(...), new_name: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def restore_backup_definition(backup_dir: str = Form(...), new_name: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     task = start_task(db, user, 'restore_definition', backup_dir)
     try:
         result = BackupService().restore_definition(backup_dir, new_name or None)
@@ -473,191 +520,18 @@ def zfs_page(request: Request, user: str = Depends(require_user)):
 
 
 @app.post('/zfs/pools/{pool}/scrub')
-def zfs_scrub(pool: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+def zfs_scrub(pool: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
     result = zfs_service.scrub(pool)
     log_event(db, user, 'zfs_scrub', pool, str(result))
     return RedirectResponse(url='/zfs', status_code=303)
 
 
 @app.post('/zfs/snapshots')
-def zfs_snapshot(dataset: str = Form(...), snapshot_name: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_user)):
+def zfs_snapshot(dataset: str = Form(...), snapshot_name: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     result = zfs_service.create_snapshot(dataset, snapshot_name)
     log_event(db, user, 'zfs_snapshot', dataset, result['snapshot'])
     return RedirectResponse(url='/zfs', status_code=303)
 
-
-
-@app.get('/settings')
-def settings_page(
-    request: Request,
-    user: str = Depends(require_user),
-):
-    settings = get_settings()
-
-    values = {
-        'app_name': settings.app_name,
-        'host': settings.host,
-        'port': settings.port,
-        'libvirt_uri': settings.libvirt_uri,
-        'default_storage_pool': settings.default_storage_pool,
-        'iso_pool': settings.iso_pool,
-        'default_network': settings.default_network,
-        'vm_disk_path': settings.vm_disk_path,
-        'iso_path': settings.iso_path,
-        'template_path': settings.template_path,
-        'backup_path': settings.backup_path,
-        'console_bind_host': settings.console_bind_host,
-        'console_public_host': settings.console_public_host,
-        'console_port_base': settings.console_port_base,
-        'console_port_max': settings.console_port_max,
-        'database_url': settings.database_url,
-    }
-
-    return templates.TemplateResponse(
-        'settings.html',
-        {
-            'request': request,
-            'app_name': settings.app_name,
-            'settings_values': values,
-            'user': user,
-            'error': None,
-        },
-    )
-
-
-@app.get('/users')
-def users_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: str = Depends(require_user),
-):
-    settings = get_settings()
-
-    try:
-        from app.models.user import User
-        users = db.query(User).order_by(User.username).all()
-        error = request.query_params.get('error')
-        message = request.query_params.get('message')
-    except Exception as exc:
-        users = []
-        error = str(exc)
-        message = None
-
-    return templates.TemplateResponse(
-        'users.html',
-        {
-            'request': request,
-            'app_name': settings.app_name,
-            'users': users,
-            'user': user,
-            'error': error,
-            'message': message,
-        },
-    )
-
-
-@app.post('/users')
-def create_user_page(
-    request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
-    role: str = Form('admin'),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_user),
-):
-    from urllib.parse import quote
-
-    username = username.strip()
-    role = role.strip() or 'admin'
-
-    try:
-        if not username:
-            raise RuntimeError('Username is required.')
-
-        if not password:
-            raise RuntimeError('Password is required.')
-
-        if role not in ('admin', 'operator', 'viewer'):
-            raise RuntimeError(f'Invalid role: {role}')
-
-        from app.models.user import User
-        from app.core.passwords import hash_password
-
-        existing = db.query(User).filter(User.username == username).first()
-        if existing:
-            raise RuntimeError(f'User already exists: {username}')
-
-        new_user = User(
-            username=username,
-            password_hash=hash_password(password),
-            role=role,
-            is_active=True,
-        )
-
-        db.add(new_user)
-        db.commit()
-
-        return RedirectResponse(
-            url=f'/users?message={quote("User created: " + username)}',
-            status_code=303,
-        )
-
-    except Exception as exc:
-        db.rollback()
-        return RedirectResponse(
-            url=f'/users?error={quote(str(exc))}',
-            status_code=303,
-        )
-
-
-@app.post('/users')
-def create_user_page(
-    request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
-    role: str = Form('admin'),
-    is_active: bool = Form(False),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_user),
-):
-    settings = get_settings()
-
-    try:
-        from app.models.user import User
-        from app.core.passwords import hash_password
-
-        existing = db.query(User).filter(User.username == username).first()
-        if existing:
-            raise RuntimeError(f'User already exists: {username}')
-
-        new_user = User(
-            username=username,
-            password_hash=hash_password(password),
-            role=role,
-            is_active=is_active,
-        )
-        db.add(new_user)
-        db.commit()
-
-        return RedirectResponse(url='/users', status_code=303)
-
-    except Exception as exc:
-        try:
-            from app.models.user import User
-            users = db.query(User).order_by(User.username).all()
-        except Exception:
-            users = []
-
-        return templates.TemplateResponse(
-            'users.html',
-            {
-                'request': request,
-                'app_name': settings.app_name,
-                'users': users,
-                'user': user,
-                'error': str(exc),
-            },
-        )
 
 @app.get('/doctor', response_class=HTMLResponse)
 def doctor_page(request: Request, user: str = Depends(require_user)):
@@ -666,68 +540,172 @@ def doctor_page(request: Request, user: str = Depends(require_user)):
 
 
 @app.get('/settings', response_class=HTMLResponse)
-def settings_page(request: Request, user: str = Depends(require_user)):
+def settings_page(request: Request, user: str = Depends(require_admin)):
     cfg = get_settings()
-    safe_items = [
+    editable = [
         ('app_name', cfg.app_name),
-        ('host', cfg.host),
-        ('port', cfg.port),
-        ('libvirt_uri', cfg.libvirt_uri),
         ('default_storage_pool', cfg.default_storage_pool),
         ('iso_pool', cfg.iso_pool),
         ('default_network', cfg.default_network),
-        ('vm_disk_path', cfg.vm_disk_path),
         ('iso_path', cfg.iso_path),
         ('template_path', cfg.template_path),
         ('backup_path', cfg.backup_path),
+        ('console_public_host', cfg.console_public_host),
         ('console_port_base', cfg.console_port_base),
         ('console_port_max', cfg.console_port_max),
+        ('backup_require_shutdown', str(cfg.backup_require_shutdown).lower()),
+        ('backup_keep_last', cfg.backup_keep_last),
+    ]
+    readonly = [
+        ('host', cfg.host),
+        ('port', cfg.port),
+        ('libvirt_uri', cfg.libvirt_uri),
+        ('vm_disk_path', cfg.vm_disk_path),
         ('database_url', cfg.database_url),
     ]
-    return templates.TemplateResponse('settings.html', {'request': request, 'app_name': settings.app_name, 'settings_items': safe_items, 'error': None})
+    context = _view_context(request, user)
+    context.update({'settings_items': editable, 'readonly_items': readonly, 'restart_required': request.query_params.get('restart_required')})
+    return templates.TemplateResponse('settings.html', context)
+
+
+@app.post('/settings')
+def settings_update(
+    request: Request,
+    app_name: str = Form(...),
+    default_storage_pool: str = Form(...),
+    iso_pool: str = Form(...),
+    default_network: str = Form(...),
+    iso_path: str = Form(...),
+    template_path: str = Form(...),
+    backup_path: str = Form(...),
+    console_public_host: str = Form(''),
+    console_port_base: int = Form(...),
+    console_port_max: int = Form(...),
+    backup_require_shutdown: str = Form('false'),
+    backup_keep_last: int = Form(...),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    try:
+        updates = {
+            'app_name': app_name.strip() or 'AtlasVM',
+            'default_storage_pool': default_storage_pool.strip(),
+            'iso_pool': iso_pool.strip(),
+            'default_network': default_network.strip(),
+            'iso_path': iso_path.strip(),
+            'template_path': template_path.strip(),
+            'backup_path': backup_path.strip(),
+            'console_public_host': console_public_host.strip(),
+            'console_port_base': str(console_port_base),
+            'console_port_max': str(console_port_max),
+            'backup_require_shutdown': 'true' if str(backup_require_shutdown).lower() in {'true','on','1','yes'} else 'false',
+            'backup_keep_last': str(max(0, backup_keep_last)),
+        }
+        _write_env_values(updates)
+        log_event(db, user, 'update_settings', 'platform', 'Updated editable AtlasVM settings in .env')
+        return _redirect('/settings?restart_required=1', message='Settings saved to .env. Restart AtlasVM for all changes to take effect.')
+    except Exception as exc:
+        return _redirect('/settings', error=str(exc))
 
 
 @app.get('/users', response_class=HTMLResponse)
 def users_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_admin)):
     users = db.query(UserAccount).order_by(UserAccount.username.asc()).all()
-    return templates.TemplateResponse('users.html', {'request': request, 'app_name': settings.app_name, 'users': users, 'error': None})
+    context = _view_context(request, user)
+    context.update({'users': users})
+    return templates.TemplateResponse('users.html', context)
 
 
 @app.post('/users/create')
 def users_create(username: str = Form(...), password: str = Form(...), role: str = Form('operator'), db: Session = Depends(get_db), user: str = Depends(require_admin)):
+    username = username.strip()
     role = role if role in {'admin', 'operator', 'viewer'} else 'operator'
-    existing = db.query(UserAccount).filter(UserAccount.username == username).first()
-    if existing:
-        raise ValueError('A user with that username already exists')
-    account = UserAccount(username=username, password_hash=hash_password(password), role=role, is_active=True)
-    db.add(account)
+    try:
+        if not username:
+            raise ValueError('Username is required')
+        if len(password) < 10:
+            raise ValueError('Password must be at least 10 characters')
+        existing = db.query(UserAccount).filter(UserAccount.username == username).first()
+        if existing:
+            raise ValueError('A user with that username already exists')
+        account = UserAccount(username=username, password_hash=hash_password(password), role=role, is_active=True)
+        db.add(account)
+        db.commit()
+        log_event(db, user, 'create_user', username, f'role={role}')
+        return _redirect('/users', message=f'User created: {username}')
+    except Exception as exc:
+        db.rollback()
+        return _redirect('/users', error=str(exc))
+
+
+@app.post('/users/{account_id}/role')
+def users_change_role(account_id: int, role: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_admin)):
+    account = db.query(UserAccount).filter(UserAccount.id == account_id).first()
+    if not account:
+        return _redirect('/users', error='User not found')
+    if role not in {'admin', 'operator', 'viewer'}:
+        return _redirect('/users', error='Invalid role')
+    active_admin_count = db.query(UserAccount).filter(UserAccount.role == 'admin', UserAccount.is_active == True).count()
+    if account.role == 'admin' and role != 'admin' and account.is_active and active_admin_count <= 1:
+        return _redirect('/users', error='Cannot remove the last active administrator')
+    old_role = account.role
+    account.role = role
     db.commit()
-    log_event(db, user, 'create_user', username, f'role={role}')
-    return RedirectResponse(url='/users', status_code=303)
+    log_event(db, user, 'change_user_role', account.username, f'{old_role} -> {role}')
+    return _redirect('/users', message=f'Role updated for {account.username}')
+
+
+@app.post('/users/{account_id}/password')
+def users_reset_password(account_id: int, password: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_admin)):
+    account = db.query(UserAccount).filter(UserAccount.id == account_id).first()
+    if not account:
+        return _redirect('/users', error='User not found')
+    if len(password) < 10:
+        return _redirect('/users', error='Password must be at least 10 characters')
+    account.password_hash = hash_password(password)
+    db.commit()
+    log_event(db, user, 'reset_user_password', account.username, 'Password reset')
+    return _redirect('/users', message=f'Password reset for {account.username}')
 
 
 @app.post('/users/{account_id}/toggle')
 def users_toggle(account_id: int, db: Session = Depends(get_db), user: str = Depends(require_admin)):
     account = db.query(UserAccount).filter(UserAccount.id == account_id).first()
     if not account:
-        raise ValueError('User not found')
+        return _redirect('/users', error='User not found')
     if account.username == user:
-        raise ValueError('You cannot disable your own account while using it. Heroic, but no.')
+        return _redirect('/users', error='You cannot disable your own account while using it')
+    active_admin_count = db.query(UserAccount).filter(UserAccount.role == 'admin', UserAccount.is_active == True).count()
+    if account.role == 'admin' and account.is_active and active_admin_count <= 1:
+        return _redirect('/users', error='Cannot disable the last active administrator')
     account.is_active = not account.is_active
     db.commit()
     log_event(db, user, 'toggle_user', account.username, f'is_active={account.is_active}')
-    return RedirectResponse(url='/users', status_code=303)
+    return _redirect('/users', message=f"{'Enabled' if account.is_active else 'Disabled'} {account.username}")
 
 
 @app.post('/users/{account_id}/delete')
 def users_delete(account_id: int, db: Session = Depends(get_db), user: str = Depends(require_admin)):
     account = db.query(UserAccount).filter(UserAccount.id == account_id).first()
     if not account:
-        raise ValueError('User not found')
+        return _redirect('/users', error='User not found')
     if account.username == user:
-        raise ValueError('You cannot delete the account currently holding the keyboard. Civilization barely survives as it is.')
+        return _redirect('/users', error='You cannot delete the account currently holding the keyboard')
+    active_admin_count = db.query(UserAccount).filter(UserAccount.role == 'admin', UserAccount.is_active == True).count()
+    if account.role == 'admin' and account.is_active and active_admin_count <= 1:
+        return _redirect('/users', error='Cannot delete the last active administrator')
     username = account.username
     db.delete(account)
     db.commit()
     log_event(db, user, 'delete_user', username, 'Deleted local AtlasVM user')
-    return RedirectResponse(url='/users', status_code=303)
+    return _redirect('/users', message=f'Deleted {username}')
+
+
+@app.post('/backups/delete')
+def backups_delete(backup_dir: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    try:
+        BackupService().delete_backup(backup_dir)
+        log_event(db, user, 'delete_backup', backup_dir, 'Deleted backup directory and archive')
+        return _redirect('/backups', message='Backup deleted')
+    except Exception as exc:
+        return _redirect('/backups', error=str(exc))

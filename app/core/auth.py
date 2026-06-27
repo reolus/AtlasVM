@@ -7,6 +7,8 @@ from app.core.security import verify_password
 
 security = HTTPBasic()
 
+ROLE_RANK = {'viewer': 1, 'operator': 2, 'admin': 3}
+
 
 def _env_auth(credentials: HTTPBasicCredentials) -> str | None:
     settings = get_settings()
@@ -23,6 +25,16 @@ def _db_user(username: str) -> UserAccount | None:
         return db.query(UserAccount).filter(UserAccount.username == username).first()
     finally:
         db.close()
+
+
+def get_user_role(username: str) -> str:
+    user = _db_user(username)
+    if user and user.is_active:
+        return user.role
+    settings = get_settings()
+    if username == settings.username:
+        return 'admin'
+    return 'viewer'
 
 
 def require_user(credentials: HTTPBasicCredentials = Depends(security)) -> str:
@@ -42,14 +54,20 @@ def require_user(credentials: HTTPBasicCredentials = Depends(security)) -> str:
     )
 
 
+def require_role(required_role: str, username: str) -> str:
+    actual_role = get_user_role(username)
+    if ROLE_RANK.get(actual_role, 0) >= ROLE_RANK.get(required_role, 99):
+        return username
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f'AtlasVM {required_role} rights are required')
+
+
+def require_viewer(username: str = Depends(require_user)) -> str:
+    return require_role('viewer', username)
+
+
+def require_operator(username: str = Depends(require_user)) -> str:
+    return require_role('operator', username)
+
+
 def require_admin(username: str = Depends(require_user)) -> str:
-    user = _db_user(username)
-    if user and user.is_active and user.role == 'admin':
-        return username
-
-    # The original environment account remains an admin-level fallback.
-    settings = get_settings()
-    if username == settings.username:
-        return username
-
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='AtlasVM administrator rights are required')
+    return require_role('admin', username)

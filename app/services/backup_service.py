@@ -100,6 +100,20 @@ class BackupService:
                     })
         return sorted(backups, key=lambda b: b['created_at'], reverse=True)
 
+
+    def delete_backup(self, backup_dir: str) -> None:
+        backup_path = Path(backup_dir).resolve()
+        root_path = self.backup_root.resolve()
+        if root_path not in backup_path.parents:
+            raise ValueError('Backup path is outside the AtlasVM backup root')
+        if not (backup_path / 'metadata.json').exists():
+            raise ValueError('Backup directory does not contain metadata.json')
+        archive_zst = backup_path.with_suffix('.tar.zst')
+        archive_gz = backup_path.with_suffix('.tar.gz')
+        shutil.rmtree(backup_path, ignore_errors=False)
+        archive_zst.unlink(missing_ok=True)
+        archive_gz.unlink(missing_ok=True)
+
     def restore_definition(self, backup_dir: str, new_name: str | None = None) -> dict[str, str]:
         backup_path = Path(backup_dir).resolve()
         metadata_path = backup_path / 'metadata.json'
