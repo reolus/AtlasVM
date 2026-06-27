@@ -258,6 +258,40 @@ class BackupService:
             tf.add(directory, arcname=directory.name)
         return gz_path
 
+
+    def prune_backups(self, vm_name: str | None = None, keep_last: int | None = None) -> dict[str, object]:
+        """Apply the simple AtlasVM retention policy and return deleted paths.
+
+        Phase 6 keeps this intentionally conservative: keep the most recent N
+        backups per VM and delete older backup directories plus matching archives.
+        """
+        keep = max(0, int(self.settings.backup_keep_last if keep_last is None else keep_last))
+        targets: list[str]
+        if vm_name:
+            targets = [vm_name]
+        else:
+            targets = [p.name for p in self.backup_root.iterdir() if p.is_dir()] if self.backup_root.exists() else []
+        deleted: list[str] = []
+        for target in targets:
+            backups = self.list_backups(target)
+            for old in backups[keep:]:
+                path = Path(old['path'])
+                if path.exists():
+                    shutil.rmtree(path, ignore_errors=True)
+                    deleted.append(str(path))
+                if old.get('archive'):
+                    archive = Path(old['archive'])
+                    archive.unlink(missing_ok=True)
+                    deleted.append(str(archive))
+        return {'status': 'ok', 'keep_last': keep, 'deleted': deleted, 'deleted_count': len(deleted)}
+
+    def retention_policy(self) -> dict[str, object]:
+        return {
+            'backup_keep_last': int(self.settings.backup_keep_last),
+            'backup_path': str(self.backup_root),
+            'policy': 'keep_last_per_vm',
+        }
+
     def _prune(self, vm_name: str) -> None:
         keep = max(0, int(self.settings.backup_keep_last))
         if keep <= 0:

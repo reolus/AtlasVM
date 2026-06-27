@@ -104,6 +104,13 @@ def _job_restore_backup_as_new(backup_dir: str, new_name: str, storage_pool: str
     result = BackupService().restore_as_new_vm(backup_dir, new_name, storage_pool)
     return f"Restored backup as {result['name']} with disks: {result.get('disks', '')}"
 
+
+
+def _job_zfs_send(snapshot: str, destination_dir: str | None = None, recursive: bool = False, compress: bool = True) -> str:
+    result = zfs_service.send_snapshot(snapshot, destination_dir=destination_dir or None, recursive=recursive, compress=compress)
+    return f"ZFS send export created: {result['path']}"
+
+
 def _write_env_values(updates: dict[str, str]) -> None:
     env_path = Path('.env')
     existing_lines = env_path.read_text(encoding='utf-8').splitlines() if env_path.exists() else []
@@ -571,7 +578,7 @@ def tasks_page(request: Request, db: Session = Depends(get_db), user: str = Depe
 @app.get('/backups', response_class=HTMLResponse)
 def backups_page(request: Request, user: str = Depends(require_user)):
     backups = BackupService().list_backups()
-    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups, 'backup_path': settings.backup_path})
+    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups, 'backup_path': settings.backup_path, 'retention': BackupService().retention_policy(), 'message': request.query_params.get('message'), 'error': request.query_params.get('error')})
 
 
 @app.post('/backups/restore-definition')
@@ -606,7 +613,20 @@ def restore_backup_as_new(
 
 @app.get('/zfs', response_class=HTMLResponse)
 def zfs_page(request: Request, user: str = Depends(require_user)):
-    return templates.TemplateResponse('zfs.html', {'request': request, 'app_name': settings.app_name, 'zfs': zfs_service.pool_status(), 'datasets': zfs_service.datasets(), 'snapshots': zfs_service.snapshots()})
+    return templates.TemplateResponse(
+        'zfs.html',
+        {
+            'request': request,
+            'app_name': settings.app_name,
+            'zfs': zfs_service.pool_status(),
+            'datasets': zfs_service.datasets(),
+            'snapshots': zfs_service.snapshots(),
+            'exports': zfs_service.exports(),
+            'backup_path': settings.backup_path,
+            'message': request.query_params.get('message'),
+            'error': request.query_params.get('error'),
+        },
+    )
 
 
 @app.post('/zfs/pools/{pool}/scrub')
@@ -617,10 +637,56 @@ def zfs_scrub(pool: str, db: Session = Depends(get_db), user: str = Depends(requ
 
 
 @app.post('/zfs/snapshots')
-def zfs_snapshot(dataset: str = Form(...), snapshot_name: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_operator)):
-    result = zfs_service.create_snapshot(dataset, snapshot_name)
-    log_event(db, user, 'zfs_snapshot', dataset, result['snapshot'])
-    return RedirectResponse(url='/zfs', status_code=303)
+def zfs_snapshot(dataset: str = Form(...), snapshot_name: str = Form(...), recursive: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    try:
+        result = zfs_service.create_snapshot(dataset, snapshot_name, recursive=recursive)
+        log_event(db, user, 'zfs_snapshot', dataset, result['snapshot'])
+        return _redirect('/zfs', message=f"Created ZFS snapshot {result['snapshot']}")
+    except Exception as exc:
+        log_event(db, user, 'zfs_snapshot_failed', dataset, str(exc))
+        return _redirect('/zfs', error=str(exc))
+
+@app.post('/zfs/snapshots/delete')
+def zfs_destroy_snapshot(snapshot: str = Form(...), recursive: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    try:
+        result = zfs_service.destroy_snapshot(snapshot, recursive=recursive)
+        log_event(db, user, 'zfs_destroy_snapshot', snapshot, str(result))
+        return _redirect('/zfs', message=f'Destroyed ZFS snapshot {snapshot}')
+    except Exception as exc:
+        log_event(db, user, 'zfs_destroy_snapshot_failed', snapshot, str(exc))
+        return _redirect('/zfs', error=str(exc))
+
+
+@app.post('/zfs/snapshots/send')
+def zfs_send_snapshot(snapshot: str = Form(...), destination_dir: str = Form(''), recursive: bool = Form(False), compress: bool = Form(True), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    try:
+        task_id = enqueue_task(user, 'zfs_send', snapshot, _job_zfs_send, snapshot, destination_dir or None, recursive, compress)
+        log_event(db, user, 'queue_zfs_send', snapshot, f'Queued ZFS send task {task_id}')
+        return _redirect('/tasks', message=f'ZFS send queued as task {task_id}')
+    except Exception as exc:
+        return _redirect('/zfs', error=str(exc))
+
+
+@app.post('/zfs/exports/delete')
+def zfs_delete_export(path: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    try:
+        zfs_service.delete_export(path)
+        log_event(db, user, 'zfs_delete_export', path, 'Deleted ZFS send export')
+        return _redirect('/zfs', message='ZFS export deleted')
+    except Exception as exc:
+        log_event(db, user, 'zfs_delete_export_failed', path, str(exc))
+        return _redirect('/zfs', error=str(exc))
+
+
+@app.post('/backups/prune')
+def backups_prune(vm_name: str = Form(''), keep_last: int | None = Form(None), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    try:
+        result = BackupService().prune_backups(vm_name.strip() or None, keep_last=keep_last)
+        log_event(db, user, 'backup_prune', vm_name or 'all', str(result))
+        return _redirect('/backups', message=f"Backup retention applied; deleted {result['deleted_count']} item(s)")
+    except Exception as exc:
+        log_event(db, user, 'backup_prune_failed', vm_name or 'all', str(exc))
+        return _redirect('/backups', error=str(exc))
 
 
 @app.get('/doctor', response_class=HTMLResponse)

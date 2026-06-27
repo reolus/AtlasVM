@@ -97,3 +97,8 @@ small { color: #64748b; }
 .pill.queued { background: #e0f2fe; color: #075985; }
 .pill.running { background: #dcfce7; color: #14532d; }
 .task-message { white-space: pre-wrap; max-width: 520px; max-height: 180px; overflow: auto; }
+
+/* Phase 6 storage health */
+.alert.success { background: #dcfce7; border-color: #bbf7d0; color: #14532d; }
+.alert.warning { background: #fef3c7; border-color: #fde68a; color: #78350f; }
+.card-ish { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; }

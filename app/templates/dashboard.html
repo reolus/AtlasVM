@@ -13,10 +13,11 @@
 <section>
   <div class="section-title"><h2>ZFS Health</h2><a href="/zfs">Manage ZFS</a></div>
   {% if zfs.error %}<div class="alert">{{ zfs.error }}</div>{% endif %}
-  <table><thead><tr><th>Pool</th><th>Health</th><th>Size</th><th>Allocated</th><th>Free</th></tr></thead><tbody>
+  {% for warning in zfs.warnings or [] %}<div class="alert {{ 'failed' if warning.severity == 'critical' else 'warning' }}"><strong>{{ warning.target }}:</strong> {{ warning.message }}</div>{% endfor %}
+  <table><thead><tr><th>Pool</th><th>Health</th><th>Capacity</th><th>Size</th><th>Allocated</th><th>Free</th></tr></thead><tbody>
     {% for pool in zfs.pools or [] %}
-      <tr><td>{{ pool.name }}</td><td><span class="pill {{ 'success' if pool.health == 'ONLINE' else 'failed' }}">{{ pool.health }}</span></td><td>{{ pool.size }}</td><td>{{ pool.allocated }}</td><td>{{ pool.free }}</td></tr>
-    {% else %}<tr><td colspan="5">No ZFS pool data. Either ZFS is absent or it is being dramatic.</td></tr>{% endfor %}
+      <tr><td>{{ pool.name }}</td><td><span class="pill {{ 'success' if pool.health == 'ONLINE' else 'failed' }}">{{ pool.health }}</span></td><td>{{ pool.capacity }}</td><td>{{ pool.size }}</td><td>{{ pool.allocated }}</td><td>{{ pool.free }}</td></tr>
+    {% else %}<tr><td colspan="6">No ZFS pool data. Either ZFS is absent or it is being dramatic.</td></tr>{% endfor %}
   </tbody></table>
 </section>
 

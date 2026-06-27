@@ -129,3 +129,18 @@ See `docs/PHASE_FOUR_DESIGN.md` and `docs/PHASE_FOUR_UPGRADE.md`.
 ## Phase 5
 
 Phase 5 adds background tasks, restore-backup-as-new-VM, template cloning, and VM metrics. See `docs/PHASE_FIVE_DESIGN.md` and `docs/PHASE_FIVE_UPGRADE.md`.
+
+
+## Phase 6
+
+Phase 6 adds ZFS-native storage maturity features:
+
+- ZFS pool health warnings.
+- Dataset capacity visibility.
+- ZFS snapshot create/delete.
+- Recursive snapshot option.
+- ZFS send export with optional zstd compression.
+- ZFS export inventory and delete action.
+- Manual backup retention pruning from the Backups page.
+
+See `docs/PHASE_SIX_DESIGN.md` and `docs/PHASE_SIX_UPGRADE.md`.
