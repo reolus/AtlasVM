@@ -37,7 +37,7 @@ class ConsoleService:
             pid_file.write_text(str(process.pid))
 
         public_host = self.settings.console_public_host or request_host or 'localhost'
-        url = f'http://{public_host}:{proxy_port}/vnc.html?autoconnect=1&resize=scale'
+        url = f'http://{public_host}:{proxy_port}/vnc.html?host={public_host}&port={proxy_port}&path=websockify&autoconnect=1&resize=scale'
         return ConsoleSession(vm_name=vm_name, vnc_display=vnc_display, vnc_port=vnc_port, proxy_port=proxy_port, url=url, pid=self._read_pid(pid_file))
 
     def stop_novnc(self, vm_name: str) -> None:
@@ -74,9 +74,19 @@ class ConsoleService:
         return self._pid_running(pid_file)
 
     def _display_to_port(self, display: str) -> int:
+        display = str(display).strip()
+
         if display.startswith(':'):
             return 5900 + int(display[1:])
-        return int(display)
+
+        value = int(display)
+
+        # libvirt/virsh may return either ':0' or '0' for display zero.
+        # Treat small numbers as VNC display numbers, not TCP ports.
+        if value < 100:
+            return 5900 + value
+
+        return value
 
     def _safe(self, name: str) -> str:
         return ''.join(c if c.isalnum() or c in '-_' else '_' for c in name)

@@ -1,7 +1,7 @@
 from pathlib import Path
 from shutil import copyfileobj
 
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
+from fastapi import Request, Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -96,7 +96,7 @@ def vm_detail(name: str, request: Request, user: str = Depends(require_user)):
 
 
 @app.post('/ui/vms/{name}/{action}')
-def vm_action(name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
+def vm_action(request: Request, name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
     lv = LibvirtService()
     task = start_task(db, user, action, name)
     try:
@@ -122,6 +122,15 @@ def vm_action(name: str, action: str, db: Session = Depends(get_db), user: str =
             finish_task(db, task, 'success', 'VM and disks deleted')
             log_event(db, user, action, name, 'Deleted VM and disks')
             return RedirectResponse(url='/', status_code=303)
+        elif action == 'console':
+            display = lv.vnc_display(name)
+            if not display:
+                raise ValueError(f'VM {name} does not have an active VNC display. Make sure it is running and has VNC graphics enabled.')
+            host = request.headers.get('host', '').split(':')[0]
+            session = ConsoleService().start_novnc(name, display, request_host=host)
+            finish_task(db, task, 'success', f'Console opened: {session.url}')
+            log_event(db, user, 'open_console', name, session.url)
+            return RedirectResponse(url=session.url, status_code=303)
         else:
             raise ValueError(f'Unsupported action: {action}')
         log_event(db, user, action, name, f'UI action: {action}')

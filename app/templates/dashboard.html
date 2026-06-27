@@ -22,7 +22,7 @@
         <td>{{ vm.autostart }}</td>
         <td class="actions">
           <a class="button muted" href="/vms/{{ vm.name }}">Details</a>
-          <form method="post" action="/ui/vms/{{ vm.name }}/console"><button>Console</button></form>
+          <form method="post" action="/ui/vms/{{ vm.name }}/console" target="_blank"><button>Console</button></form>
           <form method="post" action="/ui/vms/{{ vm.name }}/start"><button>Start</button></form>
           <form method="post" action="/ui/vms/{{ vm.name }}/shutdown"><button>Shutdown</button></form>
           <form method="post" action="/ui/vms/{{ vm.name }}/force-stop"><button class="danger">Force Stop</button></form>

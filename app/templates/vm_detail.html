@@ -11,7 +11,7 @@
     <div class="card"><strong>UUID</strong><small>{{ vm.uuid }}</small></div>
   </div>
   <div class="actions block-actions">
-    <form method="post" action="/ui/vms/{{ vm.name }}/console"><button>Open Console</button></form>
+    <form method="post" action="/ui/vms/{{ vm.name }}/console" target="_blank"><button>Open Console</button></form>
     <form method="post" action="/ui/vms/{{ vm.name }}/start"><button>Start</button></form>
     <form method="post" action="/ui/vms/{{ vm.name }}/shutdown"><button>Shutdown</button></form>
     <form method="post" action="/ui/vms/{{ vm.name }}/reboot"><button>Reboot</button></form>
