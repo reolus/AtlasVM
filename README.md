@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="docs/assets/atlasvm-logo.png" alt="AtlasVM Logo" width="220">
+</p>
+
+<h1 align="center">AtlasVM</h1>
+
+<p align="center">
+  A lightweight virtualization management interface for KVM, QEMU, libvirt, and ZFS.
+</p>
+
 # AtlasVM Phase 2
 
 AtlasVM is a single-node KVM/libvirt virtualization manager built on FastAPI. Phase 2 turns the original proof of concept into a usable host manager with browser console support, ISO management, VM detail pages, snapshots, storage visibility, network visibility, task history, and audit logging.
