@@ -19,8 +19,12 @@
     {% for backup in backups %}
       <tr>
         <td>{{ backup.vm_name }}</td><td>{{ backup.created_at }}</td><td>{{ backup.state }}</td><td>{{ backup.disk_count }}</td><td><code>{{ backup.path }}</code></td><td><code>{{ backup.archive or '' }}</code></td>
+<<<<<<< HEAD
         <td><form method="post" action="/backups/restore-as-new"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><input name="new_name" placeholder="new-vm-name" required><input name="storage_pool" placeholder="optional-pool"><button>Restore VM</button></form></td>
         <td><form method="post" action="/backups/restore-definition"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><input name="new_name" placeholder="optional-new-name"><button>Definition Only</button></form></td>
+=======
+        <td><form method="post" action="/backups/restore"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><input name="new_name" placeholder="new-vm-name" required><input name="storage_pool" placeholder="optional-pool"><button>Restore VM</button></form></td><td><form method="post" action="/backups/restore"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><input name="new_name" placeholder="optional-new-name"><button>Definition Only</button></form></td>
+>>>>>>> 587a5fb5045c595204938575ae5073d49a2d11f5
         <td><form method="post" action="/backups/delete"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><button class="danger">Delete</button></form></td>
       </tr>
     {% else %}<tr><td colspan="9">No backups found. Bold strategy.</td></tr>{% endfor %}
