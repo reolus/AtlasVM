@@ -102,3 +102,95 @@ small { color: #64748b; }
 .alert.success { background: #dcfce7; border-color: #bbf7d0; color: #14532d; }
 .alert.warning { background: #fef3c7; border-color: #fde68a; color: #78350f; }
 .card-ish { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; }
+
+
+/* Phase 7.5 UI cleanup */
+header.topbar {
+  background: #0f172a;
+  padding: .75rem 1.5rem;
+  align-items: center;
+  gap: 1rem;
+}
+.brand-wrap { flex: 0 0 auto; }
+.brand img {
+  width: min(310px, 34vw);
+  max-height: 74px;
+  height: auto;
+  object-fit: contain;
+  aspect-ratio: auto;
+}
+.brand-copy { display: none; }
+.main-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem .55rem;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+}
+.main-nav a {
+  margin-left: 0;
+  padding: .35rem .5rem;
+  border-radius: 7px;
+  color: #e5e7eb;
+}
+.main-nav a:hover {
+  background: rgba(255,255,255,.09);
+  color: #ffffff;
+}
+.session-tools {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.logout-form { margin: 0; }
+.logout-form button {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.18);
+  padding: .35rem .55rem;
+}
+.logout-form button:hover { background: rgba(255,255,255,.14); }
+.login-body {
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 10%, rgba(250, 204, 21, .12), transparent 28%), #0f172a;
+  color: #17202a;
+}
+.login-shell {
+  min-height: 100vh;
+  padding: 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.login-card {
+  width: min(560px, 94vw);
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.24);
+  box-shadow: 0 24px 80px rgba(0,0,0,.25);
+  padding: 2rem;
+}
+.login-logo-wrap {
+  background: #0f172a;
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+.login-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+.login-copy h1 { margin: 0 0 .3rem; }
+.login-copy p { color: #64748b; margin-top: 0; }
+.login-form label { margin-top: 1rem; }
+.login-button { width: 100%; margin-top: 1rem; background: #0f172a; }
+.login-button:hover { background: #1e293b; }
+@media (max-width: 900px) {
+  header.topbar { align-items: flex-start; }
+  .brand img { width: min(300px, 80vw); }
+  .main-nav { justify-content: flex-start; }
+  .session-tools { width: 100%; justify-content: flex-start; }
+}

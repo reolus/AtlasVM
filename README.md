@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/atlasvm-logo.png" alt="AtlasVM Logo" width="420">
+</p>
+
 # AtlasVM Phase 2
 
 AtlasVM is a single-node KVM/libvirt virtualization manager built on FastAPI. Phase 2 turns the original proof of concept into a usable host manager with browser console support, ISO management, VM detail pages, snapshots, storage visibility, network visibility, task history, and audit logging.
@@ -154,3 +158,8 @@ See:
 
 - `docs/PHASE_SEVEN_DESIGN.md`
 - `docs/PHASE_SEVEN_UPGRADE.md`
+
+
+## Phase 7.5 UI cleanup
+
+Phase 7.5 adds the new wide AtlasVM logo, removes duplicate header title text, introduces a branded login screen with signed browser-session cookies, and keeps HTTP Basic auth fallback for scripts and curl.

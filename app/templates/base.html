@@ -11,12 +11,16 @@
   <header class="topbar">
     <div class="brand-wrap">
       <a class="brand" href="/" aria-label="AtlasVM Dashboard"><img src="/static/atlasvm-logo.png" alt="AtlasVM logo"></a>
-      <div class="brand-copy"><h1>{{ app_name }}</h1><p>Single-node KVM/libvirt virtualization manager</p></div>
     </div>
-    <nav>
+    <nav class="main-nav">
       <a href="/">Dashboard</a><a href="/vms/new">Create VM</a><a href="/isos">ISOs</a><a href="/storage">Storage</a><a href="/zfs">ZFS</a><a href="/backups">Backups</a><a href="/templates">Templates</a><a href="/networks">Networks</a><a href="/tasks">Tasks</a><a href="/events">Audit</a><a href="/doctor">Doctor</a><a href="/settings">Settings</a><a href="/users">Users</a><a href="/docs">API</a>
     </nav>
-    {% if current_user %}<div class="user-chip">{{ current_user }} <span>{{ current_role }}</span></div>{% endif %}
+    <div class="session-tools">
+      {% if current_user %}
+        <div class="user-chip">{{ current_user }} <span>{{ current_role }}</span></div>
+        <form method="post" action="/logout" class="logout-form"><button type="submit">Logout</button></form>
+      {% endif %}
+    </div>
   </header>
   <main>
     {% set q_error = request.query_params.get('error') if request is defined else None %}

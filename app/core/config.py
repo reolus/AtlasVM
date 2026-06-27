@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     backup_require_shutdown: bool = True
     backup_keep_last: int = 5
 
+    # Used to sign browser login cookies. Set ATLASVM_SESSION_SECRET in production.
+    session_secret: str = ''
+
 
 @lru_cache
 def get_settings() -> Settings:
