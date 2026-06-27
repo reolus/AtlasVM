@@ -23,8 +23,8 @@
 <section class="grid two">
   <div>
     <h2>Edit VM Basics</h2>
-    <p><small>Requires shutdown. AtlasVM is brave, not reckless. Yet.</small></p>
-    <form method="post" action="/vms/{{ vm.name }}/edit">
+    <p><small>Description can be saved while running. Memory and vCPU changes require shutdown, because thermodynamics and libvirt both enjoy rules.</small></p>
+    <form method="post" action="/ui/vms/{{ vm.name }}/edit">
       <div class="grid two">
         <label>Memory MB <input name="memory_mb" type="number" min="256" value="{{ vm.memory_mb }}" required></label>
         <label>vCPUs <input name="vcpus" type="number" min="1" value="{{ vm.vcpus }}" required></label>
@@ -66,22 +66,18 @@
   <div>
     <h2>Installer Media</h2>
     <form class="inline-form" method="post" action="/ui/vms/{{ vm.name }}/iso/attach">
-      <select name="iso_path">
+      <select name="iso_path" required>
         <option value="" {% if current_iso is not defined or not current_iso %}selected{% endif %}>No ISO loaded</option>
-          {% for iso in isos %}
-        <option value="{{ iso.path }}" {% if current_iso is defined and current_iso and (current_iso == iso.path or current_iso.endswith('/' ~ iso.name)) %}selected{% endif %}>
-          {{ iso.name }}
-        </option>
-          {% endfor %}
+        {% for iso in isos %}<option value="{{ iso.path }}" {% if current_iso is defined and current_iso and (current_iso == iso.path or current_iso.endswith('/' ~ iso.name)) %}selected{% endif %}>{{ iso.name }}</option>{% endfor %}
       </select>
-      <!--<select name="iso_path" required>{% for iso in isos %}<option value="{{ iso.path }}">{{ iso.name }}</option>{% endfor %}</select>-->
+      {% if current_iso %}<small>Loaded: <code>{{ current_iso }}</code></small>{% endif %}
       <button>Attach ISO</button>
     </form>
     <form method="post" action="/ui/vms/{{ vm.name }}/iso/eject"><button>Eject ISO</button></form>
   </div>
   <div>
     <h2>Backup</h2>
-    <form method="post" action="/vms/{{ vm.name }}/backup">
+    <form method="post" action="/ui/vms/{{ vm.name }}/backup">
       <label class="check"><input name="require_shutdown" type="checkbox" value="true" checked> Require VM shutdown</label>
       <label class="check"><input name="compress" type="checkbox" value="true" checked> Compress archive</label>
       <button>Backup VM</button>
@@ -92,7 +88,7 @@
 
 <section>
   <h2>Snapshots</h2>
-  <form class="inline-form" method="post" action="/vms/{{ vm.name }}/snapshots">
+  <form class="inline-form" method="post" action="/ui/vms/{{ vm.name }}/snapshots">
     <input name="snapshot_name" placeholder="before-update" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}">
     <input name="description" placeholder="Description">
     <button>Create Snapshot</button>

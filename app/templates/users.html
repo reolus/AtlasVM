@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <div class="section-title"><h2>Users</h2><span class="pill">Phase 4</span></div>
+  <p>Local AtlasVM users. The default environment account is seeded as the first administrator, because apparently even hypervisors need adult supervision.</p>
+</section>
+<section class="grid two">
+  <div>
+    <h2>Create User</h2>
+    <form method="post" action="/users/create">
+      <label>Username <input name="username" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" required></label>
+      <label>Password <input name="password" type="password" minlength="10" required></label>
+      <label>Role
+        <select name="role">
+          <option value="operator">Operator</option>
+          <option value="viewer">Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+      </label>
+      <button>Create User</button>
+    </form>
+  </div>
+  <div>
+    <h2>Role Notes</h2>
+    <table>
+      <tbody>
+        <tr><th>Admin</th><td>Manage users and perform VM/storage actions.</td></tr>
+        <tr><th>Operator</th><td>Perform VM/storage actions.</td></tr>
+        <tr><th>Viewer</th><td>Reserved for read-only enforcement in a later hardening pass.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<section>
+  <h2>Existing Users</h2>
+  <table>
+    <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for account in users %}
+      <tr>
+        <td>{{ account.username }}</td>
+        <td>{{ account.role }}</td>
+        <td>{{ 'active' if account.is_active else 'disabled' }}</td>
+        <td class="actions">
+          <form method="post" action="/users/{{ account.id }}/toggle"><button>{{ 'Disable' if account.is_active else 'Enable' }}</button></form>
+          <form method="post" action="/users/{{ account.id }}/delete"><button class="danger">Delete</button></form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">No users found. That would be ominous.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

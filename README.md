@@ -117,3 +117,10 @@ Important routes:
 - `/vms/{name}` - VM detail, edit, backup, clone, ISO attach/eject, add disk
 
 See `docs/PHASE_THREE_DESIGN.md` and `docs/PHASE_THREE_UPGRADE.md`.
+
+
+## Phase 4 additions
+
+Phase 4 adds AtlasVM branding in the interface, local user management, an admin-only users page, a read-only settings page, and ISO-state visibility on VM detail pages. The first local admin account is seeded from the existing AtlasVM username and password in `.env`.
+
+See `docs/PHASE_FOUR_DESIGN.md` and `docs/PHASE_FOUR_UPGRADE.md`.

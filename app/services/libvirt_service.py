@@ -37,6 +37,32 @@ class LibvirtService:
         if self.conn is None:
             raise RuntimeError(f'Unable to connect to libvirt URI {self.settings.libvirt_uri}')
 
+    def current_iso(self, name: str) -> str | None:
+        import xml.etree.ElementTree as ET
+        import libvirt
+
+        dom = self.conn.lookupByName(name)
+
+        def iso_from_xml(xml_text: str) -> str | None:
+            root = ET.fromstring(xml_text)
+            for disk in root.findall('./devices/disk'):
+                if disk.get('device') != 'cdrom':
+                    continue
+                source = disk.find('source')
+                if source is None:
+                    return None
+                return source.get('file') or source.get('dev') or source.get('name')
+            return None
+
+        for flags in (0, libvirt.VIR_DOMAIN_XML_INACTIVE):
+            try:
+                current = iso_from_xml(dom.XMLDesc(flags))
+                if current:
+                    return current
+            except Exception:
+                pass
+        return None
+
     def close(self) -> None:
         if self.conn:
             self.conn.close()
@@ -221,13 +247,22 @@ class LibvirtService:
 
     def update_vm_basic(self, name: str, memory_mb: int, vcpus: int, description: str | None = None) -> dict[str, Any]:
         domain = self.conn.lookupByName(name)
-        if domain.isActive():
-            raise RuntimeError('Basic VM edits require the VM to be shut down')
         if memory_mb < 256:
             raise ValueError('memory_mb must be at least 256')
         if vcpus < 1:
             raise ValueError('vcpus must be at least 1')
+
         root = ET.fromstring(domain.XMLDesc())
+        existing_memory = root.find('./memory')
+        existing_vcpu = root.find('./vcpu')
+        existing_memory_mb = int((existing_memory.text or '0')) // 1024 if existing_memory is not None else None
+        existing_vcpus = int(existing_vcpu.text or '0') if existing_vcpu is not None else None
+        memory_changed = existing_memory_mb != memory_mb
+        vcpu_changed = existing_vcpus != vcpus
+
+        if domain.isActive() and (memory_changed or vcpu_changed):
+            raise RuntimeError('Memory and vCPU changes require the VM to be shut down. Description-only edits are allowed while running.')
+
         memory_kib = str(memory_mb * 1024)
         for tag in ('memory', 'currentMemory'):
             elem = root.find(f'./{tag}')
@@ -247,101 +282,53 @@ class LibvirtService:
         return self.get_vm(name)
 
     def attach_iso(self, name: str, iso_path: str) -> None:
-        import subprocess
-        import xml.etree.ElementTree as ET
+        if iso_path and not os.path.exists(iso_path):
+            raise ValueError(f'ISO path does not exist: {iso_path}')
+        domain = self.conn.lookupByName(name)
+        if domain.isActive():
+            raise RuntimeError('Attach/eject ISO from AtlasVM currently requires the VM to be shut down')
+        root = ET.fromstring(domain.XMLDesc())
+        devices = root.find('./devices')
+        if devices is None:
+            raise RuntimeError('Domain XML has no devices section')
 
-        conn = getattr(self, "conn", None) or getattr(self, "_conn", None)
-        if conn is None:
-            raise RuntimeError("Libvirt connection is not initialized on this service instance")
-
-        dom = conn.lookupByName(name)
-        root = ET.fromstring(dom.XMLDesc(0))
-
-        cdrom_target = None
-        for disk in root.findall("./devices/disk"):
-            if disk.get("device") == "cdrom":
-                target = disk.find("target")
-                if target is not None:
-                    cdrom_target = target.get("dev")
+        cdrom = None
+        for disk in devices.findall('./disk'):
+            if disk.attrib.get('device') == 'cdrom':
+                cdrom = disk
                 break
+        if cdrom is None:
+            cdrom = ET.SubElement(devices, 'disk', {'type': 'file', 'device': 'cdrom'})
+            ET.SubElement(cdrom, 'driver', {'name': 'qemu', 'type': 'raw'})
+            ET.SubElement(cdrom, 'target', {'dev': 'sda', 'bus': 'sata'})
+            ET.SubElement(cdrom, 'readonly')
 
-        if not cdrom_target:
-            raise ValueError(f"VM {name} does not have a CD-ROM device")
+        source = cdrom.find('./source')
+        if source is None:
+            source = ET.SubElement(cdrom, 'source')
+        source.attrib.clear()
+        source.attrib['file'] = iso_path
+        self._redefine_domain(domain, root)
 
-        cmd = ["virsh", "change-media", name, cdrom_target, iso_path, "--insert"]
-
-        if dom.isActive():
-            cmd.extend(["--live", "--config"])
-        else:
-            cmd.append("--config")
-
-        result = subprocess.run(
-            cmd,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-
-        if result.returncode != 0:
-            raise RuntimeError(
-                "Failed to attach ISO using: "
-                + " ".join(cmd)
-                + "\n"
-                + (result.stderr.strip() or result.stdout.strip())
-            )
     def eject_iso(self, name: str) -> None:
-        import subprocess
-        import xml.etree.ElementTree as ET
-
-        conn = getattr(self, "conn", None) or getattr(self, "_conn", None)
-        if conn is None:
-            raise RuntimeError("Libvirt connection is not initialized on this service instance")
-
-        dom = conn.lookupByName(name)
-        root = ET.fromstring(dom.XMLDesc(0))
-
-        cdrom_target = None
-        has_iso = False
-
-        for disk in root.findall("./devices/disk"):
-            if disk.get("device") == "cdrom":
-                target = disk.find("target")
-                source = disk.find("source")
-                if target is not None:
-                    cdrom_target = target.get("dev")
-                if source is not None and source.get("file"):
-                    has_iso = True
-                break
-
-        if not cdrom_target:
-            raise ValueError(f"VM {name} does not have a CD-ROM device")
-
-        if not has_iso:
+        domain = self.conn.lookupByName(name)
+        if domain.isActive():
+            raise RuntimeError('Attach/eject ISO from AtlasVM currently requires the VM to be shut down')
+        root = ET.fromstring(domain.XMLDesc())
+        devices = root.find('./devices')
+        if devices is None:
             return
+        changed = False
+        for disk in devices.findall('./disk'):
+            if disk.attrib.get('device') == 'cdrom':
+                source = disk.find('./source')
+                if source is not None:
+                    disk.remove(source)
+                    changed = True
+                break
+        if changed:
+            self._redefine_domain(domain, root)
 
-        cmd = ["virsh", "change-media", name, cdrom_target, "--eject"]
-
-        if dom.isActive():
-            cmd.extend(["--live", "--config"])
-        else:
-            cmd.append("--config")
-
-        result = subprocess.run(
-            cmd,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-
-        if result.returncode != 0:
-            raise RuntimeError(
-                "Failed to eject ISO using: "
-                + " ".join(cmd)
-                + "\n"
-                + (result.stderr.strip() or result.stdout.strip())
-            )
     def add_disk(self, name: str, size_gb: int, storage_pool: str | None = None) -> str:
         domain = self.conn.lookupByName(name)
         if domain.isActive():
@@ -680,111 +667,3 @@ class LibvirtService:
             libvirt.VIR_DOMAIN_CRASHED: 'crashed',
             libvirt.VIR_DOMAIN_PMSUSPENDED: 'suspended',
         }.get(state_code, 'unknown')
-
-    def current_iso(self, name: str) -> str | None:
-        import xml.etree.ElementTree as ET
-
-        conn = getattr(self, "conn", None) or getattr(self, "_conn", None)
-        if conn is None:
-            raise RuntimeError("Libvirt connection is not initialized on this service instance")
-
-        dom = conn.lookupByName(name)
-
-        def iso_from_xml(xml_text: str) -> str | None:
-            root = ET.fromstring(xml_text)
-
-            for disk in root.findall("./devices/disk"):
-                if disk.get("device") != "cdrom":
-                    continue
-
-                source = disk.find("source")
-                if source is None:
-                    return None
-
-                return (
-                    source.get("file")
-                    or source.get("dev")
-                    or source.get("name")
-                    or None
-                )
-
-            return None
-
-        # Active XML first. If the VM is running and media was inserted live,
-        # this is the view that matters.
-        try:
-            current = iso_from_xml(dom.XMLDesc(0))
-            if current:
-                return current
-        except Exception:
-            pass
-
-        # Fall back to inactive/persistent config when available.
-        try:
-            import libvirt
-            current = iso_from_xml(dom.XMLDesc(libvirt.VIR_DOMAIN_XML_INACTIVE))
-            if current:
-                return current
-        except Exception:
-            pass
-
-        return None
-
-    def update_vm(self, name: str, memory_mb: int, vcpus: int, description: str = '') -> None:
-        import xml.etree.ElementTree as ET
-
-        conn = getattr(self, "conn", None) or getattr(self, "_conn", None)
-        if conn is None:
-            raise RuntimeError("Libvirt connection is not initialized on this service instance")
-
-        dom = conn.lookupByName(name)
-        root = ET.fromstring(dom.XMLDesc(0))
-
-        requested_memory_kib = int(memory_mb) * 1024
-        requested_vcpus = int(vcpus)
-
-        memory = root.find("memory")
-        current_memory = root.find("currentMemory")
-        vcpu = root.find("vcpu")
-
-        existing_memory_kib = None
-        existing_vcpus = None
-
-        if memory is not None and memory.text:
-            existing_memory_kib = int(memory.text)
-
-        if vcpu is not None and vcpu.text:
-            existing_vcpus = int(vcpu.text)
-
-        memory_changed = existing_memory_kib != requested_memory_kib
-        vcpu_changed = existing_vcpus != requested_vcpus
-
-        # Description-only edits are safe while running.
-        # CPU/RAM edits still require the VM to be shut down for now.
-        if dom.isActive() and (memory_changed or vcpu_changed):
-            raise RuntimeError("AtlasVM currently requires the VM to be shut down before changing memory or CPU settings.")
-
-        if memory is None:
-            memory = ET.SubElement(root, "memory")
-        memory.set("unit", "KiB")
-        memory.text = str(requested_memory_kib)
-
-        if current_memory is None:
-            current_memory = ET.SubElement(root, "currentMemory")
-        current_memory.set("unit", "KiB")
-        current_memory.text = str(requested_memory_kib)
-
-        if vcpu is None:
-            vcpu = ET.SubElement(root, "vcpu")
-        vcpu.text = str(requested_vcpus)
-
-        desc = root.find("description")
-        if description:
-            if desc is None:
-                desc = ET.SubElement(root, "description")
-            desc.text = description
-        elif desc is not None:
-            root.remove(desc)
-
-        xml_text = ET.tostring(root, encoding="unicode")
-        conn.defineXML(xml_text)

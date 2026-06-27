@@ -7,10 +7,15 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <div>
-      <h1>{{ app_name }}</h1>
-      <p>Single-node KVM/libvirt virtualization manager</p>
+  <header class="topbar">
+    <div class="brand-wrap">
+      <a class="brand" href="/" aria-label="AtlasVM Dashboard">
+        <img src="/static/atlasvm-logo.png" alt="AtlasVM logo">
+      </a>
+      <div class="brand-copy">
+        <h1>{{ app_name }}</h1>
+        <p>Single-node KVM/libvirt virtualization manager</p>
+      </div>
     </div>
     <nav>
       <a href="/">Dashboard</a>
@@ -23,11 +28,14 @@
       <a href="/tasks">Tasks</a>
       <a href="/events">Audit</a>
       <a href="/doctor">Doctor</a>
+      <a href="/settings">Settings</a>
+      <a href="/users">Users</a>
       <a href="/docs">API</a>
     </nav>
   </header>
   <main>
     {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+    {% if success %}<div class="notice success">{{ success }}</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
 </body>
