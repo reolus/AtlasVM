@@ -4,6 +4,7 @@ from shutil import copyfileobj
 from fastapi import Depends, FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -25,6 +26,14 @@ from app.services.libvirt_service import LibvirtService, VMCreateRequest
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
+
+settings = get_settings()
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=getattr(settings, 'session_secret', None) or settings.password,
+    same_site='lax',
+    https_only=False,
+)
 app.include_router(router)
 app.mount('/static', StaticFiles(directory='app/static'), name='static')
 templates = Jinja2Templates(directory='app/templates')
@@ -201,7 +210,9 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: str = Depen
 @app.get('/vms/new', response_class=HTMLResponse)
 def new_vm_form(request: Request, user: str = Depends(require_user)):
     _, pools, networks, isos, error = _lv_data()
-    return templates.TemplateResponse('new_vm.html', {'request': request, 'app_name': settings.app_name, 'pools': pools, 'networks': networks, 'isos': isos, 'default_pool': settings.default_storage_pool, 'default_network': settings.default_network, 'error': error})
+    return templates.TemplateResponse('new_vm.html', {'request': request, 'app_name': settings.app_name, 'pools': pools, 'networks': networks, 'isos': isos, 'default_pool': settings.default_storage_pool, 'default_network': settings.default_network, 'error': error,
+            'user': user,
+        })
 
 
 @app.post('/vms/new')
@@ -242,7 +253,9 @@ def vm_detail(name: str, request: Request, error_msg: str | None = Query(None, a
     finally:
         lv.close()
     backups = BackupService().list_backups(name)
-    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error, 'success': success, 'current_iso': current_iso, 'metrics': metrics})
+    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error, 'success': success, 'current_iso': current_iso, 'metrics': metrics,
+            'user': user,
+        })
 
 
 @app.post('/ui/vms/{name}/{action}')
@@ -416,7 +429,9 @@ def vm_console_start(name: str, request: Request, db: Session = Depends(get_db),
 
 @app.get('/vms/{name}/console', response_class=HTMLResponse)
 def vm_console_page(name: str, request: Request, url: str = '', user: str = Depends(require_user)):
-    return templates.TemplateResponse('console.html', {'request': request, 'app_name': settings.app_name, 'name': name, 'console_url': url})
+    return templates.TemplateResponse('console.html', {'request': request, 'app_name': settings.app_name, 'name': name, 'console_url': url,
+            'user': user,
+        })
 
 
 @app.post('/ui/vms/{name}/snapshots')
@@ -518,7 +533,9 @@ def iso_library(request: Request, user: str = Depends(require_user)):
         error = str(exc)
     finally:
         lv.close()
-    return templates.TemplateResponse('isos.html', {'request': request, 'app_name': settings.app_name, 'isos': isos, 'iso_path': settings.iso_path, 'error': error})
+    return templates.TemplateResponse('isos.html', {'request': request, 'app_name': settings.app_name, 'isos': isos, 'iso_path': settings.iso_path, 'error': error,
+            'user': user,
+        })
 
 
 @app.post('/isos/upload')
@@ -563,7 +580,9 @@ def storage_page(request: Request, user: str = Depends(require_user)):
         error = str(exc)
     finally:
         lv.close()
-    return templates.TemplateResponse('storage.html', {'request': request, 'app_name': settings.app_name, 'pools': pools, 'error': error})
+    return templates.TemplateResponse('storage.html', {'request': request, 'app_name': settings.app_name, 'pools': pools, 'error': error,
+            'user': user,
+        })
 
 
 @app.get('/storage/{name}', response_class=HTMLResponse)
@@ -577,7 +596,9 @@ def storage_detail(name: str, request: Request, user: str = Depends(require_user
         error = str(exc)
     finally:
         lv.close()
-    return templates.TemplateResponse('storage_detail.html', {'request': request, 'app_name': settings.app_name, 'pool': pool, 'error': error})
+    return templates.TemplateResponse('storage_detail.html', {'request': request, 'app_name': settings.app_name, 'pool': pool, 'error': error,
+            'user': user,
+        })
 
 
 @app.post('/storage/{name}/refresh')
@@ -598,15 +619,21 @@ def networks_page(request: Request, user: str = Depends(require_viewer)):
         networks = lv.list_networks()
     except Exception as exc:
         networks = []
-        return templates.TemplateResponse('networks.html', {**_view_context(request, user), 'networks': networks, 'error': str(exc)})
+        return templates.TemplateResponse('networks.html', {**_view_context(request, user), 'networks': networks, 'error': str(exc),
+            'user': user,
+        })
     finally:
         lv.close()
-    return templates.TemplateResponse('networks.html', {**_view_context(request, user), 'networks': networks})
+    return templates.TemplateResponse('networks.html', {**_view_context(request, user), 'networks': networks,
+            'user': user,
+        })
 
 
 @app.get('/networks/new', response_class=HTMLResponse)
 def network_new_page(request: Request, user: str = Depends(require_admin)):
-    return templates.TemplateResponse('network_form.html', {**_view_context(request, user), 'network': None, 'action': '/networks/new', 'mode': 'create'})
+    return templates.TemplateResponse('network_form.html', {**_view_context(request, user), 'network': None, 'action': '/networks/new', 'mode': 'create',
+            'user': user,
+        })
 
 
 @app.post('/networks/new')
@@ -654,7 +681,9 @@ def network_detail_page(name: str, request: Request, user: str = Depends(require
         return _redirect('/networks', error=str(exc))
     finally:
         lv.close()
-    return templates.TemplateResponse('network_detail.html', {**_view_context(request, user), 'network': network})
+    return templates.TemplateResponse('network_detail.html', {**_view_context(request, user), 'network': network,
+            'user': user,
+        })
 
 
 @app.get('/networks/{name}/edit', response_class=HTMLResponse)
@@ -666,7 +695,9 @@ def network_edit_page(name: str, request: Request, user: str = Depends(require_a
         return _redirect('/networks', error=str(exc))
     finally:
         lv.close()
-    return templates.TemplateResponse('network_form.html', {**_view_context(request, user), 'network': network, 'action': f'/networks/{name}/edit', 'mode': 'edit'})
+    return templates.TemplateResponse('network_form.html', {**_view_context(request, user), 'network': network, 'action': f'/networks/{name}/edit', 'mode': 'edit',
+            'user': user,
+        })
 
 
 @app.post('/networks/{name}/edit')
@@ -734,19 +765,25 @@ def networks_action(name: str, action: str, db: Session = Depends(get_db), user:
 @app.get('/events', response_class=HTMLResponse)
 def events_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(250).all()
-    return templates.TemplateResponse('events.html', {'request': request, 'app_name': settings.app_name, 'events': events})
+    return templates.TemplateResponse('events.html', {'request': request, 'app_name': settings.app_name, 'events': events,
+            'user': user,
+        })
 
 
 @app.get('/tasks', response_class=HTMLResponse)
 def tasks_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(250).all()
-    return templates.TemplateResponse('tasks.html', {'request': request, 'app_name': settings.app_name, 'tasks': tasks})
+    return templates.TemplateResponse('tasks.html', {'request': request, 'app_name': settings.app_name, 'tasks': tasks,
+            'user': user,
+        })
 
 
 @app.get('/backups', response_class=HTMLResponse)
 def backups_page(request: Request, user: str = Depends(require_user)):
     backups = BackupService().list_backups()
-    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups, 'backup_path': settings.backup_path, 'retention': BackupService().retention_policy(), 'message': request.query_params.get('message'), 'error': request.query_params.get('error')})
+    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups, 'backup_path': settings.backup_path, 'retention': BackupService().retention_policy(), 'message': request.query_params.get('message'), 'error': request.query_params.get('error'),
+            'user': user,
+        })
 
 
 @app.post('/backups/restore-definition')
@@ -781,9 +818,7 @@ def restore_backup_as_new(
 
 @app.get('/zfs', response_class=HTMLResponse)
 def zfs_page(request: Request, user: str = Depends(require_user)):
-    return templates.TemplateResponse(
-        'zfs.html',
-        {
+    return templates.TemplateResponse('zfs.html', {
             'request': request,
             'app_name': settings.app_name,
             'zfs': zfs_service.pool_status(),
@@ -860,7 +895,9 @@ def backups_prune(vm_name: str = Form(''), keep_last: int | None = Form(None), d
 @app.get('/doctor', response_class=HTMLResponse)
 def doctor_page(request: Request, user: str = Depends(require_user)):
     checks = run_doctor()
-    return templates.TemplateResponse('doctor.html', {'request': request, 'app_name': settings.app_name, 'checks': checks})
+    return templates.TemplateResponse('doctor.html', {'request': request, 'app_name': settings.app_name, 'checks': checks,
+            'user': user,
+        })
 
 
 @app.get('/settings', response_class=HTMLResponse)
@@ -1033,3 +1070,65 @@ def backups_delete(backup_dir: str = Form(...), db: Session = Depends(get_db), u
         return _redirect('/backups', message='Backup deleted')
     except Exception as exc:
         return _redirect('/backups', error=str(exc))
+
+
+@app.get('/logout')
+def logout_get(request: Request):
+    request.session.clear()
+    return RedirectResponse(url='/login?message=Logged out', status_code=303)
+
+@app.get('/vms')
+def vms_redirect():
+    return RedirectResponse(url='/', status_code=303)
+
+@app.get('/audit')
+def audit_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_user),
+):
+    from sqlalchemy import text
+
+    settings = get_settings()
+    events = []
+    error = request.query_params.get('error')
+
+    try:
+        # Find likely audit table names. SQLite gets to be interrogated directly,
+        # because guessing Python model names has betrayed us like a tiny ORM goblin.
+        tables = db.execute(text(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        )).fetchall()
+
+        table_names = [row[0] for row in tables]
+        audit_table = None
+
+        for candidate in ["event_log", "audit_logs", "audit_log", "audit", "events"]:
+            if candidate in table_names:
+                audit_table = candidate
+                break
+
+        if audit_table is None:
+            error = "No audit table found. Existing tables: " + ", ".join(table_names)
+        else:
+            rows = db.execute(text(
+                f"SELECT * FROM {audit_table} ORDER BY id DESC LIMIT 200"
+            )).mappings().all()
+
+            events = [dict(row) for row in rows]
+
+    except Exception as exc:
+        error = str(exc)
+
+    return templates.TemplateResponse(
+        'audit.html',
+        {
+            'request': request,
+            'app_name': settings.app_name,
+            'events': events,
+            'user': user,
+            'error': error,
+            'message': request.query_params.get('message'),
+        },
+    )
+

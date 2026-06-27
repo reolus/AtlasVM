@@ -194,3 +194,106 @@ header.topbar {
   .main-nav { justify-content: flex-start; }
   .session-tools { width: 100%; justify-content: flex-start; }
 }
+
+/* Phase 7.5 shared header cleanup */
+.atlas-topbar {
+  background: #0f172a;
+  color: #ffffff;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.atlas-topbar-inner {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.65rem 1.25rem;
+}
+
+.atlas-brand {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  flex: 0 0 auto;
+}
+
+.atlas-logo {
+  height: 52px;
+  width: auto;
+  max-width: 260px;
+  object-fit: contain;
+  display: block;
+}
+
+.atlas-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+}
+
+.atlas-nav a {
+  color: rgba(255,255,255,0.82);
+  text-decoration: none;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.45rem;
+  font-size: 0.95rem;
+}
+
+.atlas-nav a:hover {
+  color: #ffffff;
+  background: rgba(255,255,255,0.08);
+}
+
+.atlas-userbar {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.atlas-user {
+  color: rgba(255,255,255,0.88);
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.atlas-logout-form {
+  margin: 0;
+}
+
+.atlas-logout-button,
+.atlas-login-link {
+  border: 1px solid rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.08);
+  color: #ffffff;
+  border-radius: 0.45rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.9rem;
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+.atlas-logout-button:hover,
+.atlas-login-link:hover {
+  background: rgba(255,255,255,0.16);
+  color: #ffffff;
+}
+
+@media (max-width: 900px) {
+  .atlas-topbar-inner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .atlas-userbar {
+    margin-left: 0;
+  }
+
+  .atlas-logo {
+    height: 44px;
+    max-width: 220px;
+  }
+}

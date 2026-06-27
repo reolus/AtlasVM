@@ -8,20 +8,38 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand-wrap">
-      <a class="brand" href="/" aria-label="AtlasVM Dashboard"><img src="/static/atlasvm-logo.png" alt="AtlasVM logo"></a>
-    </div>
-    <nav class="main-nav">
-      <a href="/">Dashboard</a><a href="/vms/new">Create VM</a><a href="/isos">ISOs</a><a href="/storage">Storage</a><a href="/zfs">ZFS</a><a href="/backups">Backups</a><a href="/templates">Templates</a><a href="/networks">Networks</a><a href="/tasks">Tasks</a><a href="/events">Audit</a><a href="/doctor">Doctor</a><a href="/settings">Settings</a><a href="/users">Users</a><a href="/docs">API</a>
+  <header class="atlas-topbar">
+  <div class="atlas-topbar-inner">
+    <a class="atlas-brand" href="/">
+      <img src="/static/atlasvm-logo.png" alt="AtlasVM" class="atlas-logo">
+    </a>
+
+    <nav class="atlas-nav">
+      <a href="/">Dashboard</a>
+      <a href="/vms">VMs</a>
+      <a href="/storage">Storage</a>
+      <a href="/backups">Backups</a>
+      <a href="/templates">Templates</a>
+      <a href="/networks">Networks</a>
+      <a href="/zfs">ZFS</a>
+      <a href="/tasks">Tasks</a>
+      <a href="/audit">Audit</a>
+      <a href="/settings">Settings</a>
+      <a href="/users">Users</a>
     </nav>
-    <div class="session-tools">
-      {% if current_user %}
-        <div class="user-chip">{{ current_user }} <span>{{ current_role }}</span></div>
-        <form method="post" action="/logout" class="logout-form"><button type="submit">Logout</button></form>
+
+    <div class="atlas-userbar">
+      {% if request.url.path != '/login' %}
+        <span class="atlas-user">{{ user if user is defined and user else 'Signed in' }}</span>
+        <form method="post" action="/logout" class="atlas-logout-form">
+          <button type="submit" class="atlas-logout-button">Logout</button>
+        </form>
+      {% else %}
+        <a class="atlas-login-link" href="/login">Login</a>
       {% endif %}
     </div>
-  </header>
+  </div>
+</header>
   <main>
     {% set q_error = request.query_params.get('error') if request is defined else None %}
     {% set q_message = request.query_params.get('message') if request is defined else None %}
