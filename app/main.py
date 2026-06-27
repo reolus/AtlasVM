@@ -329,7 +329,7 @@ def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = 
 
 
 @app.post('/ui/vms/{name}/delete-confirm')
-def vm_delete_confirm(name: str, confirm_name: str = Form(...), delete_disks: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def vm_delete_confirm(name: str, confirm_name: str = Form(...), delete_disks: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_user)):
     if confirm_name != name:
         raise ValueError('Confirmation name did not match VM name')
     lv = LibvirtService()
@@ -552,7 +552,7 @@ def networks_page(request: Request, user: str = Depends(require_viewer)):
 
 
 @app.get('/networks/new', response_class=HTMLResponse)
-def network_new_page(request: Request, user: str = Depends(require_admin)):
+def network_new_page(request: Request, user: str = Depends(require_user)):
     return templates.TemplateResponse('network_form.html', {**_view_context(request, user), 'network': None, 'action': '/networks/new', 'mode': 'create'})
 
 
@@ -569,7 +569,7 @@ def network_create(
     autostart: bool = Form(False),
     start_network: bool = Form(False),
     db: Session = Depends(get_db),
-    user: str = Depends(require_admin),
+    user: str = Depends(require_user),
 ):
     lv = LibvirtService()
     try:
@@ -592,6 +592,71 @@ def network_create(
         lv.close()
 
 
+
+@app.get('/networks/new')
+def network_new_page(
+    request: Request,
+    user: str = Depends(require_user),
+):
+    settings = get_settings()
+    return templates.TemplateResponse(
+        'network_form.html',
+        {
+            'request': request,
+            'app_name': settings.app_name,
+            'user': user,
+            'mode': 'create',
+            'network': None,
+            'message': request.query_params.get('message'),
+            'error': request.query_params.get('error'),
+        },
+    )
+
+
+@app.post('/networks/new')
+def network_create_page(
+    request: Request,
+    name: str = Form(...),
+    network_mode: str = Form('nat'),
+    bridge_name: str = Form(''),
+    ip_address: str = Form('192.168.100.1'),
+    netmask: str = Form('255.255.255.0'),
+    dhcp_start: str = Form(''),
+    dhcp_end: str = Form(''),
+    autostart: bool = Form(False),
+    start_now: bool = Form(False),
+    user: str = Depends(require_user),
+):
+    from urllib.parse import quote
+
+    try:
+        from app.services.network_service import NetworkService
+
+        service = NetworkService()
+        service.create_network(
+            name=name.strip(),
+            mode=network_mode.strip(),
+            bridge_name=bridge_name.strip() or None,
+            ip_address=ip_address.strip() or None,
+            netmask=netmask.strip() or None,
+            dhcp_start=dhcp_start.strip() or None,
+            dhcp_end=dhcp_end.strip() or None,
+            autostart=autostart,
+            start_now=start_now,
+        )
+
+        return RedirectResponse(
+            url=f'/networks/{name.strip()}?message={quote("Network created: " + name.strip())}',
+            status_code=303,
+        )
+
+    except Exception as exc:
+        return RedirectResponse(
+            url=f'/networks/new?error={quote(str(exc))}',
+            status_code=303,
+        )
+
+
 @app.get('/networks/{name}', response_class=HTMLResponse)
 def network_detail_page(name: str, request: Request, user: str = Depends(require_viewer)):
     lv = LibvirtService()
@@ -605,7 +670,7 @@ def network_detail_page(name: str, request: Request, user: str = Depends(require
 
 
 @app.get('/networks/{name}/edit', response_class=HTMLResponse)
-def network_edit_page(name: str, request: Request, user: str = Depends(require_admin)):
+def network_edit_page(name: str, request: Request, user: str = Depends(require_user)):
     lv = LibvirtService()
     try:
         network = lv.get_network(name)
@@ -629,7 +694,7 @@ def network_edit(
     autostart: bool = Form(False),
     start_network: bool = Form(False),
     db: Session = Depends(get_db),
-    user: str = Depends(require_admin),
+    user: str = Depends(require_user),
 ):
     lv = LibvirtService()
     try:
@@ -653,7 +718,7 @@ def network_edit(
 
 
 @app.post('/networks/{name}/delete')
-def network_delete(name: str, db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def network_delete(name: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
     lv = LibvirtService()
     try:
         lv.delete_network(name)
@@ -666,7 +731,7 @@ def network_delete(name: str, db: Session = Depends(get_db), user: str = Depends
 
 
 @app.post('/networks/{name}/{action}')
-def networks_action(name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def networks_action(name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_user)):
     lv = LibvirtService()
     try:
         lv.network_action(name, action)
@@ -811,7 +876,7 @@ def doctor_page(request: Request, user: str = Depends(require_user)):
 
 
 @app.get('/settings', response_class=HTMLResponse)
-def settings_page(request: Request, user: str = Depends(require_admin)):
+def settings_page(request: Request, user: str = Depends(require_user)):
     cfg = get_settings()
     editable = [
         ('app_name', cfg.app_name),
@@ -855,7 +920,7 @@ def settings_update(
     backup_require_shutdown: str = Form('false'),
     backup_keep_last: int = Form(...),
     db: Session = Depends(get_db),
-    user: str = Depends(require_admin),
+    user: str = Depends(require_user),
 ):
     try:
         updates = {
@@ -880,7 +945,7 @@ def settings_update(
 
 
 @app.get('/users', response_class=HTMLResponse)
-def users_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def users_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     users = db.query(UserAccount).order_by(UserAccount.username.asc()).all()
     context = _view_context(request, user)
     context.update({'users': users})
@@ -888,7 +953,7 @@ def users_page(request: Request, db: Session = Depends(get_db), user: str = Depe
 
 
 @app.post('/users/create')
-def users_create(username: str = Form(...), password: str = Form(...), role: str = Form('operator'), db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def users_create(username: str = Form(...), password: str = Form(...), role: str = Form('operator'), db: Session = Depends(get_db), user: str = Depends(require_user)):
     username = username.strip()
     role = role if role in {'admin', 'operator', 'viewer'} else 'operator'
     try:
@@ -910,7 +975,7 @@ def users_create(username: str = Form(...), password: str = Form(...), role: str
 
 
 @app.post('/users/{account_id}/role')
-def users_change_role(account_id: int, role: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def users_change_role(account_id: int, role: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_user)):
     account = db.query(UserAccount).filter(UserAccount.id == account_id).first()
     if not account:
         return _redirect('/users', error='User not found')
@@ -927,7 +992,7 @@ def users_change_role(account_id: int, role: str = Form(...), db: Session = Depe
 
 
 @app.post('/users/{account_id}/password')
-def users_reset_password(account_id: int, password: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def users_reset_password(account_id: int, password: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_user)):
     account = db.query(UserAccount).filter(UserAccount.id == account_id).first()
     if not account:
         return _redirect('/users', error='User not found')
@@ -940,7 +1005,7 @@ def users_reset_password(account_id: int, password: str = Form(...), db: Session
 
 
 @app.post('/users/{account_id}/toggle')
-def users_toggle(account_id: int, db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def users_toggle(account_id: int, db: Session = Depends(get_db), user: str = Depends(require_user)):
     account = db.query(UserAccount).filter(UserAccount.id == account_id).first()
     if not account:
         return _redirect('/users', error='User not found')
@@ -956,7 +1021,7 @@ def users_toggle(account_id: int, db: Session = Depends(get_db), user: str = Dep
 
 
 @app.post('/users/{account_id}/delete')
-def users_delete(account_id: int, db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def users_delete(account_id: int, db: Session = Depends(get_db), user: str = Depends(require_user)):
     account = db.query(UserAccount).filter(UserAccount.id == account_id).first()
     if not account:
         return _redirect('/users', error='User not found')
