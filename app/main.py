@@ -486,6 +486,179 @@ def zfs_snapshot(dataset: str = Form(...), snapshot_name: str = Form(...), db: S
     return RedirectResponse(url='/zfs', status_code=303)
 
 
+
+@app.get('/settings')
+def settings_page(
+    request: Request,
+    user: str = Depends(require_user),
+):
+    settings = get_settings()
+
+    values = {
+        'app_name': settings.app_name,
+        'host': settings.host,
+        'port': settings.port,
+        'libvirt_uri': settings.libvirt_uri,
+        'default_storage_pool': settings.default_storage_pool,
+        'iso_pool': settings.iso_pool,
+        'default_network': settings.default_network,
+        'vm_disk_path': settings.vm_disk_path,
+        'iso_path': settings.iso_path,
+        'template_path': settings.template_path,
+        'backup_path': settings.backup_path,
+        'console_bind_host': settings.console_bind_host,
+        'console_public_host': settings.console_public_host,
+        'console_port_base': settings.console_port_base,
+        'console_port_max': settings.console_port_max,
+        'database_url': settings.database_url,
+    }
+
+    return templates.TemplateResponse(
+        'settings.html',
+        {
+            'request': request,
+            'app_name': settings.app_name,
+            'settings_values': values,
+            'user': user,
+            'error': None,
+        },
+    )
+
+
+@app.get('/users')
+def users_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_user),
+):
+    settings = get_settings()
+
+    try:
+        from app.models.user import User
+        users = db.query(User).order_by(User.username).all()
+        error = request.query_params.get('error')
+        message = request.query_params.get('message')
+    except Exception as exc:
+        users = []
+        error = str(exc)
+        message = None
+
+    return templates.TemplateResponse(
+        'users.html',
+        {
+            'request': request,
+            'app_name': settings.app_name,
+            'users': users,
+            'user': user,
+            'error': error,
+            'message': message,
+        },
+    )
+
+
+@app.post('/users')
+def create_user_page(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form('admin'),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_user),
+):
+    from urllib.parse import quote
+
+    username = username.strip()
+    role = role.strip() or 'admin'
+
+    try:
+        if not username:
+            raise RuntimeError('Username is required.')
+
+        if not password:
+            raise RuntimeError('Password is required.')
+
+        if role not in ('admin', 'operator', 'viewer'):
+            raise RuntimeError(f'Invalid role: {role}')
+
+        from app.models.user import User
+        from app.core.passwords import hash_password
+
+        existing = db.query(User).filter(User.username == username).first()
+        if existing:
+            raise RuntimeError(f'User already exists: {username}')
+
+        new_user = User(
+            username=username,
+            password_hash=hash_password(password),
+            role=role,
+            is_active=True,
+        )
+
+        db.add(new_user)
+        db.commit()
+
+        return RedirectResponse(
+            url=f'/users?message={quote("User created: " + username)}',
+            status_code=303,
+        )
+
+    except Exception as exc:
+        db.rollback()
+        return RedirectResponse(
+            url=f'/users?error={quote(str(exc))}',
+            status_code=303,
+        )
+
+
+@app.post('/users')
+def create_user_page(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form('admin'),
+    is_active: bool = Form(False),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_user),
+):
+    settings = get_settings()
+
+    try:
+        from app.models.user import User
+        from app.core.passwords import hash_password
+
+        existing = db.query(User).filter(User.username == username).first()
+        if existing:
+            raise RuntimeError(f'User already exists: {username}')
+
+        new_user = User(
+            username=username,
+            password_hash=hash_password(password),
+            role=role,
+            is_active=is_active,
+        )
+        db.add(new_user)
+        db.commit()
+
+        return RedirectResponse(url='/users', status_code=303)
+
+    except Exception as exc:
+        try:
+            from app.models.user import User
+            users = db.query(User).order_by(User.username).all()
+        except Exception:
+            users = []
+
+        return templates.TemplateResponse(
+            'users.html',
+            {
+                'request': request,
+                'app_name': settings.app_name,
+                'users': users,
+                'user': user,
+                'error': str(exc),
+            },
+        )
+
 @app.get('/doctor', response_class=HTMLResponse)
 def doctor_page(request: Request, user: str = Depends(require_user)):
     checks = run_doctor()
