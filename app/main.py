@@ -142,7 +142,8 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: str = Depen
     backups = BackupService().list_backups()[:5]
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(10).all()
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(10).all()
-    return templates.TemplateResponse('dashboard.html', {'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'zfs': zfs, 'backups': backups, 'events': events, 'tasks': tasks, 'error': error})
+    return templates.TemplateResponse('dashboard.html', {'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'zfs': zfs, 'backups': backups,
+            'events': events, 'tasks': tasks, 'error': error})
 
 
 @app.get('/vms/new', response_class=HTMLResponse)
@@ -189,7 +190,8 @@ def vm_detail(name: str, request: Request, error_msg: str | None = Query(None, a
     finally:
         lv.close()
     backups = BackupService().list_backups(name)
-    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error, 'success': success, 'current_iso': current_iso, 'metrics': metrics})
+    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups,
+            'error': error, 'success': success, 'current_iso': current_iso, 'metrics': metrics})
 
 
 @app.post('/ui/vms/{name}/{action}')
@@ -578,11 +580,17 @@ def tasks_page(request: Request, db: Session = Depends(get_db), user: str = Depe
 @app.get('/backups', response_class=HTMLResponse)
 def backups_page(request: Request, user: str = Depends(require_user)):
     backups = BackupService().list_backups()
-    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups, 'backup_path': settings.backup_path, 'retention': BackupService().retention_policy(), 'message': request.query_params.get('message'), 'error': request.query_params.get('error')})
+    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups,
+            'backup_path': settings.backup_path, 'retention': BackupService().retention_policy(), 'message': request.query_params.get('message'), 'error': request.query_params.get('error')})
 
 
 @app.post('/backups/restore-definition')
 def restore_backup_definition(backup_dir: str = Form(...), new_name: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    settings = get_settings()
+    retention = {
+        'keep_last': getattr(settings, 'backup_keep_last', 7),
+        'scope': 'all',
+    }
     task = start_task(db, user, 'restore_definition', backup_dir)
     try:
         result = BackupService().restore_definition(backup_dir, new_name or None)
