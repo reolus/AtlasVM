@@ -39,7 +39,7 @@
   <div>
     <h2>Edit VM Basics</h2>
     <p><small>Description can be saved while running. Memory and vCPU changes require shutdown, because thermodynamics and libvirt both enjoy rules.</small></p>
-    <form method="post" action="/vms/{{ vm.name }}/edit">
+    <form method="post" action="/ui/vms/{{ vm.name }}/edit">
       <div class="grid two">
         <label>Memory MB <input name="memory_mb" type="number" min="256" value="{{ vm.memory_mb }}" required></label>
         <label>vCPUs <input name="vcpus" type="number" min="1" value="{{ vm.vcpus }}" required></label>

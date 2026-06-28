@@ -299,9 +299,6 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
         elif action == 'delete-confirm':
             return RedirectResponse(url=f'/vms/{name}/delete-confirm', status_code=303)
 
-        elif action == 'clone':
-            return RedirectResponse(url=f'/vms/{name}/clone', status_code=303)
-
         else:
             raise ValueError(f'Unsupported action: {action}')
         log_event(db, user, action, name, f'UI action: {action}')
@@ -1174,24 +1171,12 @@ def vm_delete(
             status_code=303,
         )
 
-    try:
-        libvirt_service = LibvirtService()
-        # Try the known libvirt service delete method names across AtlasVM phases.
-        if hasattr(libvirt_service, 'delete_vm'):
-            libvirt_service.delete_vm(name, delete_disks=delete_disks)
-        elif hasattr(libvirt_service, 'delete_domain'):
-            libvirt_service.delete_domain(name, remove_disks=delete_disks)
-        elif hasattr(libvirt_service, 'undefine_vm'):
-            libvirt_service.undefine_vm(name, delete_storage=delete_disks)
-        else:
-            raise RuntimeError('No VM delete method found on LibvirtService.')
+    task = create_task(db, f'Delete VM {name}', user)
 
-        # Best-effort event logging. Do not let logging failure break deletion.
-        try:
-            if 'log_event' in globals():
-                log_event(db, user, 'delete_vm', name, f'delete_disks={delete_disks}')
-        except Exception:
-            pass
+    try:
+        lv.delete_vm(name, delete_disks=delete_disks)
+        finish_task(db, task, 'success', f'Deleted VM {name}')
+        log_event(db, user, 'delete_vm', name, f'delete_disks={delete_disks}')
 
         return RedirectResponse(
             url=f'/?message={quote("Deleted VM: " + name)}',
@@ -1199,168 +1184,11 @@ def vm_delete(
         )
 
     except Exception as exc:
-        try:
-            if 'log_event' in globals():
-                log_event(db, user, 'delete_vm_failed', name, str(exc))
-        except Exception:
-            pass
+        finish_task(db, task, 'failed', str(exc))
+        log_event(db, user, 'delete_vm_failed', name, str(exc))
 
         return RedirectResponse(
             url=f'/vms/{name}/delete-confirm?error={quote(str(exc))}',
-            status_code=303,
-        )
-
-@app.get('/vms/{name}/clone')
-def vm_clone_page(
-    name: str,
-    request: Request,
-    user: str = Depends(require_operator),
-):
-    settings = get_settings()
-
-    return templates.TemplateResponse(
-        'vm_clone.html',
-        {
-            'request': request,
-            'app_name': settings.app_name,
-            'name': name,
-            'user': user,
-            'message': request.query_params.get('message'),
-            'error': request.query_params.get('error'),
-        },
-    )
-
-
-@app.post('/vms/{name}/clone')
-def vm_clone_submit(
-    name: str,
-    new_name: str = Form(...),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_operator),
-):
-    from urllib.parse import quote
-    from app.services.libvirt_service import LibvirtService
-
-    new_name = new_name.strip()
-
-    if not new_name:
-        return RedirectResponse(
-            url=f'/vms/{name}/clone?error={quote("New VM name is required.")}',
-            status_code=303,
-        )
-
-    try:
-        libvirt_service = LibvirtService()
-
-        if hasattr(libvirt_service, 'clone_vm'):
-            libvirt_service.clone_vm(name, new_name)
-        elif hasattr(libvirt_service, 'clone_domain'):
-            libvirt_service.clone_domain(name, new_name)
-        elif hasattr(libvirt_service, 'clone'):
-            libvirt_service.clone(name, new_name)
-        else:
-            raise RuntimeError('No clone method found on LibvirtService.')
-
-        try:
-            if 'log_event' in globals():
-                log_event(db, user, 'clone_vm', name, f'new_name={new_name}')
-        except Exception:
-            pass
-
-        return RedirectResponse(
-            url=f'/?message={quote("Cloned VM " + name + " to " + new_name)}',
-            status_code=303,
-        )
-
-    except Exception as exc:
-        try:
-            if 'log_event' in globals():
-                log_event(db, user, 'clone_vm_failed', name, str(exc))
-        except Exception:
-            pass
-
-        return RedirectResponse(
-            url=f'/vms/{name}/clone?error={quote(str(exc))}',
-            status_code=303,
-        )
-
-@app.post('/vms/{name}/edit')
-def vm_edit_submit(
-    name: str,
-    memory_mb: int = Form(...),
-    vcpus: int = Form(...),
-    description: str = Form(''),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_operator),
-):
-    from urllib.parse import quote
-    import libvirt
-
-    settings = get_settings()
-
-    try:
-        if memory_mb < 128:
-            raise RuntimeError('Memory must be at least 128 MB.')
-
-        if vcpus < 1:
-            raise RuntimeError('vCPU count must be at least 1.')
-
-        conn = libvirt.open(settings.libvirt_uri)
-        if conn is None:
-            raise RuntimeError('Could not connect to libvirt.')
-
-        try:
-            dom = conn.lookupByName(name)
-
-            if dom.isActive():
-                raise RuntimeError('Shut down the VM before changing memory or vCPU settings.')
-
-            mem_kib = int(memory_mb) * 1024
-            cpu_count = int(vcpus)
-
-            # Update persistent/inactive VM config only.
-            # Maximums first, then current values, because libvirt enjoys making order matter.
-            dom.setMemoryFlags(
-                mem_kib,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG | libvirt.VIR_DOMAIN_MEM_MAXIMUM,
-            )
-            dom.setMemoryFlags(
-                mem_kib,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-            )
-
-            dom.setVcpusFlags(
-                cpu_count,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG | libvirt.VIR_DOMAIN_VCPU_MAXIMUM,
-            )
-            dom.setVcpusFlags(
-                cpu_count,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-            )
-
-        finally:
-            conn.close()
-
-        try:
-            if 'log_event' in globals():
-                log_event(db, user, 'edit_vm', name, f'memory_mb={memory_mb}, vcpus={vcpus}')
-        except Exception:
-            pass
-
-        return RedirectResponse(
-            url=f'/vms/{name}?message={quote("Updated VM settings. Start the VM for the new values to take effect.")}',
-            status_code=303,
-        )
-
-    except Exception as exc:
-        try:
-            if 'log_event' in globals():
-                log_event(db, user, 'edit_vm_failed', name, str(exc))
-        except Exception:
-            pass
-
-        return RedirectResponse(
-            url=f'/vms/{name}?error={quote(str(exc))}',
             status_code=303,
         )
 

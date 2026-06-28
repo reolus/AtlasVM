@@ -1294,52 +1294,33 @@ def vm_edit_submit(
     user: str = Depends(require_operator),
 ):
     from urllib.parse import quote
-    import libvirt
-
-    settings = get_settings()
+    from app.services.libvirt_service import LibvirtService
 
     try:
-        if memory_mb < 128:
-            raise RuntimeError('Memory must be at least 128 MB.')
+        libvirt_service = LibvirtService()
 
-        if vcpus < 1:
-            raise RuntimeError('vCPU count must be at least 1.')
-
-        conn = libvirt.open(settings.libvirt_uri)
-        if conn is None:
-            raise RuntimeError('Could not connect to libvirt.')
-
-        try:
-            dom = conn.lookupByName(name)
-
-            if dom.isActive():
-                raise RuntimeError('Shut down the VM before changing memory or vCPU settings.')
-
-            mem_kib = int(memory_mb) * 1024
-            cpu_count = int(vcpus)
-
-            # Update persistent/inactive VM config only.
-            # Maximums first, then current values, because libvirt enjoys making order matter.
-            dom.setMemoryFlags(
-                mem_kib,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG | libvirt.VIR_DOMAIN_MEM_MAXIMUM,
+        if hasattr(libvirt_service, 'update_vm'):
+            libvirt_service.update_vm(
+                name,
+                memory_mb=memory_mb,
+                vcpus=vcpus,
+                description=description,
             )
-            dom.setMemoryFlags(
-                mem_kib,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG,
+        elif hasattr(libvirt_service, 'edit_vm'):
+            libvirt_service.edit_vm(
+                name,
+                memory_mb=memory_mb,
+                vcpus=vcpus,
+                description=description,
             )
-
-            dom.setVcpusFlags(
-                cpu_count,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG | libvirt.VIR_DOMAIN_VCPU_MAXIMUM,
+        elif hasattr(libvirt_service, 'set_vm_resources'):
+            libvirt_service.set_vm_resources(
+                name,
+                memory_mb=memory_mb,
+                vcpus=vcpus,
             )
-            dom.setVcpusFlags(
-                cpu_count,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-            )
-
-        finally:
-            conn.close()
+        else:
+            raise RuntimeError('No VM edit/update method found on LibvirtService.')
 
         try:
             if 'log_event' in globals():
@@ -1348,7 +1329,7 @@ def vm_edit_submit(
             pass
 
         return RedirectResponse(
-            url=f'/vms/{name}?message={quote("Updated VM settings. Start the VM for the new values to take effect.")}',
+            url=f'/ui/vms/{name}?message={quote("Updated VM settings.")}',
             status_code=303,
         )
 
@@ -1360,7 +1341,6 @@ def vm_edit_submit(
             pass
 
         return RedirectResponse(
-            url=f'/vms/{name}?error={quote(str(exc))}',
+            url=f'/ui/vms/{name}?error={quote(str(exc))}',
             status_code=303,
         )
-
