@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section>
+  <h2>New NFS Storage Target</h2>
+  <p>Add an NFS export for backups, ISO storage, templates, or VM disks.</p>
+
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+</section>
+
+<section>
+  <form method="post" action="/storage/nfs/new">
+    <label>
+      Name
+      <input name="name" placeholder="nfs-backups" required>
+    </label>
+
+    <label>
+      Storage Network Profile
+      <select name="storage_network">
+        <option value="">Use normal host routing</option>
+        {% for name, n in storage_networks.items() %}
+        <option value="{{ name }}">{{ name }} - {{ n.get('interface_name', '') }} {{ n.get('ip_cidr', '') }}</option>
+        {% endfor %}
+      </select>
+      <small>This documents the intended storage traffic path. Mounting still depends on host routing and interface reachability.</small>
+    </label>
+
+    <label>
+      NFS Server
+      <input name="server" placeholder="10.60.0.20 or storage.example.local" required>
+    </label>
+
+    <label>
+      Export Path
+      <input name="export_path" placeholder="/exports/atlasvm" required>
+    </label>
+
+    <label>
+      Local Mount Path
+      <input name="mount_path" placeholder="/atlasvm-storage/nfs/backups" required>
+    </label>
+
+    <label>
+      NFS Version
+      <select name="nfs_version">
+        <option value="4">4</option>
+        <option value="4.1">4.1</option>
+        <option value="4.2">4.2</option>
+        <option value="3">3</option>
+      </select>
+    </label>
+
+    <label>
+      Mount Options
+      <input name="mount_options" value="rw,_netdev,noatime">
+    </label>
+
+    <fieldset>
+      <legend>Storage Roles</legend>
+      <label><input type="checkbox" name="roles" value="backups"> Backups</label>
+      <label><input type="checkbox" name="roles" value="iso"> ISO Library</label>
+      <label><input type="checkbox" name="roles" value="templates"> Templates</label>
+      <label><input type="checkbox" name="roles" value="vm-disks"> VM Disks</label>
+    </fieldset>
+
+    <label>
+      <input type="checkbox" name="create_libvirt_pool" value="yes">
+      Create libvirt storage pool
+    </label>
+
+    <label>
+      Libvirt Pool Name
+      <input name="libvirt_pool_name" placeholder="atlasvm-nfs-backups">
+    </label>
+
+    <div style="display:flex; gap:0.5rem;">
+      <button type="submit">Save NFS Target</button>
+      <a href="/storage">Cancel</a>
+    </div>
+  </form>
+</section>
+
+{% endblock %}

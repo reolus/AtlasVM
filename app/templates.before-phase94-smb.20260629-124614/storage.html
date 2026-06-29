@@ -8,9 +8,6 @@
       <p>Local storage, ZFS, libvirt pools, filesystems, VM disks, and storage network profiles.</p>
     </div>
     <div style="display:flex; gap:0.5rem;">
-      <form method="get" action="/storage/smb/new">
-        <button type="submit">New SMB/CIFS Target</button>
-      </form>
       <form method="get" action="/storage/nfs/new">
         <button type="submit">New NFS Target</button>
       </form>
@@ -98,47 +95,6 @@
   </table>
 </section>
 
-
-
-<section>
-  <h3>SMB/CIFS Storage Targets</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th><th>Server</th><th>Share</th><th>Mount</th><th>Version</th><th>Roles</th><th>Mounted</th><th>Libvirt Pool</th><th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if overview.smb_targets %}
-      {% for name in overview.smb_targets %}
-      {% set n = overview.smb_targets[name] %}
-      <tr>
-        <td><code>{{ name }}</code></td>
-        <td>{{ n.get('server', '-') }}</td>
-        <td><code>//{{ n.get('server', '-') }}/{{ n.get('share_name', '-') }}</code></td>
-        <td><code>{{ n.get('mount_path', '-') }}</code></td>
-        <td>{{ n.get('smb_version', '-') }}</td>
-        <td>{{ n.get('roles', []) | join(', ') }}</td>
-        <td>{{ n.get('mounted', false) }}</td>
-        <td>{{ n.get('libvirt_pool_name') or '-' }}</td>
-        <td>
-          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-            <form method="post" action="/storage/smb/{{ name }}/test"><button type="submit">Test</button></form>
-            <form method="post" action="/storage/smb/{{ name }}/apply"><button type="submit">Apply/Mount</button></form>
-            <form method="post" action="/storage/smb/{{ name }}/unmount"><button type="submit">Unmount</button></form>
-            <form method="post" action="/storage/smb/{{ name }}/delete" onsubmit="return confirm('Delete this SMB/CIFS target? This also removes stored credentials.');">
-              <button type="submit" class="danger">Delete</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% endfor %}
-      {% else %}
-      <tr><td colspan="9">No SMB/CIFS targets defined.</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
-</section>
 
 <section>
   <h3>NFS Storage Targets</h3>

@@ -37,11 +37,6 @@ from app.services.storage_phase9 import (
     save_nfs_target,
     test_nfs_target,
     unmount_nfs_target,
-    apply_smb_target,
-    delete_smb_target,
-    save_smb_target,
-    test_smb_target,
-    unmount_smb_target,
 )
 from app.services.host_mgmt_network import (
     apply_plan,
@@ -1063,100 +1058,6 @@ def nfs_delete(name: str, user: str = Depends(require_admin)):
     try:
         delete_nfs_target(name)
         return _redirect('/storage', message=f'NFS target {name} deleted.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-
-@app.get('/storage/smb/new', response_class=HTMLResponse)
-def smb_new_page(request: Request, user: str = Depends(require_admin)):
-    overview = storage_overview()
-    return templates.TemplateResponse(
-        'smb_form.html',
-        {
-            **_view_context(request, user),
-            'storage_networks': overview.get('storage_networks', {}),
-        },
-    )
-
-
-@app.post('/storage/smb/new')
-def smb_new(
-    name: str = Form(''),
-    storage_network: str = Form(''),
-    server: str = Form(''),
-    share_name: str = Form(''),
-    mount_path: str = Form(''),
-    username: str = Form(''),
-    password: str = Form(''),
-    domain: str = Form(''),
-    smb_version: str = Form('3.1.1'),
-    mount_options: str = Form('rw,_netdev,noserverino,iocharset=utf8'),
-    roles: str = Form(''),
-    create_libvirt_pool: str = Form(''),
-    libvirt_pool_name: str = Form(''),
-    user: str = Depends(require_admin),
-):
-    try:
-        save_smb_target(
-            name=name,
-            storage_network=storage_network,
-            server=server,
-            share_name=share_name,
-            mount_path=mount_path,
-            username=username,
-            password=password,
-            domain=domain,
-            smb_version=smb_version,
-            mount_options=mount_options,
-            roles=roles,
-            create_libvirt_pool=create_libvirt_pool,
-            libvirt_pool_name=libvirt_pool_name,
-        )
-        return _redirect('/storage', message='SMB/CIFS target saved.')
-    except Exception as exc:
-        return _redirect('/storage/smb/new', error=str(exc))
-
-
-@app.post('/storage/smb/{name}/test')
-def smb_test(name: str, user: str = Depends(require_admin)):
-    try:
-        result = test_smb_target(name)
-
-        if not result.get('test_available'):
-            return _redirect('/storage', message=result.get('message', 'SMB test skipped.'))
-
-        if result.get('returncode') == 0:
-            return _redirect('/storage', message=f'SMB target {name} responded.')
-
-        return _redirect('/storage', error=f'SMB test returned error: {result.get("stderr") or result.get("stdout")}')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/smb/{name}/apply')
-def smb_apply(name: str, user: str = Depends(require_admin)):
-    try:
-        apply_smb_target(name)
-        return _redirect('/storage', message=f'SMB/CIFS target {name} applied.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/smb/{name}/unmount')
-def smb_unmount(name: str, user: str = Depends(require_admin)):
-    try:
-        unmount_smb_target(name)
-        return _redirect('/storage', message=f'SMB/CIFS target {name} unmounted.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/smb/{name}/delete')
-def smb_delete(name: str, user: str = Depends(require_admin)):
-    try:
-        delete_smb_target(name)
-        return _redirect('/storage', message=f'SMB/CIFS target {name} deleted.')
     except Exception as exc:
         return _redirect('/storage', error=str(exc))
 
