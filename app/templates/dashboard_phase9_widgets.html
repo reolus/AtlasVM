@@ -1,0 +1,204 @@
+<style>
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.dash-card {
+  border: 1px solid var(--border, #333);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--panel, rgba(255,255,255,0.03));
+  --donut-hole-bg: var(--panel, rgba(255,255,255,0.03));
+}
+.dash-card h3,
+.dash-card h4 {
+  margin-top: 0;
+}
+.dash-donut {
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  margin: 0.5rem auto 0.75rem auto;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.dash-donut::after {
+  content: "";
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--donut-hole-bg, transparent);
+  position: absolute;
+}
+.dash-donut-label {
+  position: relative;
+  z-index: 1;
+  font-weight: 700;
+}
+.dash-meta {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.95rem;
+}
+.dash-pill-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+.dash-pill {
+  border: 1px solid var(--border, #444);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.85rem;
+}
+.dash-good {
+  color: var(--success, #5cb85c);
+}
+.dash-bad {
+  color: var(--danger, #d9534f);
+}
+.dash-small {
+  font-size: 0.9rem;
+}
+.dash-big-number {
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.dash-table {
+  width: 100%;
+}
+.dash-note {
+  opacity: 0.8;
+  font-size: 0.9rem;
+}
+</style>
+
+<section>
+  <h2>Host Overview</h2>
+  <div class="dash-grid">
+    {% for item in [dashboard.host.cpu, dashboard.host.memory, dashboard.host.root_disk] %}
+    <div class="dash-card">
+      <h3>{{ item.label }}</h3>
+      <div class="dash-donut" style="background: {{ item.chart_gradient }};">
+        <div class="dash-donut-label">
+          {% if item.used_percent is none %}
+          ?
+          {% else %}
+          {{ item.used_percent }}%
+          {% endif %}
+        </div>
+      </div>
+      <div class="dash-meta">
+        <div><strong>Used:</strong> {{ item.used }}</div>
+        <div><strong>Available:</strong> {{ item.available }}</div>
+        <div><strong>Total:</strong> {{ item.total }}</div>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="dash-card">
+      <h3>VMs</h3>
+      <div class="dash-big-number">{{ dashboard.vms.total }}</div>
+      <div class="dash-meta" style="margin-top:0.75rem;">
+        <div class="dash-good dash-small"><strong>{{ dashboard.vms.running }}</strong> running</div>
+        <div class="dash-bad dash-small"><strong>{{ dashboard.vms.offline }}</strong> offline</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Libvirt Pool Health</h2>
+  <table class="dash-table">
+    <thead>
+      <tr>
+        <th>Pool</th>
+        <th>Health</th>
+        <th>Type</th>
+        <th>Mode</th>
+        <th>Capacity</th>
+        <th>Used</th>
+        <th>Available</th>
+        <th>Path</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in dashboard.libvirt_pools %}
+      <tr>
+        <td><code>{{ p.name }}</code></td>
+        <td>
+          {% if p.health == 'healthy' %}
+          <span class="dash-good">healthy</span>
+          {% else %}
+          <span class="dash-bad">{{ p.health }}</span>
+          {% endif %}
+        </td>
+        <td>{{ p.type }}</td>
+        <td>{{ p.mode }}</td>
+        <td>{{ p.capacity }}</td>
+        <td>{{ p.used }}</td>
+        <td>{{ p.available }}</td>
+        <td><code>{{ p.path }}</code></td>
+      </tr>
+      {% if p.note %}
+      <tr>
+        <td></td>
+        <td colspan="7" class="dash-note">{{ p.note }}</td>
+      </tr>
+      {% endif %}
+      {% else %}
+      <tr><td colspan="8">No libvirt pools found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>iSCSI Overview</h2>
+  <table class="dash-table">
+    <thead>
+      <tr>
+        <th>Target</th>
+        <th>Status</th>
+        <th>Portal</th>
+        <th>IQN</th>
+        <th>Associated LVM</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in dashboard.iscsi %}
+      <tr>
+        <td><code>{{ t.name }}</code></td>
+        <td>
+          {% if t.connected %}
+          <span class="dash-good">connected</span>
+          {% else %}
+          <span class="dash-bad">disconnected</span>
+          {% endif %}
+        </td>
+        <td><code>{{ t.portal }}</code></td>
+        <td><code>{{ t.target_iqn }}</code></td>
+        <td>
+          {% if t.lvm %}
+            {% for l in t.lvm %}
+              VG <code>{{ l.vg_name }}</code>
+              {% if l.thinpool_name %}
+                <br><small>Thin pool: <code>{{ l.thinpool_name }}</code></small>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            -
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">No iSCSI targets configured.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>

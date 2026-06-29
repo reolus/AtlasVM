@@ -24,6 +24,7 @@ from app.services.doctor_service import run_doctor
 from app.services import zfs_service
 from app.services.libvirt_service import LibvirtService, VMCreateRequest
 from app.services.network_phase8 import NetworkPhase8Service
+from app.services.dashboard_overview import dashboard_overview
 from app.services.storage_phase9 import (
     apply_storage_network,
     delete_storage_network,
@@ -48,6 +49,8 @@ from app.services.storage_phase9 import (
     logout_iscsi_target,
     save_iscsi_target,
     test_iscsi_target,
+    iscsi_lvm_candidate_devices,
+    initialize_iscsi_lvm_thin,
 )
 from app.services.host_mgmt_network import (
     apply_plan,
@@ -284,7 +287,8 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: str = Depen
     backups = BackupService().list_backups()[:5]
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(10).all()
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(10).all()
-    return templates.TemplateResponse('dashboard.html', {'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'zfs': zfs, 'backups': backups, 'events': events, 'tasks': tasks, 'error': error})
+    return templates.TemplateResponse('dashboard.html', {
+            'dashboard': dashboard_overview(),'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'zfs': zfs, 'backups': backups, 'events': events, 'tasks': tasks, 'error': error})
 
 
 @app.get('/vms/new', response_class=HTMLResponse)
@@ -1266,6 +1270,54 @@ def iscsi_delete(name: str, user: str = Depends(require_admin)):
     try:
         delete_iscsi_target(name)
         return _redirect('/storage', message=f'iSCSI target {name} deleted.')
+    except Exception as exc:
+        return _redirect('/storage', error=str(exc))
+
+
+
+@app.get('/storage/iscsi/{name}/lvm-thin', response_class=HTMLResponse)
+def iscsi_lvm_thin_page(name: str, request: Request, user: str = Depends(require_admin)):
+    try:
+        candidates = iscsi_lvm_candidate_devices(name)
+        targets = storage_overview().get('iscsi_targets', {})
+        target = targets.get(name, {})
+        return templates.TemplateResponse(
+            'iscsi_lvm_form.html',
+            {
+                **_view_context(request, user),
+                'name': name,
+                'target': target,
+                'candidates': candidates,
+            },
+        )
+    except Exception as exc:
+        return _redirect('/storage', error=str(exc))
+
+
+@app.post('/storage/iscsi/{name}/lvm-thin')
+def iscsi_lvm_thin_apply(
+    name: str,
+    by_path: str = Form(''),
+    vg_name: str = Form(''),
+    thinpool_name: str = Form(''),
+    thinpool_percent: str = Form('95'),
+    create_libvirt_pool: str = Form(''),
+    libvirt_pool_name: str = Form(''),
+    confirm_text: str = Form(''),
+    user: str = Depends(require_admin),
+):
+    try:
+        initialize_iscsi_lvm_thin(
+            name=name,
+            by_path=by_path,
+            vg_name=vg_name,
+            thinpool_name=thinpool_name,
+            thinpool_percent=thinpool_percent,
+            create_libvirt_pool=create_libvirt_pool,
+            libvirt_pool_name=libvirt_pool_name,
+            confirm_text=confirm_text,
+        )
+        return _redirect('/storage', message=f'iSCSI target {name} initialized as LVM-thin.')
     except Exception as exc:
         return _redirect('/storage', error=str(exc))
 

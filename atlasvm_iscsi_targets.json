@@ -9,6 +9,42 @@
     "last_login_stdout": "Login to [iface: default, target: iqn.2000-01.com.synology:PCIS-NAS-001.Target-12.c645cbd62c, portal: 10.21.50.51,3260] successful.\n",
     "libvirt_pool_name": "atlasvm-iscsi-virtpool",
     "logged_in": true,
+    "lvm_thin": {
+      "by_path": "/dev/disk/by-path/ip-10.21.50.51:3260-iscsi-iqn.2000-01.com.synology:PCIS-NAS-001.Target-12.c645cbd62c-lun-1",
+      "commands": [
+        {
+          "cmd": "wipefs -a /dev/sdc",
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "cmd": "pvcreate -ff -y /dev/sdc",
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "  Physical volume \"/dev/sdc\" successfully created.\n"
+        },
+        {
+          "cmd": "vgcreate atlasvm_iscsi_virtpool /dev/sdc",
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "  Volume group \"atlasvm_iscsi_virtpool\" successfully created\n"
+        },
+        {
+          "cmd": "lvcreate -l 95%VG -T atlasvm_iscsi_virtpool/thinpool",
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "  Thin pool volume with chunk size 256.00 KiB can address at most 63.50 TiB of data.\n  Logical volume \"thinpool\" created.\n"
+        }
+      ],
+      "enabled": true,
+      "initialized_at": 1782761495,
+      "libvirt_pool_name": "atlasvm-lvm-virtpool",
+      "resolved_path": "/dev/sdc",
+      "thinpool_name": "thinpool",
+      "thinpool_percent": 95,
+      "vg_name": "atlasvm_iscsi_virtpool"
+    },
     "mutual_chap_configured": false,
     "mutual_username": "",
     "name": "synology-01",

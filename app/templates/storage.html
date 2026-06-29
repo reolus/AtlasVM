@@ -1,6 +1,62 @@
 {% extends "base.html" %}
 {% block content %}
 
+<style>
+.storage-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.storage-chart-card {
+  border: 1px solid var(--border, #333);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--panel, rgba(255,255,255,0.03));
+  --donut-hole-bg: var(--panel, rgba(255,255,255,0.03));
+}
+.storage-donut {
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  margin: 0.5rem auto 0.75rem auto;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.storage-donut::after {
+  content: "";
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: var(--donut-hole-bg, rgba(255,255,255,0.03));
+  position: absolute;
+}
+.storage-donut-label {
+  position: relative;
+  z-index: 1;
+  font-weight: 700;
+}
+.storage-chart-meta {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.95rem;
+}
+.storage-pill-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+.storage-pill {
+  border: 1px solid var(--border, #444);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.85rem;
+}
+</style>
+
+
 <section>
   <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem;">
     <div>
@@ -28,6 +84,103 @@
 
   {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
   {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+</section>
+
+
+<section>
+  <h3>Storage Usage Overview</h3>
+  <p>Quick used/free view per pool. Red is used, green is available, because apparently even storage needs traffic lights.</p>
+
+  <h4>ZFS Pools</h4>
+  <div class="storage-chart-grid">
+    {% for p in overview.zfs_pools %}
+    <div class="storage-chart-card">
+      <h4><code>{{ p.name }}</code></h4>
+      <div class="storage-donut" style="background: {{ p.chart_gradient }};">
+        <div class="storage-donut-label">
+          {% if p.usage_mode == 'lvm-thin' %}
+            {{ p.used_percent if p.used_percent is not none else 0 }}%
+          {% elif p.used_percent is none %}
+            Block
+          {% else %}
+            {{ p.used_percent }}%
+          {% endif %}
+        </div>
+      </div>
+      <div class="storage-chart-meta">
+        <div><strong>Used:</strong> {{ p.alloc }}</div>
+        <div><strong>Available:</strong> {{ p.free }}</div>
+        <div><strong>Total:</strong> {{ p.size }}</div>
+        <div><strong>Health:</strong> {{ p.health }}</div>
+      </div>
+      <div class="storage-pill-row">
+        <span class="storage-pill">Used {{ p.used_percent }}%</span>
+        <span class="storage-pill">Free {{ p.free_percent }}%</span>
+      </div>
+    </div>
+    {% else %}
+    <p>No ZFS pools found.</p>
+    {% endfor %}
+  </div>
+
+  <h4>Libvirt Storage Pools</h4>
+  <div class="storage-chart-grid">
+    {% for p in overview.libvirt_pools %}
+    {% if p.name and p.name != 'Name' %}
+    <div class="storage-chart-card">
+      <h4><code>{{ p.name }}</code></h4>
+      <div class="storage-donut" style="background: {{ p.chart_gradient }};">
+        <div class="storage-donut-label">
+          {% if p.usage_mode == 'lvm-thin' %}
+            {{ p.used_percent if p.used_percent is not none else 0 }}%
+          {% elif p.used_percent is none %}
+            Block
+          {% else %}
+            {{ p.used_percent }}%
+          {% endif %}
+        </div>
+      </div>
+      <div class="storage-chart-meta">
+        {% if p.usage_mode == 'lvm-thin' and p.lvm_thin %}
+        <div><strong>Data Used:</strong> {{ p.lvm_thin.data_percent or 0 }}%</div>
+        <div><strong>Data Free:</strong> {{ p.lvm_thin.free_percent if p.lvm_thin.free_percent is not none else 100 }}%</div>
+        <div><strong>Thin Pool:</strong> {{ p.lvm_thin.thinpool_size or p.capacity }}</div>
+        <div><strong>Metadata Used:</strong> {{ p.lvm_thin.metadata_percent or 0 }}%</div>
+        <div><strong>VG Path:</strong> <code>{{ p.path }}</code></div>
+        {% elif p.usage_mode == 'block-presented' %}
+        <div><strong>Presented:</strong> {{ p.capacity }}</div>
+        <div><strong>Allocation:</strong> Not filesystem-aware</div>
+        <div><strong>Available:</strong> Not reported by block LUN</div>
+        <div><strong>Path:</strong> <code>{{ p.path }}</code></div>
+        {% else %}
+        <div><strong>Used:</strong> {{ p.allocation }}</div>
+        <div><strong>Available:</strong> {{ p.available }}</div>
+        <div><strong>Total:</strong> {{ p.capacity }}</div>
+        <div><strong>Path:</strong> <code>{{ p.path }}</code></div>
+        {% endif %}
+      </div>
+      <div class="storage-pill-row">
+        <span class="storage-pill">{{ p.state }}</span>
+        <span class="storage-pill">Autostart {{ p.autostart }}</span>
+        {% if p.usage_mode == 'block-presented' %}
+        <span class="storage-pill">Block-backed</span>
+        {% endif %}
+        {% if p.usage_mode == 'lvm-thin' %}
+        <span class="storage-pill">LVM-thin</span>
+        {% if p.lvm_thin and p.lvm_thin.metadata_percent is not none %}
+        <span class="storage-pill">Metadata {{ p.lvm_thin.metadata_percent }}%</span>
+        {% endif %}
+        {% endif %}
+      </div>
+      {% if p.chart_note %}
+      <p><small>{{ p.chart_note }}</small></p>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <p>No libvirt storage pools found.</p>
+    {% endfor %}
+  </div>
 </section>
 
 <section>
@@ -84,6 +237,7 @@
     </thead>
     <tbody>
       {% for p in overview.libvirt_pools %}
+      {% if p.name and p.name != 'Name' %}
       <tr>
         <td><code>{{ p.name }}</code></td>
         <td>{{ p.type }}</td>
@@ -94,6 +248,7 @@
         <td>{{ p.available }}</td>
         <td><code>{{ p.path }}</code></td>
       </tr>
+      {% endif %}
       {% else %}
       <tr><td colspan="8">No libvirt storage pools found.</td></tr>
       {% endfor %}
@@ -127,6 +282,7 @@
           <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
             <form method="post" action="/storage/iscsi/{{ name }}/test"><button type="submit">Test</button></form>
             <form method="post" action="/storage/iscsi/{{ name }}/login"><button type="submit">Login</button></form>
+            <form method="get" action="/storage/iscsi/{{ name }}/lvm-thin"><button type="submit">LVM-thin</button></form>
             <form method="post" action="/storage/iscsi/{{ name }}/logout"><button type="submit">Logout</button></form>
             <form method="post" action="/storage/iscsi/{{ name }}/delete" onsubmit="return confirm('Delete this iSCSI target? This also removes stored CHAP secrets.');">
               <button type="submit" class="danger">Delete</button>
@@ -182,6 +338,106 @@
     </tbody>
   </table>
 </section>
+
+
+<section>
+  <h3>iSCSI LUN Details</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>By-path</th>
+        <th>Device</th>
+        <th>Size</th>
+        <th>Filesystem</th>
+        <th>Mount</th>
+        <th>LVM</th>
+        <th>VM Usage</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in overview.iscsi_device_details %}
+      <tr>
+        <td><code>{{ d.by_path_name }}</code></td>
+        <td><code>{{ d.resolved_path }}</code></td>
+        <td>{{ d.size }}</td>
+        <td>{{ d.fstype or '-' }}</td>
+        <td>
+          {% if d.mountpoints %}
+            <code>{{ d.mountpoints }}</code>
+            {% if d.filesystem_usage %}
+              <br><small>{{ d.filesystem_usage.used }} used / {{ d.filesystem_usage.avail }} free ({{ d.filesystem_usage.pcent }})</small>
+            {% endif %}
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td>
+          {% if d.lvm %}
+            VG <code>{{ d.lvm.vg_name }}</code><br>
+            <small>{{ d.lvm.pv_free }} free of {{ d.lvm.pv_size }}</small>
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td>
+          {% if d.used_by_vms %}
+            {% for u in d.used_by_vms %}
+              <div>{{ u.vm }}: <code>{{ u.target }}</code></div>
+            {% endfor %}
+          {% else %}
+            -
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">No iSCSI LUN details found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h3>LVM Storage Summary</h3>
+
+  <h4>Volume Groups</h4>
+  <table>
+    <thead><tr><th>VG</th><th>Size</th><th>Free</th><th>PVs</th><th>LVs</th></tr></thead>
+    <tbody>
+      {% for vg in overview.lvm_summary.vgs %}
+      <tr>
+        <td><code>{{ vg.vg_name }}</code></td>
+        <td>{{ vg.vg_size }}</td>
+        <td>{{ vg.vg_free }}</td>
+        <td>{{ vg.pv_count }}</td>
+        <td>{{ vg.lv_count }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">No LVM volume groups found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h4>Logical Volumes</h4>
+  <table>
+    <thead><tr><th>LV</th><th>VG</th><th>Size</th><th>Pool</th><th>Data %</th><th>Metadata %</th><th>Devices</th></tr></thead>
+    <tbody>
+      {% for lv in overview.lvm_summary.lvs %}
+      <tr>
+        <td><code>{{ lv.lv_name }}</code></td>
+        <td><code>{{ lv.vg_name }}</code></td>
+        <td>{{ lv.lv_size }}</td>
+        <td>{{ lv.pool_lv or '-' }}</td>
+        <td>{{ lv.data_percent or '-' }}</td>
+        <td>{{ lv.metadata_percent or '-' }}</td>
+        <td><code>{{ lv.devices or '-' }}</code></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">No LVM logical volumes found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
 
 <section>
   <h3>SMB/CIFS Storage Targets</h3>

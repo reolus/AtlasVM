@@ -49,29 +49,65 @@ def storage_overview() -> dict[str, Any]:
         "iscsi_targets": list_iscsi_targets(),
         "iscsi_sessions": list_iscsi_sessions(),
         "iscsi_block_devices": list_iscsi_block_devices(),
+        "iscsi_device_details": list_iscsi_device_details(),
+        "lvm_summary": list_lvm_storage_summary(),
         "host_links": list_host_links(),
         "default_route": default_route(),
     }
 
 
 def list_zfs_pools() -> list[dict[str, str]]:
-    result = run(["zpool", "list", "-H", "-o", "name,size,alloc,free,cap,health"])
-    pools = []
-    if result.returncode != 0:
-        return pools
+    # Human-readable view plus byte-accurate values for charts.
+    human = run(["zpool", "list", "-H", "-o", "name,size,alloc,free,cap,health"])
+    raw = run(["zpool", "list", "-Hp", "-o", "name,size,alloc,free,cap,health"])
 
-    for line in _split_lines(result.stdout):
+    human_rows = {}
+    if human.returncode == 0:
+        for line in _split_lines(human.stdout):
+            parts = line.split()
+            if len(parts) >= 6:
+                human_rows[parts[0]] = {
+                    "name": parts[0],
+                    "size": parts[1],
+                    "alloc": parts[2],
+                    "free": parts[3],
+                    "cap": parts[4],
+                    "health": parts[5],
+                }
+
+    pools = []
+    if raw.returncode != 0:
+        return list(human_rows.values())
+
+    for line in _split_lines(raw.stdout):
         parts = line.split()
-        if len(parts) >= 6:
-            pools.append({
-                "name": parts[0],
-                "size": parts[1],
-                "alloc": parts[2],
-                "free": parts[3],
-                "cap": parts[4],
-                "health": parts[5],
-            })
+        if len(parts) < 6:
+            continue
+
+        name = parts[0]
+        size_bytes = int(parts[1])
+        alloc_bytes = int(parts[2])
+        free_bytes = int(parts[3])
+
+        used_percent = 0
+        free_percent = 0
+        if size_bytes > 0:
+            used_percent = round((alloc_bytes / size_bytes) * 100, 1)
+            free_percent = round((free_bytes / size_bytes) * 100, 1)
+
+        row = human_rows.get(name, {"name": name})
+        row.update({
+            "size_bytes": size_bytes,
+            "alloc_bytes": alloc_bytes,
+            "free_bytes": free_bytes,
+            "used_percent": used_percent,
+            "free_percent": free_percent,
+            "chart_gradient": f"conic-gradient(var(--danger, #d9534f) 0 {used_percent}%, var(--success, #5cb85c) {used_percent}% 100%)",
+        })
+        pools.append(row)
+
     return pools
+
 
 
 def zfs_status_text() -> str:
@@ -111,12 +147,138 @@ def _pool_target_path(xml_text: str) -> str:
     return ""
 
 
+def _pool_capacity_bytes(xml_text: str) -> dict[str, int]:
+    out = {"capacity_bytes": 0, "allocation_bytes": 0, "available_bytes": 0}
+    try:
+        root = ET.fromstring(xml_text)
+        for key, tag in [
+            ("capacity_bytes", "capacity"),
+            ("allocation_bytes", "allocation"),
+            ("available_bytes", "available"),
+        ]:
+            value = root.findtext(tag)
+            if value:
+                out[key] = int(value)
+    except Exception:
+        pass
+    return out
+
+
 def _pool_type(xml_text: str) -> str:
     try:
         root = ET.fromstring(xml_text)
         return root.attrib.get("type", "")
     except Exception:
         return ""
+
+
+def _pool_source_name(xml_text: str) -> str:
+    try:
+        root = ET.fromstring(xml_text)
+        source = root.find("source")
+        if source is not None:
+            name = source.findtext("name")
+            return name or ""
+    except Exception:
+        pass
+    return ""
+
+
+def _lvm_thin_usage_for_vg(vg_name: str) -> dict[str, Any]:
+    """
+    Return thin-pool usage for a VG.
+
+    For LVM-thin, libvirt pool allocation often reflects the thinpool LV size,
+    not actual data consumed. The real useful numbers are lvs data_percent and
+    metadata_percent. Naturally, those live somewhere else, because storage.
+    """
+    if not vg_name:
+        return {}
+
+    result = run([
+        "lvs",
+        "--readonly",
+        "--reportformat", "json",
+        "--units", "g",
+        "-a",
+        "-o", "lv_name,vg_name,lv_size,lv_attr,pool_lv,data_percent,metadata_percent",
+        vg_name,
+    ], check=False)
+
+    if result.returncode != 0:
+        return {}
+
+    try:
+        data = json.loads(result.stdout)
+    except Exception:
+        return {}
+
+    candidates = []
+
+    for report in data.get("report", []):
+        for lv in report.get("lv", []):
+            if lv.get("vg_name") != vg_name:
+                continue
+
+            lv_attr = str(lv.get("lv_attr") or "")
+            data_percent = str(lv.get("data_percent") or "").strip()
+            metadata_percent = str(lv.get("metadata_percent") or "").strip()
+
+            # Thin pools usually expose data_percent and metadata_percent.
+            if data_percent or metadata_percent or "t" in lv_attr.lower():
+                candidates.append(lv)
+
+    if not candidates:
+        return {}
+
+    # Prefer the LV with data_percent populated.
+    selected = None
+    for lv in candidates:
+        if str(lv.get("data_percent") or "").strip():
+            selected = lv
+            break
+
+    if selected is None:
+        selected = candidates[0]
+
+    def pct(value: Any, default: float | None = None) -> float | None:
+        value = str(value or "").strip()
+        if not value:
+            return default
+        try:
+            return round(float(value), 1)
+        except Exception:
+            return default
+
+    # LVM sometimes returns blank data_percent/metadata_percent for a newly
+    # created thin pool with no thin volumes yet. Treat that as 0%, not unknown.
+    # Thank you, LVM, for making "nothing used" look like "who knows."
+    data_pct = pct(selected.get("data_percent"), 0.0)
+    meta_pct = pct(selected.get("metadata_percent"), 0.0)
+
+    free_pct = None
+    if data_pct is not None:
+        free_pct = round(100 - data_pct, 1)
+
+    return {
+        "thinpool_name": selected.get("lv_name", ""),
+        "thinpool_size": selected.get("lv_size", ""),
+        "data_percent": data_pct,
+        "free_percent": free_pct,
+        "metadata_percent": meta_pct,
+        "lv_attr": selected.get("lv_attr", ""),
+        "raw_data_percent": selected.get("data_percent", ""),
+        "raw_metadata_percent": selected.get("metadata_percent", ""),
+    }
+
+
+def _pool_usage_mode(pool_type: str) -> str:
+    pool_type = (pool_type or "").strip().lower()
+    if pool_type in {"iscsi", "disk", "mpath", "scsi"}:
+        return "block-presented"
+    if pool_type == "logical":
+        return "logical"
+    return "filesystem"
 
 
 def list_libvirt_pools() -> list[dict[str, Any]]:
@@ -127,7 +289,8 @@ def list_libvirt_pools() -> list[dict[str, Any]]:
 
     lines = _split_lines(result.stdout)
     for line in lines:
-        if line.startswith("Name") or line.startswith("-"):
+        stripped = line.strip()
+        if stripped.startswith("Name") or stripped.startswith("-"):
             continue
 
         parts = line.split()
@@ -138,16 +301,75 @@ def list_libvirt_pools() -> list[dict[str, Any]]:
         info = run(["virsh", "pool-info", name])
         xml = run(["virsh", "pool-dumpxml", name])
 
+        pool_bytes = _pool_capacity_bytes(xml.stdout)
+
+        pool_type = _pool_type(xml.stdout)
+        usage_mode = _pool_usage_mode(pool_type)
+
+        used_percent = 0
+        free_percent = 0
+        chart_note = ""
+
+        if pool_bytes["capacity_bytes"] > 0:
+            if usage_mode == "block-presented":
+                # iSCSI/block pools often report the whole LUN as allocated.
+                # That is not filesystem free space, so do not present it as "100% full".
+                used_percent = None
+                free_percent = None
+                chart_note = "Block-backed pool. Libvirt reports presented LUN capacity, not filesystem free space."
+            else:
+                used_percent = round((pool_bytes["allocation_bytes"] / pool_bytes["capacity_bytes"]) * 100, 1)
+                free_percent = round((pool_bytes["available_bytes"] / pool_bytes["capacity_bytes"]) * 100, 1)
+
+        if used_percent is None:
+            chart_gradient = "conic-gradient(var(--muted, #777) 0 100%)"
+        else:
+            chart_gradient = f"conic-gradient(var(--danger, #d9534f) 0 {used_percent}%, var(--success, #5cb85c) {used_percent}% 100%)"
+
+        source_name = _pool_source_name(xml.stdout)
+
         pool = {
             "name": name,
             "state": state,
             "autostart": autostart,
-            "type": _pool_type(xml.stdout),
+            "type": pool_type,
+            "usage_mode": usage_mode,
+            "source_name": source_name,
             "path": _pool_target_path(xml.stdout),
             "capacity": "",
             "allocation": "",
             "available": "",
+            "capacity_bytes": pool_bytes["capacity_bytes"],
+            "allocation_bytes": pool_bytes["allocation_bytes"],
+            "available_bytes": pool_bytes["available_bytes"],
+            "used_percent": used_percent,
+            "free_percent": free_percent,
+            "chart_note": chart_note,
+            "chart_gradient": chart_gradient,
         }
+
+        if pool_type == "logical" and source_name:
+            thin = _lvm_thin_usage_for_vg(source_name)
+            if thin:
+                pool["usage_mode"] = "lvm-thin"
+                pool["lvm_thin"] = thin
+                pool["used_percent"] = thin.get("data_percent")
+                pool["free_percent"] = thin.get("free_percent")
+                pool["capacity"] = thin.get("thinpool_size") or pool["capacity"]
+                data_percent = thin.get("data_percent")
+                free_percent = thin.get("free_percent")
+
+                if data_percent is not None:
+                    pool["allocation"] = f"{data_percent}% data used"
+                    pool["available"] = f"{free_percent}% data free"
+                    pool["chart_gradient"] = f"conic-gradient(var(--danger, #d9534f) 0 {data_percent}%, var(--success, #5cb85c) {data_percent}% 100%)"
+                else:
+                    pool["allocation"] = "Unknown data usage"
+                    pool["available"] = "Unknown free space"
+                    pool["chart_gradient"] = "conic-gradient(var(--muted, #777) 0 100%)"
+
+                pool["chart_note"] = "LVM-thin pool. Chart shows thin-pool data usage, not raw LUN allocation."
+
 
         if info.returncode == 0:
             for row in _split_lines(info.stdout):
@@ -1418,3 +1640,411 @@ def ensure_libvirt_iscsi_pool(pool_name: str, portal: str, target_iqn: str) -> N
         tmp.unlink()
     except Exception:
         pass
+
+def list_iscsi_device_details() -> list[dict[str, Any]]:
+    """
+    Detailed iSCSI LUN visibility.
+
+    This does not attempt to infer array-side thin provisioning. It reports what
+    the host can actually see: by-path links, resolved block devices, partitions,
+    filesystems, mounts, LVM membership, and VM disk references.
+    """
+    devices: list[dict[str, Any]] = []
+
+    lsblk_map = _lsblk_device_map()
+    vm_sources = list_vm_disks()
+
+    bypath = Path("/dev/disk/by-path")
+    if not bypath.exists():
+        return devices
+
+    for item in sorted(bypath.glob("*iscsi*")):
+        try:
+            resolved = str(item.resolve())
+        except Exception:
+            resolved = ""
+
+        meta = lsblk_map.get(resolved, {})
+        children = meta.get("children", []) or []
+
+        partitions = []
+        for child in children:
+            partitions.append({
+                "name": child.get("name", ""),
+                "path": child.get("path", ""),
+                "size": child.get("size", ""),
+                "type": child.get("type", ""),
+                "fstype": child.get("fstype", ""),
+                "mountpoints": ",".join(child.get("mountpoints") or []),
+            })
+
+        mountpoints = ",".join(meta.get("mountpoints") or [])
+        fstype = meta.get("fstype", "")
+
+        used_by_vms = []
+        for disk in vm_sources:
+            source = disk.get("source", "")
+            if source and (source == resolved or source == str(item) or resolved in source or item.name in source):
+                used_by_vms.append({
+                    "vm": disk.get("vm", ""),
+                    "target": disk.get("target", ""),
+                    "source": source,
+                })
+
+        devices.append({
+            "by_path": str(item),
+            "by_path_name": item.name,
+            "resolved_path": resolved,
+            "name": meta.get("name", ""),
+            "size": meta.get("size", ""),
+            "type": meta.get("type", ""),
+            "model": meta.get("model", ""),
+            "serial": meta.get("serial", ""),
+            "fstype": fstype,
+            "mountpoints": mountpoints,
+            "partitions": partitions,
+            "used_by_vms": used_by_vms,
+            "lvm": _lvm_membership_for_device(resolved),
+            "filesystem_usage": _filesystem_usage_for_path(mountpoints),
+        })
+
+    return devices
+
+
+def _lsblk_device_map() -> dict[str, Any]:
+    result = run([
+        "lsblk",
+        "-J",
+        "-o",
+        "NAME,PATH,SIZE,TYPE,FSTYPE,MODEL,SERIAL,TRAN,MOUNTPOINTS",
+    ], check=False)
+
+    if result.returncode != 0:
+        return {}
+
+    try:
+        data = json.loads(result.stdout)
+    except Exception:
+        return {}
+
+    out: dict[str, Any] = {}
+
+    def walk(items: list[dict[str, Any]]) -> None:
+        for item in items:
+            path = item.get("path", "")
+            name = item.get("name", "")
+
+            if path:
+                out[path] = item
+            if name:
+                out[f"/dev/{name}"] = item
+
+            walk(item.get("children") or [])
+
+    walk(data.get("blockdevices", []))
+    return out
+
+
+def _lvm_membership_for_device(device_path: str) -> dict[str, str]:
+    if not device_path:
+        return {}
+
+    result = run([
+        "pvs",
+        "--noheadings",
+        "--readonly",
+        "--reportformat", "json",
+        "-o", "pv_name,vg_name,pv_size,pv_free",
+    ], check=False)
+
+    if result.returncode != 0:
+        return {}
+
+    try:
+        data = json.loads(result.stdout)
+    except Exception:
+        return {}
+
+    for report in data.get("report", []):
+        for pv in report.get("pv", []):
+            if pv.get("pv_name") == device_path:
+                return {
+                    "pv_name": pv.get("pv_name", ""),
+                    "vg_name": pv.get("vg_name", ""),
+                    "pv_size": pv.get("pv_size", ""),
+                    "pv_free": pv.get("pv_free", ""),
+                }
+
+    return {}
+
+
+def _filesystem_usage_for_path(mountpoints: str) -> dict[str, str]:
+    if not mountpoints:
+        return {}
+
+    mountpoint = mountpoints.split(",")[0].strip()
+    if not mountpoint:
+        return {}
+
+    result = run([
+        "df",
+        "-h",
+        "--output=source,size,used,avail,pcent,target",
+        mountpoint,
+    ], check=False)
+
+    if result.returncode != 0:
+        return {}
+
+    lines = _split_lines(result.stdout)
+    if len(lines) < 2:
+        return {}
+
+    parts = lines[1].split(None, 5)
+    if len(parts) < 6:
+        return {}
+
+    return {
+        "source": parts[0],
+        "size": parts[1],
+        "used": parts[2],
+        "avail": parts[3],
+        "pcent": parts[4],
+        "target": parts[5],
+    }
+
+
+def list_lvm_storage_summary() -> dict[str, Any]:
+    return {
+        "pvs": _lvm_json(["pvs", "--readonly", "--reportformat", "json", "-o", "pv_name,vg_name,pv_size,pv_free"]),
+        "vgs": _lvm_json(["vgs", "--readonly", "--reportformat", "json", "-o", "vg_name,vg_size,vg_free,pv_count,lv_count"]),
+        "lvs": _lvm_json(["lvs", "--readonly", "--reportformat", "json", "-a", "-o", "lv_name,vg_name,lv_size,pool_lv,data_percent,metadata_percent,origin,devices"]),
+    }
+
+
+def _lvm_json(cmd: list[str]) -> list[dict[str, Any]]:
+    result = run(cmd, check=False)
+    if result.returncode != 0:
+        return []
+
+    try:
+        data = json.loads(result.stdout)
+    except Exception:
+        return []
+
+    rows = []
+    for report in data.get("report", []):
+        for key, values in report.items():
+            if isinstance(values, list):
+                rows.extend(values)
+    return rows
+
+
+def iscsi_lvm_candidate_devices(name: str) -> list[dict[str, Any]]:
+    """
+    Return iSCSI devices that could be initialized as LVM-backed storage.
+
+    This is deliberately conservative. We do not want AtlasVM helpfully formatting
+    the wrong disk, because that is how automation becomes evidence.
+    """
+    name = validate_name(name)
+    targets = list_iscsi_targets()
+
+    if name not in targets:
+        raise RuntimeError("iSCSI target not found.")
+
+    devices = list_iscsi_device_details()
+    candidates = []
+
+    for d in devices:
+        by_path = d.get("by_path", "")
+        resolved = d.get("resolved_path", "")
+
+        if not by_path or "iscsi" not in by_path:
+            continue
+
+        candidate = dict(d)
+        candidate["eligible"] = True
+        candidate["warnings"] = []
+
+        if d.get("partitions"):
+            candidate["eligible"] = False
+            candidate["warnings"].append("Device has partitions.")
+
+        if d.get("fstype"):
+            candidate["eligible"] = False
+            candidate["warnings"].append("Device already has a filesystem.")
+
+        if d.get("mountpoints"):
+            candidate["eligible"] = False
+            candidate["warnings"].append("Device is mounted.")
+
+        if d.get("lvm"):
+            candidate["eligible"] = False
+            candidate["warnings"].append("Device is already an LVM physical volume.")
+
+        if d.get("used_by_vms"):
+            candidate["eligible"] = False
+            candidate["warnings"].append("Device is already referenced by a VM.")
+
+        if not resolved:
+            candidate["eligible"] = False
+            candidate["warnings"].append("Could not resolve by-path device.")
+
+        candidates.append(candidate)
+
+    return candidates
+
+
+def _run_required(cmd: list[str]) -> subprocess.CompletedProcess:
+    result = run(cmd, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Command failed: "
+            + " ".join(cmd)
+            + "\nSTDOUT:\n"
+            + result.stdout
+            + "\nSTDERR:\n"
+            + result.stderr
+        )
+    return result
+
+
+def initialize_iscsi_lvm_thin(
+    name: str,
+    by_path: str,
+    vg_name: str,
+    thinpool_name: str,
+    thinpool_percent: str,
+    create_libvirt_pool: str,
+    libvirt_pool_name: str,
+    confirm_text: str,
+) -> dict[str, Any]:
+    """
+    Initialize an iSCSI LUN as an LVM-thin storage backend.
+
+    This is destructive to the selected block device. The caller must provide
+    confirm_text == DESTROY. Yes, theatrical, but so is data loss.
+    """
+    name = validate_name(name)
+    vg_name = validate_name(vg_name)
+    thinpool_name = validate_name(thinpool_name)
+
+    if confirm_text != "DESTROY":
+        raise RuntimeError("Type DESTROY to confirm LVM-thin initialization.")
+
+    by_path = (by_path or "").strip()
+
+    if not by_path.startswith("/dev/disk/by-path/") or "iscsi" not in by_path:
+        raise RuntimeError("Selected device must be an iSCSI /dev/disk/by-path device.")
+
+    thinpool_percent = str(thinpool_percent or "95").strip()
+    percent = int(thinpool_percent)
+
+    if percent < 50 or percent > 99:
+        raise RuntimeError("Thin pool percent must be between 50 and 99.")
+
+    candidates = iscsi_lvm_candidate_devices(name)
+    selected = None
+
+    for c in candidates:
+        if c.get("by_path") == by_path:
+            selected = c
+            break
+
+    if not selected:
+        raise RuntimeError("Selected iSCSI device was not found.")
+
+    if not selected.get("eligible"):
+        raise RuntimeError("Selected iSCSI device is not eligible: " + "; ".join(selected.get("warnings", [])))
+
+    resolved = selected.get("resolved_path")
+    if not resolved:
+        raise RuntimeError("Could not resolve selected iSCSI device.")
+
+    targets = list_iscsi_targets()
+    if name not in targets:
+        raise RuntimeError("iSCSI target not found.")
+
+    target = targets[name]
+
+    # Refuse to reuse an existing VG name.
+    existing_vg = run(["vgs", "--noheadings", "-o", "vg_name", vg_name], check=False)
+    if existing_vg.returncode == 0 and vg_name in existing_vg.stdout:
+        raise RuntimeError(f"Volume group already exists: {vg_name}")
+
+    commands = []
+
+    commands.append(["wipefs", "-a", resolved])
+    commands.append(["pvcreate", "-ff", "-y", resolved])
+    commands.append(["vgcreate", vg_name, resolved])
+    commands.append(["lvcreate", "-l", f"{percent}%VG", "-T", f"{vg_name}/{thinpool_name}"])
+
+    command_results = []
+
+    for cmd in commands:
+        result = _run_required(cmd)
+        command_results.append({
+            "cmd": " ".join(cmd),
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode,
+        })
+
+    create_pool = str(create_libvirt_pool or "").lower() in {"1", "true", "yes", "on"}
+
+    if create_pool:
+        pool_name = validate_name(libvirt_pool_name or f"atlasvm-lvm-{name}")
+        ensure_libvirt_lvm_pool(pool_name, vg_name)
+    else:
+        pool_name = ""
+
+    target["lvm_thin"] = {
+        "enabled": True,
+        "by_path": by_path,
+        "resolved_path": resolved,
+        "vg_name": vg_name,
+        "thinpool_name": thinpool_name,
+        "thinpool_percent": percent,
+        "libvirt_pool_name": pool_name,
+        "initialized_at": int(time.time()),
+        "commands": command_results,
+    }
+
+    targets[name] = target
+    write_json(ISCSI_TARGETS_FILE, targets)
+
+    return target
+
+
+def ensure_libvirt_lvm_pool(pool_name: str, vg_name: str) -> None:
+    existing = run(["virsh", "pool-info", pool_name], check=False)
+    if existing.returncode == 0:
+        run(["virsh", "pool-start", pool_name], check=False)
+        run(["virsh", "pool-autostart", pool_name], check=False)
+        return
+
+    xml = f"""<pool type='logical'>
+  <name>{pool_name}</name>
+  <source>
+    <name>{vg_name}</name>
+    <format type='lvm2'/>
+  </source>
+  <target>
+    <path>/dev/{vg_name}</path>
+  </target>
+</pool>
+"""
+
+    tmp = Path(f"/tmp/{pool_name}.xml")
+    tmp.write_text(xml)
+
+    try:
+        _run_required(["virsh", "pool-define", str(tmp)])
+        run(["virsh", "pool-start", pool_name], check=False)
+        run(["virsh", "pool-autostart", pool_name], check=False)
+    finally:
+        try:
+            tmp.unlink()
+        except Exception:
+            pass
