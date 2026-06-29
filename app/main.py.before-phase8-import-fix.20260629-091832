@@ -22,8 +22,8 @@ from app.services.host_service import get_host_summary
 from app.services.backup_service import BackupService
 from app.services.doctor_service import run_doctor
 from app.services import zfs_service
-from app.services.libvirt_service import LibvirtService, VMCreateRequest
-from app.services.network_phase8 import NetworkPhase8Service
+from app.services.libvirt_service import LibvirtService
+from app.services.network_phase8 import NetworkPhase8Service, VMCreateRequest
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)

@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
-
 <section>
   <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
     <h2>Networks</h2>
@@ -9,36 +8,36 @@
     </form>
   </div>
 
-  {% if error %}
-  <div class="alert alert-danger">{{ error }}</div>
-  {% endif %}
-
-  {% if message %}
-  <div class="alert alert-success">{{ message }}</div>
-  {% endif %}
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
 
   <table>
     <thead>
       <tr>
         <th>Name</th>
+        <th>Type</th>
+        <th>Bridge</th>
+        <th>Parent</th>
+        <th>VLAN</th>
         <th>Active</th>
         <th>Autostart</th>
-        <th>VLAN Tag</th>
       </tr>
     </thead>
     <tbody>
       {% for network in networks %}
       <tr>
         <td><a href="/networks/{{ network.name }}">{{ network.name }}</a></td>
+        <td>{{ network.type or '-' }}</td>
+        <td>{{ network.bridge or '-' }}</td>
+        <td>{{ network.parent_interface or '-' }}</td>
+        <td>{% if network.vlan_tag %}{{ network.vlan_tag }}{% else %}<span class="muted">untagged</span>{% endif %}</td>
         <td>{{ network.active }}</td>
         <td>{{ network.autostart }}</td>
-        <td>{% if network.vlan_tag %}{{ network.vlan_tag }}{% else %}<span class="muted">none</span>{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="4">No networks found.</td></tr>
+      <tr><td colspan="7">No networks found.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </section>
-
 {% endblock %}
