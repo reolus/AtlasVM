@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section>
+  <h2>New iSCSI Storage Target</h2>
+  <p>Add an iSCSI target for block storage. Discovery finds IQNs from a portal, then Login connects the target.</p>
+
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+</section>
+
+<section>
+  <h3>Discover Targets</h3>
+  <form method="post" action="/storage/iscsi/discover">
+    <label>
+      Portal
+      <input name="portal" value="{{ portal or '' }}" placeholder="10.60.0.20 or 10.60.0.20:3260" required>
+    </label>
+    <button type="submit">Discover</button>
+  </form>
+
+  {% if discovery %}
+  <h4>Discovery Result</h4>
+  {% if discovery.error %}
+    <div class="alert danger">{{ discovery.error }}</div>
+  {% else %}
+    <p>Return code: {{ discovery.returncode }}</p>
+    {% if discovery.targets %}
+      <table>
+        <thead><tr><th>Portal</th><th>Target IQN</th></tr></thead>
+        <tbody>
+          {% for t in discovery.targets %}
+          <tr>
+            <td><code>{{ t.portal }}</code></td>
+            <td><code>{{ t.target_iqn }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <pre>{{ discovery.stdout }}{{ discovery.stderr }}</pre>
+    {% endif %}
+  {% endif %}
+  {% endif %}
+</section>
+
+<section>
+  <h3>Save iSCSI Target</h3>
+  <form method="post" action="/storage/iscsi/new">
+    <label>
+      Name
+      <input name="name" placeholder="iscsi-vmdisks" required>
+    </label>
+
+    <label>
+      Storage Network Profile
+      <select name="storage_network">
+        <option value="">Use normal host routing</option>
+        {% for name, n in storage_networks.items() %}
+        <option value="{{ name }}">{{ name }} - {{ n.get('interface_name', '') }} {{ n.get('ip_cidr', '') }}</option>
+        {% endfor %}
+      </select>
+      <small>This documents the intended storage traffic path. iSCSI connection still depends on host routing and interface reachability.</small>
+    </label>
+
+    <label>
+      Portal
+      <input name="portal" value="{{ portal or '' }}" placeholder="10.60.0.20:3260" required>
+    </label>
+
+    <label>
+      Target IQN
+      <input name="target_iqn" placeholder="iqn.2026-01.local.storage:atlasvm.lun1" required>
+    </label>
+
+    <fieldset>
+      <legend>CHAP Authentication</legend>
+      <label>
+        Username
+        <input name="username" placeholder="Optional">
+      </label>
+      <label>
+        Password
+        <input name="password" type="password" placeholder="Optional. Leave blank to preserve existing secret.">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Mutual CHAP Authentication</legend>
+      <label>
+        Mutual Username
+        <input name="mutual_username" placeholder="Optional">
+      </label>
+      <label>
+        Mutual Password
+        <input name="mutual_password" type="password" placeholder="Optional">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Storage Roles</legend>
+      <label><input type="checkbox" name="roles" value="vm-disks"> VM Disks</label>
+      <label><input type="checkbox" name="roles" value="backups"> Backups</label>
+      <label><input type="checkbox" name="roles" value="templates"> Templates</label>
+      <label><input type="checkbox" name="roles" value="iso"> ISO Library</label>
+    </fieldset>
+
+    <label>
+      <input type="checkbox" name="create_libvirt_pool" value="yes">
+      Create libvirt iSCSI storage pool
+    </label>
+
+    <label>
+      Libvirt Pool Name
+      <input name="libvirt_pool_name" placeholder="atlasvm-iscsi-vmdisks">
+    </label>
+
+    <label>
+      Notes
+      <textarea name="notes" rows="4" placeholder="Array name, LUN, VLAN, switch path, intended use"></textarea>
+    </label>
+
+    <div style="display:flex; gap:0.5rem;">
+      <button type="submit">Save iSCSI Target</button>
+      <a href="/storage">Cancel</a>
+    </div>
+  </form>
+</section>
+
+{% endblock %}

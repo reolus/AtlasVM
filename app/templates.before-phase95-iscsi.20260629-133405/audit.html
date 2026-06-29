@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-1">Audit Log</h1>
+    <div class="text-muted">Recent AtlasVM activity.</div>
+  </div>
+</div>
+
+{% if message %}
+<div class="alert alert-success">{{ message }}</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-warning">{{ error }}</div>
+{% endif %}
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Time</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Target</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+          <tr>
+            <td>
+              {{ event.get('created_at') or event.get('timestamp') or event.get('time') or event.get('id') or '' }}
+            </td>
+            <td>
+              {{ event.get('username') or event.get('user') or event.get('actor') or '' }}
+            </td>
+            <td>
+              {{ event.get('action') or event.get('event') or event.get('type') or '' }}
+            </td>
+            <td>
+              {{ event.get('target') or event.get('resource') or event.get('vm_name') or '' }}
+            </td>
+            <td>
+              {{ event.get('detail') or event.get('message') or event.get('description') or '' }}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-muted py-4">
+              No audit events found.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

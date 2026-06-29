@@ -1,0 +1,36 @@
+{
+  "synology-01": {
+    "block_devices": [],
+    "chap_configured": false,
+    "create_libvirt_pool": true,
+    "last_login_at": 1782759790,
+    "last_login_returncode": 0,
+    "last_login_stderr": "",
+    "last_login_stdout": "Login to [iface: default, target: iqn.2000-01.com.synology:PCIS-NAS-001.Target-12.c645cbd62c, portal: 10.21.50.51,3260] successful.\n",
+    "libvirt_pool_name": "atlasvm-iscsi-virtpool",
+    "logged_in": true,
+    "mutual_chap_configured": false,
+    "mutual_username": "",
+    "name": "synology-01",
+    "notes": "",
+    "portal": "10.21.50.51",
+    "roles": [
+      "iso"
+    ],
+    "secrets_file": "",
+    "sessions_after": [
+      {
+        "portal": "10.21.50.51:3260,1",
+        "raw": "tcp: [2] 10.21.50.51:3260,1 iqn.2000-01.com.synology:PCIS-NAS-001.Target-12.c645cbd62c (non-flash)",
+        "sid": "2",
+        "target_iqn": "iqn.2000-01.com.synology:PCIS-NAS-001.Target-12.c645cbd62c",
+        "transport": "tcp"
+      }
+    ],
+    "sessions_before": [],
+    "storage_network": "",
+    "target_iqn": "iqn.2000-01.com.synology:PCIS-NAS-001.Target-12.c645cbd62c",
+    "updated_at": 1782759787,
+    "username": ""
+  }
+}

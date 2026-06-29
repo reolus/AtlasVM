@@ -8,9 +8,6 @@
       <p>Local storage, ZFS, libvirt pools, filesystems, VM disks, and storage network profiles.</p>
     </div>
     <div style="display:flex; gap:0.5rem;">
-      <form method="get" action="/storage/iscsi/new">
-        <button type="submit">New iSCSI Target</button>
-      </form>
       <form method="get" action="/storage/smb/new">
         <button type="submit">New SMB/CIFS Target</button>
       </form>
@@ -102,86 +99,6 @@
 </section>
 
 
-
-
-<section>
-  <h3>iSCSI Storage Targets</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th><th>Portal</th><th>Target IQN</th><th>Roles</th><th>Logged In</th><th>Libvirt Pool</th><th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if overview.iscsi_targets %}
-      {% for name in overview.iscsi_targets %}
-      {% set n = overview.iscsi_targets[name] %}
-      <tr>
-        <td><code>{{ name }}</code></td>
-        <td><code>{{ n.get('portal', '-') }}</code></td>
-        <td><code>{{ n.get('target_iqn', '-') }}</code></td>
-        <td>{{ n.get('roles', []) | join(', ') }}</td>
-        <td>{{ n.get('logged_in', false) }}</td>
-        <td>{{ n.get('libvirt_pool_name') or '-' }}</td>
-        <td>
-          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-            <form method="post" action="/storage/iscsi/{{ name }}/test"><button type="submit">Test</button></form>
-            <form method="post" action="/storage/iscsi/{{ name }}/login"><button type="submit">Login</button></form>
-            <form method="post" action="/storage/iscsi/{{ name }}/logout"><button type="submit">Logout</button></form>
-            <form method="post" action="/storage/iscsi/{{ name }}/delete" onsubmit="return confirm('Delete this iSCSI target? This also removes stored CHAP secrets.');">
-              <button type="submit" class="danger">Delete</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% endfor %}
-      {% else %}
-      <tr><td colspan="7">No iSCSI targets defined.</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
-</section>
-
-<section>
-  <h3>Active iSCSI Sessions</h3>
-  <table>
-    <thead><tr><th>Transport</th><th>SID</th><th>Portal</th><th>Target IQN</th></tr></thead>
-    <tbody>
-      {% for s in overview.iscsi_sessions %}
-      <tr>
-        <td>{{ s.get('transport', '-') }}</td>
-        <td>{{ s.get('sid', '-') }}</td>
-        <td><code>{{ s.get('portal', '-') }}</code></td>
-        <td><code>{{ s.get('target_iqn', s.get('raw', '-')) }}</code></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4">No active iSCSI sessions.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-
-<section>
-  <h3>iSCSI Block Devices</h3>
-  <table>
-    <thead><tr><th>Name</th><th>Path</th><th>Size</th><th>Type</th><th>Model</th><th>Serial</th><th>Mountpoints</th></tr></thead>
-    <tbody>
-      {% for d in overview.iscsi_block_devices %}
-      <tr>
-        <td><code>{{ d.get('name', '-') }}</code></td>
-        <td><code>{{ d.get('path', '-') }}</code></td>
-        <td>{{ d.get('size', '-') }}</td>
-        <td>{{ d.get('type', '-') }}</td>
-        <td>{{ d.get('model', '-') }}</td>
-        <td>{{ d.get('serial', '-') }}</td>
-        <td>{{ d.get('mountpoints', '-') }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="7">No iSCSI block devices detected.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
 
 <section>
   <h3>SMB/CIFS Storage Targets</h3>

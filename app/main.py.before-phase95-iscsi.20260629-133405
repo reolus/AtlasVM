@@ -42,12 +42,6 @@ from app.services.storage_phase9 import (
     save_smb_target,
     test_smb_target,
     unmount_smb_target,
-    delete_iscsi_target,
-    iscsi_discover,
-    login_iscsi_target,
-    logout_iscsi_target,
-    save_iscsi_target,
-    test_iscsi_target,
 )
 from app.services.host_mgmt_network import (
     apply_plan,
@@ -1163,109 +1157,6 @@ def smb_delete(name: str, user: str = Depends(require_admin)):
     try:
         delete_smb_target(name)
         return _redirect('/storage', message=f'SMB/CIFS target {name} deleted.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-
-@app.get('/storage/iscsi/new', response_class=HTMLResponse)
-def iscsi_new_page(request: Request, portal: str = '', user: str = Depends(require_admin)):
-    overview = storage_overview()
-    discovery = None
-    if portal:
-        try:
-            discovery = iscsi_discover(portal)
-        except Exception as exc:
-            discovery = {'error': str(exc), 'portal': portal}
-
-    return templates.TemplateResponse(
-        'iscsi_form.html',
-        {
-            **_view_context(request, user),
-            'storage_networks': overview.get('storage_networks', {}),
-            'portal': portal,
-            'discovery': discovery,
-        },
-    )
-
-
-@app.post('/storage/iscsi/discover')
-def iscsi_discover_post(portal: str = Form(''), user: str = Depends(require_admin)):
-    if not portal:
-        return _redirect('/storage/iscsi/new', error='Portal is required.')
-    return RedirectResponse(url=f'/storage/iscsi/new?portal={portal}', status_code=303)
-
-
-@app.post('/storage/iscsi/new')
-def iscsi_new(
-    name: str = Form(''),
-    storage_network: str = Form(''),
-    portal: str = Form(''),
-    target_iqn: str = Form(''),
-    username: str = Form(''),
-    password: str = Form(''),
-    mutual_username: str = Form(''),
-    mutual_password: str = Form(''),
-    roles: str = Form(''),
-    create_libvirt_pool: str = Form(''),
-    libvirt_pool_name: str = Form(''),
-    notes: str = Form(''),
-    user: str = Depends(require_admin),
-):
-    try:
-        save_iscsi_target(
-            name=name,
-            storage_network=storage_network,
-            portal=portal,
-            target_iqn=target_iqn,
-            username=username,
-            password=password,
-            mutual_username=mutual_username,
-            mutual_password=mutual_password,
-            roles=roles,
-            create_libvirt_pool=create_libvirt_pool,
-            libvirt_pool_name=libvirt_pool_name,
-            notes=notes,
-        )
-        return _redirect('/storage', message='iSCSI target saved.')
-    except Exception as exc:
-        return _redirect('/storage/iscsi/new', error=str(exc))
-
-
-@app.post('/storage/iscsi/{name}/test')
-def iscsi_test(name: str, user: str = Depends(require_admin)):
-    try:
-        result = test_iscsi_target(name)
-        if result.get('found'):
-            return _redirect('/storage', message=f'iSCSI target {name} found during discovery.')
-        return _redirect('/storage', error=f'iSCSI target {name} was not found during discovery.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/iscsi/{name}/login')
-def iscsi_login(name: str, user: str = Depends(require_admin)):
-    try:
-        login_iscsi_target(name)
-        return _redirect('/storage', message=f'iSCSI target {name} login attempted.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/iscsi/{name}/logout')
-def iscsi_logout(name: str, user: str = Depends(require_admin)):
-    try:
-        logout_iscsi_target(name)
-        return _redirect('/storage', message=f'iSCSI target {name} logout attempted.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/iscsi/{name}/delete')
-def iscsi_delete(name: str, user: str = Depends(require_admin)):
-    try:
-        delete_iscsi_target(name)
-        return _redirect('/storage', message=f'iSCSI target {name} deleted.')
     except Exception as exc:
         return _redirect('/storage', error=str(exc))
 
