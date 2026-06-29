@@ -1,9 +1,0 @@
-{% extends "base.html" %}
-{% block content %}
-<section>
-  <h2>Audit Events</h2>
-  <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Message</th></tr></thead><tbody>
-    {% for event in events %}<tr><td>{{ event.created_at }}</td><td>{{ event.actor }}</td><td>{{ event.action }}</td><td>{{ event.target }}</td><td>{{ event.message }}</td></tr>{% endfor %}
-  </tbody></table>
-</section>
-{% endblock %}
