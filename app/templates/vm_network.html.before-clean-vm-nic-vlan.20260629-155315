@@ -63,14 +63,6 @@
         <td>
           {% if iface.warning %}
           <span class="danger">{{ iface.warning }}</span>
-          <form method="post" action="/vms/{{ name }}/network/clean-vlan" style="margin-top:.5rem;">
-            <input type="hidden" name="mac_address" value="{{ iface.mac }}">
-            <label class="check">
-              <input name="apply_live" type="checkbox" value="true">
-              Apply live
-            </label>
-            <button type="submit">Clean VLAN Tag</button>
-          </form>
           {% else %}
           OK
           {% endif %}

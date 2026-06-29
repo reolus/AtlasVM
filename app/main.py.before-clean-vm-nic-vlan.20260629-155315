@@ -1472,39 +1472,6 @@ def vm_disk_remove(
         return _redirect(f'/vms/{vm_name}/disks', error=str(exc))
 
 
-
-@app.post('/vms/{name}/network/clean-vlan')
-def vm_network_clean_vlan(
-    name: str,
-    mac_address: str = Form(...),
-    apply_live: bool = Form(False),
-    user: str = Depends(require_operator),
-):
-    from urllib.parse import quote
-
-    settings = get_settings()
-
-    try:
-        result = remove_vm_interface_vlan_tag(
-            vm_name=name,
-            mac_address=mac_address,
-            apply_live=apply_live,
-            libvirt_uri=settings.libvirt_uri,
-        )
-
-        message = result.get('message') or f"Cleaned NIC {result.get('mac')} using {result.get('mode')}."
-
-        return RedirectResponse(
-            url=f'/vms/{name}/network?message={quote(message)}',
-            status_code=303,
-        )
-    except Exception as exc:
-        return RedirectResponse(
-            url=f'/vms/{name}/network?error={quote(str(exc))}',
-            status_code=303,
-        )
-
-
 @app.get('/events', response_class=HTMLResponse)
 def events_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(250).all()
