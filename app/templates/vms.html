@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.vm-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.vm-card {
+  border: 1px solid var(--border, #333);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--panel, rgba(255,255,255,0.03));
+}
+.vm-big-number {
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.vm-good {
+  color: var(--success, #5cb85c);
+}
+.vm-bad {
+  color: var(--danger, #d9534f);
+}
+.vm-small {
+  font-size: 0.9rem;
+}
+.vm-pill {
+  display: inline-block;
+  border: 1px solid var(--border, #444);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.85rem;
+}
+.vm-pill.running {
+  color: var(--success, #5cb85c);
+}
+.vm-pill.offline {
+  color: var(--danger, #d9534f);
+}
+.vm-table code {
+  word-break: break-all;
+}
+.vm-muted {
+  opacity: 0.75;
+}
+</style>
+
+<section>
+  <h2>Virtual Machines</h2>
+  <p>Inventory and status for VMs on this AtlasVM host. Not the dashboard. Revolutionary, apparently.</p>
+
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+</section>
+
+<section class="vm-summary-grid">
+  <div class="vm-card">
+    <h3>Total VMs</h3>
+    <div class="vm-big-number">{{ inventory.total }}</div>
+  </div>
+
+  <div class="vm-card">
+    <h3>Running</h3>
+    <div class="vm-big-number vm-good">{{ inventory.running }}</div>
+    <div class="vm-good vm-small">currently online</div>
+  </div>
+
+  <div class="vm-card">
+    <h3>Offline</h3>
+    <div class="vm-big-number vm-bad">{{ inventory.offline }}</div>
+    <div class="vm-bad vm-small">shut off or not running</div>
+  </div>
+
+  <div class="vm-card">
+    <h3>Actions</h3>
+    <p><a href="/vms/new">Create VM</a></p>
+  </div>
+</section>
+
+<section>
+  <h3>VM Inventory</h3>
+
+  <table class="vm-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>State</th>
+        <th>vCPU</th>
+        <th>Memory</th>
+        <th>Autostart</th>
+        <th>IP Address</th>
+        <th>Disks</th>
+        <th>Networks</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for vm in inventory.vms %}
+      <tr>
+        <td>
+          <strong>{{ vm.name }}</strong>
+          {% if vm.uuid %}
+          <br><small class="vm-muted">{{ vm.uuid }}</small>
+          {% endif %}
+        </td>
+
+        <td>
+          {% if vm.running %}
+          <span class="vm-pill running">{{ vm.state }}</span>
+          {% else %}
+          <span class="vm-pill offline">{{ vm.state }}</span>
+          {% endif %}
+        </td>
+
+        <td>{{ vm.vcpu or '-' }}</td>
+
+        <td>
+          {% if vm.memory %}
+          {{ (vm.memory | int / 1024 / 1024) | round(1) }} GiB
+          {% else %}
+          -
+          {% endif %}
+        </td>
+
+        <td>{{ "yes" if vm.autostart else "no" }}</td>
+
+        <td>
+          {% if vm.ips %}
+            {% for ip in vm.ips %}
+            <div><code>{{ ip }}</code></div>
+            {% endfor %}
+          {% else %}
+            -
+          {% endif %}
+        </td>
+
+        <td>
+          {% if vm.disks %}
+            {% for d in vm.disks %}
+            <div>
+              <strong>{{ d.device }}</strong>
+              {% if d.target %}<code>{{ d.target }}</code>{% endif %}
+              {% if d.format %}<small>{{ d.format }}</small>{% endif %}
+              {% if d.source %}
+              <br><small><code>{{ d.source }}</code></small>
+              {% endif %}
+            </div>
+            {% endfor %}
+          {% else %}
+          -
+          {% endif %}
+        </td>
+
+        <td>
+          {% if vm.interfaces %}
+            {% for nic in vm.interfaces %}
+            <div>
+              <code>{{ nic.source or '-' }}</code>
+              {% if nic.model %}<small>{{ nic.model }}</small>{% endif %}
+              {% if nic.mac %}<br><small>{{ nic.mac }}</small>{% endif %}
+            </div>
+            {% endfor %}
+          {% else %}
+          -
+          {% endif %}
+        </td>
+
+        <td>
+          <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+            <a href="/vms/{{ vm.name }}">Details</a>
+            <a href="/vms/{{ vm.name }}/console">Console</a>
+            <a href="/vms/{{ vm.name }}/disks">Disks</a>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9">No VMs found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endblock %}

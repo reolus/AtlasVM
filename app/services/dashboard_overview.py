@@ -154,25 +154,20 @@ def root_disk_usage() -> dict[str, Any]:
 
 
 def vm_summary() -> dict[str, Any]:
-    result = run(["virsh", "list", "--all"])
-    total = 0
+    names_result = run(["virsh", "list", "--all", "--name"], check=False)
+
+    if names_result.returncode != 0:
+        return {"total": 0, "running": 0, "offline": 0, "error": names_result.stderr}
+
+    names = [line.strip() for line in names_result.stdout.splitlines() if line.strip()]
+
+    total = len(names)
     running = 0
     offline = 0
 
-    if result.returncode != 0:
-        return {"total": 0, "running": 0, "offline": 0, "error": result.stderr}
-
-    for line in split_lines(result.stdout):
-        stripped = line.strip()
-        if stripped.startswith("Id") or stripped.startswith("-"):
-            continue
-
-        parts = stripped.split(None, 2)
-        if len(parts) < 3:
-            continue
-
-        total += 1
-        state = parts[2].lower()
+    for name in names:
+        state_result = run(["virsh", "domstate", name], check=False)
+        state = state_result.stdout.strip().lower() if state_result.returncode == 0 else "unknown"
 
         if "running" in state:
             running += 1
@@ -184,6 +179,7 @@ def vm_summary() -> dict[str, Any]:
         "running": running,
         "offline": offline,
     }
+
 
 
 def libvirt_pool_health() -> list[dict[str, Any]]:

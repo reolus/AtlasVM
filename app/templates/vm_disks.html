@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.disk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.disk-card {
+  border: 1px solid var(--border, #333);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--panel, rgba(255,255,255,0.03));
+}
+.disk-danger {
+  color: var(--danger, #d9534f);
+}
+.disk-good {
+  color: var(--success, #5cb85c);
+}
+.disk-muted {
+  opacity: 0.75;
+}
+.disk-table code {
+  word-break: break-all;
+}
+</style>
+
+<section>
+  <h2>Disks for {{ vm_name }}</h2>
+
+  {% if running %}
+  <p class="disk-good">VM is running. New disks will be hot-added live and saved to the VM config.</p>
+  {% else %}
+  <p class="disk-muted">VM is not running. Disk changes will be saved to the VM config and apply on next boot.</p>
+  {% endif %}
+
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+
+  <p>
+    <a href="/vms">Back to VMs</a>
+    |
+    <a href="/vms/{{ vm_name }}">VM Details</a>
+  </p>
+</section>
+
+<section class="disk-grid">
+  <div class="disk-card">
+    <h3>Add Disk</h3>
+
+    <form method="post" action="/vms/{{ vm_name }}/disks/add">
+      <label>
+        Storage Pool
+        <select name="pool_name" required>
+          <option value="">Select pool</option>
+          {% for p in pools %}
+          <option value="{{ p.name }}" {% if not p.supported or p.state != 'active' %}disabled{% endif %}>
+            {{ p.name }} - {{ p.type }} / {{ p.mode }}{% if p.state != 'active' %} (inactive){% endif %}{% if not p.supported %} (unsupported){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        Disk Name
+        <input name="disk_name" value="{{ vm_name }}-extra-disk" required>
+        <small>For qcow2 pools, .qcow2 will be added if missing.</small>
+      </label>
+
+      <label>
+        Size GB
+        <input type="number" name="size_gb" min="1" value="30" required>
+      </label>
+
+      <label>
+        Format
+        <select name="fmt">
+          <option value="qcow2">qcow2</option>
+          <option value="raw">raw</option>
+        </select>
+        <small>LVM/logical pools will use raw block volumes no matter what, because physics still exists.</small>
+      </label>
+
+      <button type="submit">Add Disk</button>
+    </form>
+  </div>
+
+  <div class="disk-card">
+    <h3>Storage Pools</h3>
+    <table>
+      <thead>
+        <tr><th>Pool</th><th>Type</th><th>State</th><th>Available</th></tr>
+      </thead>
+      <tbody>
+        {% for p in pools %}
+        <tr>
+          <td><code>{{ p.name }}</code></td>
+          <td>{{ p.type }}</td>
+          <td>{{ p.state }}</td>
+          <td>{{ p.available }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">No pools found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h3>Attached Disks</h3>
+
+  <table class="disk-table">
+    <thead>
+      <tr>
+        <th>Target</th>
+        <th>Device</th>
+        <th>Type</th>
+        <th>Format</th>
+        <th>Source</th>
+        <th>Remove</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in disks %}
+      <tr>
+        <td><code>{{ d.target }}</code></td>
+        <td>{{ d.device }}</td>
+        <td>{{ d.type }}</td>
+        <td>{{ d.format or '-' }}</td>
+        <td><code>{{ d.source or '-' }}</code></td>
+        <td>
+          {% if d.device == 'disk' %}
+          <form method="post" action="/vms/{{ vm_name }}/disks/{{ d.target }}/remove" onsubmit="return confirm('Remove disk {{ d.target }} from {{ vm_name }}? If delete storage is checked, the backing file or volume may be permanently deleted.');">
+            <label>
+              <input type="checkbox" name="delete_storage" value="yes">
+              delete storage
+            </label>
+            <button type="submit" class="danger">Remove</button>
+          </form>
+          {% else %}
+          -
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">No disks found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endblock %}

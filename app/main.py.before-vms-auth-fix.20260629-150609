@@ -26,14 +26,6 @@ from app.services.libvirt_service import LibvirtService, VMCreateRequest
 from app.services.network_phase8 import NetworkPhase8Service
 from app.services.dashboard_overview import dashboard_overview
 from app.services.vm_inventory import list_vm_inventory
-from app.services.vm_disk_management import (
-    add_disk_to_vm,
-    get_vm_disks,
-    is_vm_running,
-    list_storage_pools_for_disks,
-    remove_disk_from_vm,
-)
-
 from app.services.storage_phase9 import (
     apply_storage_network,
     delete_storage_network,
@@ -1333,7 +1325,7 @@ def iscsi_lvm_thin_apply(
 
 
 @app.get('/vms', response_class=HTMLResponse)
-def vms_page(request: Request, user: str = Depends(require_admin)):
+def vms_page(request: Request, user: str = Depends(require_login)):
     return templates.TemplateResponse(
         'vms.html',
         {
@@ -1341,68 +1333,6 @@ def vms_page(request: Request, user: str = Depends(require_admin)):
             'inventory': list_vm_inventory(),
         },
     )
-
-
-
-@app.get('/vms/{vm_name}/disks', response_class=HTMLResponse)
-def vm_disks_page(vm_name: str, request: Request, user: str = Depends(require_admin)):
-    try:
-        return templates.TemplateResponse(
-            'vm_disks.html',
-            {
-                **_view_context(request, user),
-                'vm_name': vm_name,
-                'running': is_vm_running(vm_name),
-                'disks': get_vm_disks(vm_name),
-                'pools': list_storage_pools_for_disks(),
-            },
-        )
-    except Exception as exc:
-        return _redirect('/vms', error=str(exc))
-
-
-@app.post('/vms/{vm_name}/disks/add')
-def vm_disk_add(
-    vm_name: str,
-    pool_name: str = Form(''),
-    disk_name: str = Form(''),
-    size_gb: int = Form(0),
-    fmt: str = Form('qcow2'),
-    user: str = Depends(require_admin),
-):
-    try:
-        result = add_disk_to_vm(
-            vm_name=vm_name,
-            pool_name=pool_name,
-            disk_name=disk_name,
-            size_gb=size_gb,
-            fmt=fmt,
-        )
-        target = result.get('attach', {}).get('target', '')
-        mode = result.get('attach', {}).get('attach_mode', '')
-        return _redirect(f'/vms/{vm_name}/disks', message=f'Disk added as {target} using {mode}.')
-    except Exception as exc:
-        return _redirect(f'/vms/{vm_name}/disks', error=str(exc))
-
-
-@app.post('/vms/{vm_name}/disks/{target_dev}/remove')
-def vm_disk_remove(
-    vm_name: str,
-    target_dev: str,
-    delete_storage: str = Form(''),
-    user: str = Depends(require_admin),
-):
-    try:
-        should_delete = str(delete_storage or '').lower() in {'1', 'true', 'yes', 'on'}
-        result = remove_disk_from_vm(
-            vm_name=vm_name,
-            target_dev=target_dev,
-            delete_storage=should_delete,
-        )
-        delete_msg = result.get('delete', {}).get('message', '')
-        return _redirect(f'/vms/{vm_name}/disks', message=f'Disk {target_dev} removed. {delete_msg}')
-    except Exception as exc:
-        return _redirect(f'/vms/{vm_name}/disks', error=str(exc))
 
 
 @app.get('/events', response_class=HTMLResponse)
@@ -2000,81 +1930,6 @@ def vm_edit_submit(
         )
 
 @app.get('/vms/{name}/network')
-
-
-def _atlasvm_get_network_vlan_tag(network_name: str) -> str:
-    """
-    Best-effort VLAN lookup for AtlasVM-managed networks.
-
-    Checks AtlasVM network metadata first, then falls back to libvirt network XML.
-    Returns an empty string when no VLAN tag is found.
-    """
-    network_name = (network_name or "").strip()
-    if not network_name:
-        return ""
-
-    # Phase 8 network metadata.
-    metadata_paths = [
-        Path("/opt/atlasvm/atlasvm_networks.json"),
-        Path("/opt/atlasvm/atlasvm_storage_networks.json"),
-    ]
-
-    for metadata_path in metadata_paths:
-        try:
-            if not metadata_path.exists():
-                continue
-
-            import json
-            data = json.loads(metadata_path.read_text() or "{}")
-            item = data.get(network_name) or {}
-
-            for key in ("vlan_tag", "vlan", "tag"):
-                value = item.get(key)
-                if value not in (None, ""):
-                    return str(value)
-        except Exception:
-            pass
-
-    # Fallback: inspect libvirt network XML.
-    try:
-        import subprocess
-        import xml.etree.ElementTree as ET
-
-        result = subprocess.run(
-            ["virsh", "net-dumpxml", network_name],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        if result.returncode != 0:
-            return ""
-
-        root = ET.fromstring(result.stdout)
-
-        # Some libvirt network definitions may include:
-        # <vlan><tag id='36'/></vlan>
-        tag = root.find("./vlan/tag")
-        if tag is not None:
-            value = tag.get("id")
-            if value:
-                return str(value)
-
-        # AtlasVM bridge names often encode VLANs, like brphones36.
-        bridge = root.find("bridge")
-        if bridge is not None:
-            bridge_name = bridge.get("name", "")
-            import re
-            match = re.search(r"(\d{1,4})$", bridge_name)
-            if match:
-                return match.group(1)
-
-    except Exception:
-        return ""
-
-    return ""
-
-
 def vm_network_page(
     name: str,
     request: Request,
