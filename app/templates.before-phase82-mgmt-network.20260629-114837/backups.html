@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <div class="section-title"><h2>Backups</h2><span><code>{{ backup_path }}</code></span></div>
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert failed">{{ error }}</div>{% endif %}
+
+  <div class="card-ish" style="margin-bottom: 1rem;">
+    <h3>Retention Policy</h3>
+    <p>Current policy: keep the most recent <strong>{{ retention.backup_keep_last }}</strong> backup(s) per VM.</p>
+    <form class="inline-form" method="post" action="/backups/prune">
+      <input name="vm_name" placeholder="optional VM name">
+      <input name="keep_last" type="number" min="0" value="{{ retention.backup_keep_last }}">
+      <button>Apply Retention Now</button>
+    </form>
+  </div>
+
+  <table><thead><tr><th>VM</th><th>Created</th><th>State</th><th>Disks</th><th>Backup Path</th><th>Archive</th><th>Restore As New VM</th><th>Restore Definition</th><th>Delete</th></tr></thead><tbody>
+    {% for backup in backups %}
+      <tr>
+        <td>{{ backup.vm_name }}</td><td>{{ backup.created_at }}</td><td>{{ backup.state }}</td><td>{{ backup.disk_count }}</td><td><code>{{ backup.path }}</code></td><td><code>{{ backup.archive or '' }}</code></td>
+        <td><form method="post" action="/backups/restore-as-new"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><input name="new_name" placeholder="new-vm-name" required><input name="storage_pool" placeholder="optional-pool"><button>Restore VM</button></form></td>
+        <td><form method="post" action="/backups/restore-definition"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><input name="new_name" placeholder="optional-new-name"><button>Definition Only</button></form></td>
+        <td><form method="post" action="/backups/delete"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><button class="danger">Delete</button></form></td>
+      </tr>
+    {% else %}<tr><td colspan="9">No backups found. Bold strategy.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

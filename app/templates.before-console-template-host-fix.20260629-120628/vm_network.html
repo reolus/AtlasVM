@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <div>
+      <h2>Network Interfaces: {{ name }}</h2>
+      <p>VM NICs attach to AtlasVM networks. VLAN tags are owned by the network and inherited by the VM NIC.</p>
+    </div>
+    <form method="get" action="/vms/{{ name }}" style="margin:0;"><button type="submit">Back to VM</button></form>
+  </div>
+
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+</section>
+
+<section>
+  <h3>Current Interfaces</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>MAC</th>
+        <th>Type</th>
+        <th>Network</th>
+        <th>Model</th>
+        <th>NIC VLAN</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for iface in interfaces %}
+      <tr>
+        <td>{{ iface.index }}</td>
+        <td><code>{{ iface.mac }}</code></td>
+        <td>{{ iface.type }}</td>
+        <td>{{ iface.source }}</td>
+        <td>{{ iface.model }}</td>
+        <td>{% if iface.vlan_tag %}{{ iface.vlan_tag }}{% else %}<span class="muted">untagged</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">No network interfaces found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="grid two">
+  <div>
+    <h3>Switch Existing NIC</h3>
+    <form method="post" action="/vms/{{ name }}/network">
+      <label>
+        Interface
+        <select name="mac_address" required>
+          {% for iface in interfaces %}
+          <option value="{{ iface.mac }}">{{ iface.mac }}{% if iface.source %} - current: {{ iface.source }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        New Network
+        <select name="network_name" required>
+          {% for net in networks %}
+          <option value="{{ net.name }}">{{ net.name }}{% if net.vlan_tag %} - VLAN {{ net.vlan_tag }}{% else %} - untagged{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label class="check">
+        <input name="live_switch" type="checkbox" value="true">
+        Apply live if the VM is running
+      </label>
+
+      <button type="submit">Update NIC</button>
+    </form>
+  </div>
+
+  <div>
+    <h3>Add NIC</h3>
+    <form method="post" action="/vms/{{ name }}/network/add">
+      <label>
+        Network
+        <select name="network_name" required>
+          {% for net in networks %}
+          <option value="{{ net.name }}">{{ net.name }}{% if net.vlan_tag %} - VLAN {{ net.vlan_tag }}{% else %} - untagged{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        Model
+        <select name="model_type">
+          <option value="virtio" selected>virtio</option>
+          <option value="e1000e">e1000e</option>
+          <option value="rtl8139">rtl8139</option>
+        </select>
+      </label>
+
+      <label class="check">
+        <input name="apply_live" type="checkbox" value="true">
+        Apply live if the VM is running
+      </label>
+
+      <button type="submit">Add NIC</button>
+    </form>
+  </div>
+</section>
+
+<section>
+  <h3>Remove NIC</h3>
+  <form method="post" action="/vms/{{ name }}/network/remove">
+    <label>
+      Interface
+      <select name="mac_address" required>
+        {% for iface in interfaces %}
+        <option value="{{ iface.mac }}">{{ iface.mac }}{% if iface.source %} - {{ iface.source }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="check">
+      <input name="apply_live" type="checkbox" value="true">
+      Apply live if the VM is running
+    </label>
+
+    <button class="danger" type="submit">Remove NIC</button>
+  </form>
+</section>
+
+{% endblock %}

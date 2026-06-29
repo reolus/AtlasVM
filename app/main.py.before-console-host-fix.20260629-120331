@@ -51,49 +51,6 @@ app.mount('/static', StaticFiles(directory='app/static'), name='static')
 templates = Jinja2Templates(directory='app/templates')
 
 
-
-def _atlasvm_public_host(request: Request) -> str:
-    """
-    Return the host clients should use for browser-facing links.
-
-    Prefer the current browser Host header so console links keep working after
-    DHCP/static management IP changes, DNS aliases, reverse proxies, and other
-    human networking choices.
-    """
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-
-    if host:
-        return host
-
-    # Fallback to saved management IP if available.
-    try:
-        import json
-        from pathlib import Path
-
-        plan_file = Path("/opt/atlasvm/atlasvm_host_network.json")
-        if plan_file.exists():
-            plan = json.loads(plan_file.read_text())
-            static_ip = str(plan.get("static_ip") or "").strip()
-            if static_ip:
-                return static_ip
-    except Exception:
-        pass
-
-    return "127.0.0.1"
-
-
-def _atlasvm_public_scheme(request: Request) -> str:
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    if forwarded_proto:
-        return forwarded_proto.split(",")[0].strip()
-
-    return request.url.scheme or "https"
-
-
-def _atlasvm_console_base_url(request: Request) -> str:
-    return f"{_atlasvm_public_scheme(request)}://{_atlasvm_public_host(request)}"
-
-
 @app.on_event('startup')
 def startup() -> None:
     init_db()
@@ -490,10 +447,7 @@ def vm_console_start(name: str, request: Request, db: Session = Depends(get_db),
 
 @app.get('/vms/{name}/console', response_class=HTMLResponse)
 def vm_console_page(name: str, request: Request, url: str = '', user: str = Depends(require_user)):
-    return templates.TemplateResponse('console.html', {'request': request,
-            'public_host': _atlasvm_public_host(request),
-            'public_scheme': _atlasvm_public_scheme(request),
-            'console_base_url': _atlasvm_console_base_url(request), 'app_name': settings.app_name, 'name': name,
+    return templates.TemplateResponse('console.html', {'request': request, 'app_name': settings.app_name, 'name': name,
         'vlan_tag': _atlasvm_get_network_vlan_tag(name), 'console_url': url,
             'user': user,
         })

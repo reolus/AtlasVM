@@ -1,0 +1,6 @@
+{
+  "networkd_dir_exists": true,
+  "networking_active": true,
+  "networkmanager_active": false,
+  "systemd_networkd_active": false
+}

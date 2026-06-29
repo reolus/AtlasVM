@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <h2>AtlasVM Doctor</h2>
+  <p>Configuration sanity checks, because apparently software needs a wellness visit.</p>
+  <table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody>
+    {% for check in checks %}<tr><td>{{ check.name }}</td><td><span class="pill {{ 'success' if check.ok else 'failed' }}">{{ check.status }}</span></td><td><code>{{ check.detail }}</code></td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

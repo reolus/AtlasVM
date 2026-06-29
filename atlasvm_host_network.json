@@ -1,0 +1,9 @@
+{
+  "dns_servers": "10.21.250.103,10.21.250.104",
+  "gateway": "10.21.50.1",
+  "management_interface": "enp4s0f2np2",
+  "saved_at": 1782751841,
+  "static_ip": "10.21.50.34",
+  "subnet": "24",
+  "vlan_tag": ""
+}

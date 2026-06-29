@@ -24,16 +24,6 @@ from app.services.doctor_service import run_doctor
 from app.services import zfs_service
 from app.services.libvirt_service import LibvirtService, VMCreateRequest
 from app.services.network_phase8 import NetworkPhase8Service
-from app.services.host_mgmt_network import (
-    apply_plan,
-    cancel_rollback,
-    detect_stack,
-    list_links,
-    load_plan,
-    rollback_now,
-    routes as host_routes,
-    save_plan,
-)
 from app.services.network_reconcile import reconcile_all
 
 settings = get_settings()
@@ -49,49 +39,6 @@ app.add_middleware(
 app.include_router(router)
 app.mount('/static', StaticFiles(directory='app/static'), name='static')
 templates = Jinja2Templates(directory='app/templates')
-
-
-
-def _atlasvm_public_host(request: Request) -> str:
-    """
-    Return the host clients should use for browser-facing links.
-
-    Prefer the current browser Host header so console links keep working after
-    DHCP/static management IP changes, DNS aliases, reverse proxies, and other
-    human networking choices.
-    """
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-
-    if host:
-        return host
-
-    # Fallback to saved management IP if available.
-    try:
-        import json
-        from pathlib import Path
-
-        plan_file = Path("/opt/atlasvm/atlasvm_host_network.json")
-        if plan_file.exists():
-            plan = json.loads(plan_file.read_text())
-            static_ip = str(plan.get("static_ip") or "").strip()
-            if static_ip:
-                return static_ip
-    except Exception:
-        pass
-
-    return "127.0.0.1"
-
-
-def _atlasvm_public_scheme(request: Request) -> str:
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    if forwarded_proto:
-        return forwarded_proto.split(",")[0].strip()
-
-    return request.url.scheme or "https"
-
-
-def _atlasvm_console_base_url(request: Request) -> str:
-    return f"{_atlasvm_public_scheme(request)}://{_atlasvm_public_host(request)}"
 
 
 @app.on_event('startup')
@@ -490,10 +437,7 @@ def vm_console_start(name: str, request: Request, db: Session = Depends(get_db),
 
 @app.get('/vms/{name}/console', response_class=HTMLResponse)
 def vm_console_page(name: str, request: Request, url: str = '', user: str = Depends(require_user)):
-    return templates.TemplateResponse('console.html', {'request': request,
-            'public_host': _atlasvm_public_host(request),
-            'public_scheme': _atlasvm_public_scheme(request),
-            'console_base_url': _atlasvm_console_base_url(request), 'app_name': settings.app_name, 'name': name,
+    return templates.TemplateResponse('console.html', {'request': request, 'app_name': settings.app_name, 'name': name,
         'vlan_tag': _atlasvm_get_network_vlan_tag(name), 'console_url': url,
             'user': user,
         })
@@ -915,21 +859,31 @@ def networks_action(name: str, action: str, db: Session = Depends(get_db), user:
         return _redirect(f'/networks/{name}', error=str(exc))
 
 
-
-
-
 @app.get('/host/network', response_class=HTMLResponse)
 def host_network_page(request: Request, user: str = Depends(require_admin)):
-    return templates.TemplateResponse(
-        'host_network.html',
-        {
-            **_view_context(request, user),
-            'host_links': list_links(),
-            'routes': host_routes(),
-            'host_meta': load_plan(),
-            'stack': detect_stack(),
-        },
-    )
+    svc = NetworkPhase8Service(settings.libvirt_uri)
+
+    try:
+        return templates.TemplateResponse(
+            'host_network.html',
+            {
+                **_view_context(request, user),
+                'host_links': svc.list_host_links(),
+                'routes': svc.list_routes(),
+                'host_meta': svc.host_management_meta(),
+            },
+        )
+    except Exception as exc:
+        return templates.TemplateResponse(
+            'host_network.html',
+            {
+                **_view_context(request, user),
+                'host_links': [],
+                'routes': [],
+                'host_meta': {},
+                'error': str(exc),
+            },
+        )
 
 
 @app.post('/host/network')
@@ -942,8 +896,10 @@ def host_network_save(
     dns_servers: str = Form(''),
     user: str = Depends(require_admin),
 ):
+    svc = NetworkPhase8Service(settings.libvirt_uri)
+
     try:
-        save_plan(
+        svc.save_host_management_meta(
             management_interface=management_interface,
             vlan_tag=vlan_tag,
             static_ip=static_ip,
@@ -951,37 +907,7 @@ def host_network_save(
             gateway=gateway,
             dns_servers=dns_servers,
         )
-        return _redirect('/host/network', message='Management network plan saved.')
-    except Exception as exc:
-        return _redirect('/host/network', error=str(exc))
-
-
-@app.post('/host/network/apply')
-def host_network_apply(
-    timeout_seconds: int = Form(120),
-    user: str = Depends(require_admin),
-):
-    try:
-        apply_plan(timeout_seconds=timeout_seconds)
-        return _redirect('/host/network', message='Management network applied. Confirm within the rollback window or it will revert.')
-    except Exception as exc:
-        return _redirect('/host/network', error=str(exc))
-
-
-@app.post('/host/network/confirm')
-def host_network_confirm(user: str = Depends(require_admin)):
-    try:
-        cancel_rollback()
-        return _redirect('/host/network', message='Management network confirmed. Rollback cancelled.')
-    except Exception as exc:
-        return _redirect('/host/network', error=str(exc))
-
-
-@app.post('/host/network/rollback')
-def host_network_rollback(user: str = Depends(require_admin)):
-    try:
-        rollback_now()
-        return _redirect('/host/network', message='Rollback executed.')
+        return _redirect('/host/network', message='Host management network plan saved.')
     except Exception as exc:
         return _redirect('/host/network', error=str(exc))
 
