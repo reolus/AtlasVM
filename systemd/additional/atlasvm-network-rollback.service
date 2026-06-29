@@ -1,0 +1,6 @@
+[Unit]
+Description=AtlasVM Management Network Rollback
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/atlasvm-network-rollback
