@@ -957,11 +957,20 @@ class LibvirtService:
             mac = iface.find('mac')
             source = iface.find('source')
             model = iface.find('model')
+            vlan = iface.find('vlan')
+
+            vlan_tag = None
+            if vlan is not None:
+                tag = vlan.find('tag')
+                if tag is not None:
+                    vlan_tag = tag.attrib.get('id')
+
             interfaces.append({
                 'mac': mac.attrib.get('address') if mac is not None else None,
                 'network': source.attrib.get('network') if source is not None else None,
                 'bridge': source.attrib.get('bridge') if source is not None else None,
                 'model': model.attrib.get('type') if model is not None else None,
+                'vlan_tag': vlan_tag,
             })
         return interfaces
 

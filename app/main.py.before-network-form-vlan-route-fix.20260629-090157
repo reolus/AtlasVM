@@ -435,8 +435,7 @@ def vm_console_start(name: str, request: Request, db: Session = Depends(get_db),
 
 @app.get('/vms/{name}/console', response_class=HTMLResponse)
 def vm_console_page(name: str, request: Request, url: str = '', user: str = Depends(require_user)):
-    return templates.TemplateResponse('console.html', {'request': request, 'app_name': settings.app_name, 'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name), 'console_url': url,
+    return templates.TemplateResponse('console.html', {'request': request, 'app_name': settings.app_name, 'name': name, 'console_url': url,
             'user': user,
         })
 
@@ -700,7 +699,6 @@ def network_new_page(request: Request, user: str = Depends(require_admin)):
 def network_create(
     request: Request,
     name: str = Form(...),
-    vlan_tag: str = Form(''),
     mode: str = Form('nat'),
     bridge_name: str = Form(''),
     cidr: str = Form(''),
@@ -1172,7 +1170,6 @@ def vm_delete_confirm(
             'request': request,
             'app_name': settings.app_name,
             'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name),
             'user': user,
             'message': request.query_params.get('message'),
             'error': request.query_params.get('error'),
@@ -1245,7 +1242,6 @@ def vm_clone_page(
             'request': request,
             'app_name': settings.app_name,
             'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name),
             'user': user,
             'message': request.query_params.get('message'),
             'error': request.query_params.get('error'),
@@ -1407,12 +1403,10 @@ def vm_network_page(
 
         try:
             for net_name in conn.listNetworks():
-                networks.append({'name': net_name,
-                    'vlan_tag': _atlasvm_get_network_vlan_tag(net_name), 'active': True, 'vlan_tag': _atlasvm_get_network_vlan_tag(net_name)})
+                networks.append({'name': net_name, 'active': True, 'vlan_tag': _atlasvm_get_network_vlan_tag(net_name)})
 
             for net_name in conn.listDefinedNetworks():
-                networks.append({'name': net_name,
-                    'vlan_tag': _atlasvm_get_network_vlan_tag(net_name), 'active': False, 'vlan_tag': _atlasvm_get_network_vlan_tag(net_name)})
+                networks.append({'name': net_name, 'active': False, 'vlan_tag': _atlasvm_get_network_vlan_tag(net_name)})
 
             networks = sorted(networks, key=lambda n: n['name'])
 
@@ -1480,7 +1474,6 @@ def vm_network_page(
             'request': request,
             'app_name': settings.app_name,
             'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name),
             'networks': networks,
             'interfaces': interfaces,
             'user': user,
@@ -1844,7 +1837,6 @@ def network_edit_page(
             'app_name': settings.app_name,
             'network': network,
             'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name),
             'user': user,
             'message': message,
             'error': error,

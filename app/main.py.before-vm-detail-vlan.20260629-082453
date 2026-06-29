@@ -435,8 +435,7 @@ def vm_console_start(name: str, request: Request, db: Session = Depends(get_db),
 
 @app.get('/vms/{name}/console', response_class=HTMLResponse)
 def vm_console_page(name: str, request: Request, url: str = '', user: str = Depends(require_user)):
-    return templates.TemplateResponse('console.html', {'request': request, 'app_name': settings.app_name, 'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name), 'console_url': url,
+    return templates.TemplateResponse('console.html', {'request': request, 'app_name': settings.app_name, 'name': name, 'console_url': url,
             'user': user,
         })
 
@@ -619,59 +618,6 @@ def storage_refresh(name: str, db: Session = Depends(get_db), user: str = Depend
     return RedirectResponse(url=f'/storage/{name}', status_code=303)
 
 
-
-
-
-
-
-
-
-def _atlasvm_network_meta_file():
-    from pathlib import Path
-    return Path('/opt/atlasvm/atlasvm_network_meta.json')
-
-
-def _atlasvm_load_network_meta() -> dict:
-    import json
-
-    meta_file = _atlasvm_network_meta_file()
-    if not meta_file.exists():
-        return {}
-
-    try:
-        return json.loads(meta_file.read_text())
-    except Exception:
-        return {}
-
-
-def _atlasvm_save_network_meta(meta: dict) -> None:
-    import json
-
-    meta_file = _atlasvm_network_meta_file()
-    meta_file.write_text(json.dumps(meta, indent=2, sort_keys=True))
-
-
-def _atlasvm_get_network_vlan_tag(network_name: str) -> str:
-    meta = _atlasvm_load_network_meta()
-    network_meta = meta.get(network_name, {})
-    return str(network_meta.get('vlan_tag') or '').strip()
-
-
-def _atlasvm_set_network_vlan_tag(network_name: str, vlan_tag: str = '') -> None:
-    vlan_tag = str(vlan_tag or '').strip()
-
-    if vlan_tag:
-        vlan_id = int(vlan_tag)
-        if vlan_id < 1 or vlan_id > 4094:
-            raise RuntimeError('VLAN tag must be between 1 and 4094.')
-
-    meta = _atlasvm_load_network_meta()
-    network_meta = meta.get(network_name, {})
-    network_meta['vlan_tag'] = vlan_tag
-    meta[network_name] = network_meta
-    _atlasvm_save_network_meta(meta)
-
-
 @app.get('/networks', response_class=HTMLResponse)
 def networks_page(request: Request, user: str = Depends(require_viewer)):
     lv = LibvirtService()
@@ -700,7 +646,6 @@ def network_new_page(request: Request, user: str = Depends(require_admin)):
 def network_create(
     request: Request,
     name: str = Form(...),
-    vlan_tag: str = Form(''),
     mode: str = Form('nat'),
     bridge_name: str = Form(''),
     cidr: str = Form(''),
@@ -760,6 +705,41 @@ def network_edit_page(name: str, request: Request, user: str = Depends(require_a
             'user': user,
         })
 
+
+@app.post('/networks/{name}/edit')
+def network_edit(
+    name: str,
+    request: Request,
+    mode: str = Form('nat'),
+    bridge_name: str = Form(''),
+    cidr: str = Form(''),
+    dhcp_start: str = Form(''),
+    dhcp_end: str = Form(''),
+    domain_name: str = Form(''),
+    autostart: bool = Form(False),
+    start_network: bool = Form(False),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    lv = LibvirtService()
+    try:
+        lv.update_network(
+            name=name,
+            mode=mode,
+            bridge_name=bridge_name.strip() or None,
+            cidr=cidr.strip() or None,
+            dhcp_start=dhcp_start.strip() or None,
+            dhcp_end=dhcp_end.strip() or None,
+            domain_name=domain_name.strip() or None,
+            autostart=autostart,
+            start_after_define=start_network,
+        )
+        log_event(db, user, 'network_edit', name, f'Edited {mode} network')
+        return _redirect(f'/networks/{name}', message='Network updated.')
+    except Exception as exc:
+        return _redirect(f'/networks/{name}/edit', error=str(exc))
+    finally:
+        lv.close()
 
 
 @app.post('/networks/{name}/delete')
@@ -1172,7 +1152,6 @@ def vm_delete_confirm(
             'request': request,
             'app_name': settings.app_name,
             'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name),
             'user': user,
             'message': request.query_params.get('message'),
             'error': request.query_params.get('error'),
@@ -1245,7 +1224,6 @@ def vm_clone_page(
             'request': request,
             'app_name': settings.app_name,
             'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name),
             'user': user,
             'message': request.query_params.get('message'),
             'error': request.query_params.get('error'),
@@ -1407,12 +1385,10 @@ def vm_network_page(
 
         try:
             for net_name in conn.listNetworks():
-                networks.append({'name': net_name,
-                    'vlan_tag': _atlasvm_get_network_vlan_tag(net_name), 'active': True, 'vlan_tag': _atlasvm_get_network_vlan_tag(net_name)})
+                networks.append({'name': net_name, 'active': True})
 
             for net_name in conn.listDefinedNetworks():
-                networks.append({'name': net_name,
-                    'vlan_tag': _atlasvm_get_network_vlan_tag(net_name), 'active': False, 'vlan_tag': _atlasvm_get_network_vlan_tag(net_name)})
+                networks.append({'name': net_name, 'active': False})
 
             networks = sorted(networks, key=lambda n: n['name'])
 
@@ -1431,7 +1407,6 @@ def vm_network_page(
                 mac_el = iface.find("mac")
                 source_el = iface.find("source")
                 model_el = iface.find("model")
-                vlan_el = iface.find("vlan")
                 vlan_el = iface.find("vlan")
 
                 mac = mac_el.attrib.get("address", "") if mac_el is not None else ""
@@ -1452,19 +1427,12 @@ def vm_network_page(
                     if tag_el is not None:
                         vlan_tag = tag_el.attrib.get("id", "")
 
-                vlan_tag = ""
-                if vlan_el is not None:
-                    tag_el = vlan_el.find("tag")
-                    if tag_el is not None:
-                        vlan_tag = tag_el.attrib.get("id", "")
-
                 interfaces.append({
                     'index': index,
                     'type': iface_type,
                     'mac': mac,
                     'source': source,
                     'model': model,
-                    'vlan_tag': vlan_tag,
                     'vlan_tag': vlan_tag,
                 })
 
@@ -1480,7 +1448,6 @@ def vm_network_page(
             'request': request,
             'app_name': settings.app_name,
             'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name),
             'networks': networks,
             'interfaces': interfaces,
             'user': user,
@@ -1488,11 +1455,6 @@ def vm_network_page(
             'error': error,
         },
     )
-
-
-
-
-
 
 
 def _atlasvm_build_interface_xml(network_name: str, mac: str = '', model_type: str = 'virtio', vlan_tag: str = '') -> str:
@@ -1506,12 +1468,7 @@ def _atlasvm_build_interface_xml(network_name: str, mac: str = '', model_type: s
     ET.SubElement(iface, "source", {"network": network_name})
     ET.SubElement(iface, "model", {"type": model_type or "virtio"})
 
-    # VLAN is owned by the AtlasVM network definition.
-    # A manually supplied vlan_tag still overrides it for backward compatibility.
     vlan_tag = str(vlan_tag or '').strip()
-    if not vlan_tag:
-        vlan_tag = _atlasvm_get_network_vlan_tag(network_name)
-
     if vlan_tag:
         vlan_id = int(vlan_tag)
         if vlan_id < 1 or vlan_id > 4094:
@@ -1801,94 +1758,3 @@ def vm_network_remove(
             status_code=303,
         )
 
-@app.get('/networks/{name}/edit')
-def network_edit_page(
-    name: str,
-    request: Request,
-    user: str = Depends(require_operator),
-):
-    import libvirt
-
-    settings = get_settings()
-    error = request.query_params.get('error')
-    message = request.query_params.get('message')
-
-    network = {
-        'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name),
-        'active': False,
-        'autostart': False,
-        'xml': '',
-    }
-
-    try:
-        conn = libvirt.open(settings.libvirt_uri)
-        if conn is None:
-            raise RuntimeError('Could not connect to libvirt.')
-
-        try:
-            net = conn.networkLookupByName(name)
-            network['active'] = bool(net.isActive())
-            network['autostart'] = bool(net.autostart())
-            network['xml'] = net.XMLDesc(0)
-        finally:
-            conn.close()
-
-    except Exception as exc:
-        error = str(exc)
-
-    return templates.TemplateResponse(
-        'network_edit.html',
-        {
-            'request': request,
-            'app_name': settings.app_name,
-            'network': network,
-            'name': name,
-        'vlan_tag': _atlasvm_get_network_vlan_tag(name),
-            'user': user,
-            'message': message,
-            'error': error,
-        },
-    )
-
-
-@app.post('/networks/{name}/edit')
-def network_edit_save(
-    name: str,
-    vlan_tag: str = Form(''),
-    user: str = Depends(require_operator),
-):
-    from urllib.parse import quote
-    import libvirt
-
-    settings = get_settings()
-    vlan_tag = str(vlan_tag or '').strip()
-
-    try:
-        # Confirm the libvirt network exists before saving metadata.
-        conn = libvirt.open(settings.libvirt_uri)
-        if conn is None:
-            raise RuntimeError('Could not connect to libvirt.')
-
-        try:
-            conn.networkLookupByName(name)
-        finally:
-            conn.close()
-
-        _atlasvm_set_network_vlan_tag(name, vlan_tag)
-
-        if vlan_tag:
-            message = f'Saved VLAN tag {vlan_tag} for network {name}.'
-        else:
-            message = f'Cleared VLAN tag for network {name}.'
-
-        return RedirectResponse(
-            url=f'/networks/{name}?message={quote(message)}',
-            status_code=303,
-        )
-
-    except Exception as exc:
-        return RedirectResponse(
-            url=f'/networks/{name}/edit?error={quote(str(exc))}',
-            status_code=303,
-        )

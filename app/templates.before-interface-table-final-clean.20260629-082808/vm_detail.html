@@ -73,11 +73,9 @@
   </div>
   <div>
     <h2>Interfaces</h2>
-    <table><thead><tr><th>MAC</th><th>Network</th><th>Model</th><th>VLAN</th></tr></thead><tbody>{% for nic in vm.interfaces %}<tr><td>{{ nic.mac }}</td><td>{{ nic.network or nic.bridge }}</td><td>{{ nic.model }}</td><td>{% if nic.vlan_tag %}{{ nic.vlan_tag }}{% else %}<span class="muted">none</span>{% endif %}</td></tr>{% else %}<tr><td colspan="4">No interfaces found.</td></tr>{% endfor %}</tbody></table>
-    <br>
-    <form method="get" action="/vms/{{ vm.name }}/network" style="margin:0;">
-        <button type="submit">Edit Interfaces</button>
-    </form> 
+    <table><thead><tr><th>MAC</th><th>Network</th>
+            <th>VLAN</th><th>Model</th>
+            <th>VLAN</th></tr></thead><tbody>{% for nic in vm.interfaces %}<tr><td>{{ nic.mac }}</td><td>{{ nic.network or nic.bridge }}</td><td>{{ nic.model }}</td></tr>{% else %}<tr><td colspan="4">No interfaces found.</td></tr>{% endfor %}</tbody></table>
   </div>
 </section>
 
@@ -101,7 +99,7 @@
       <label class="check"><input name="compress" type="checkbox" value="true" checked> Compress archive</label>
       <button>Backup VM</button>
     </form>
-    <table><thead><tr><th>Created</th><th>Archive</th></tr></thead><tbody>{% for backup in backups[:5] %}<tr><td>{{ backup.created_at }}</td><td>{{ backup.archive or backup.path }}</td></tr>{% else %}<tr><td colspan="4">No backups for this VM.</td></tr>{% endfor %}</tbody></table>
+    <table><thead><tr><th>Created</th><th>Archive</th></tr></thead><tbody>{% for backup in backups[:5] %}<tr><td>{{ backup.created_at }}</td><td>{{ backup.archive or backup.path }}</td></tr>{% else %}<tr><td colspan="2">No backups for this VM.</td></tr>{% endfor %}</tbody></table>
   </div>
 </section>
 

@@ -1,51 +1,44 @@
 {% extends "base.html" %}
 {% block content %}
+
 <section>
-  <div class="section-title">
-    <div>
-      <h2>Networks</h2>
-      <p>Manage libvirt NAT, isolated, routed, and bridge-backed networks.</p>
-    </div>
-    <a class="button" href="/networks/new">Create Network</a>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <h2>Networks</h2>
+    <form method="get" action="/networks/new" style="margin:0;">
+      <button type="submit">New Network</button>
+    </form>
   </div>
+
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  {% if message %}
+  <div class="alert alert-success">{{ message }}</div>
+  {% endif %}
 
   <table>
     <thead>
       <tr>
         <th>Name</th>
-        <th>Mode</th>
         <th>Active</th>
         <th>Autostart</th>
-        <th>Bridge</th>
-        <th>CIDR</th>
-        <th>VMs</th>
-        <th>Actions</th>
+        <th>VLAN Tag</th>
       </tr>
     </thead>
     <tbody>
-      {% for net in networks %}
+      {% for network in networks %}
       <tr>
-        <td><a href="/networks/{{ net.name }}">{{ net.name }}</a></td>
-        <td><span class="pill">{{ net.mode or 'unknown' }}</span></td>
-        <td><span class="pill {{ 'running' if net.active else 'shutoff' }}">{{ 'Active' if net.active else 'Stopped' }}</span></td>
-        <td>{{ 'Yes' if net.autostart else 'No' }}</td>
-        <td><code>{{ net.bridge or '-' }}</code></td>
-        <td><code>{{ net.cidr or '-' }}</code></td>
-        <td>{{ net.vm_count or 0 }}</td>
-        <td class="actions">
-          <a class="button muted" href="/networks/{{ net.name }}">Details</a>
-          {% if net.active %}
-          <form method="post" action="/networks/{{ net.name }}/stop"><button class="danger">Stop</button></form>
-          {% else %}
-          <form method="post" action="/networks/{{ net.name }}/start"><button>Start</button></form>
-          {% endif %}
-          <a class="button muted" href="/networks/{{ net.name }}/edit">Edit</a>
-        </td>
+        <td><a href="/networks/{{ network.name }}">{{ network.name }}</a></td>
+        <td>{{ network.active }}</td>
+        <td>{{ network.autostart }}</td>
+        <td>{% if network.vlan_tag %}{{ network.vlan_tag }}{% else %}<span class="muted">none</span>{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="8">No libvirt networks found.</td></tr>
+      <tr><td colspan="4">No networks found.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </section>
+
 {% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="form-card">
+  <h2>Create Virtual Machine</h2>
+  <form method="post" action="/vms/new">
+    <label>Name <input name="name" required placeholder="debian-test-01" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}"></label>
+    <label>Description <input name="description" placeholder="Test VM, installer, workload, or whatever purpose this poor thing now has"></label>
+    <div class="grid three">
+      <label>Memory MB <input name="memory_mb" type="number" value="2048" min="256" required></label>
+      <label>vCPUs <input name="vcpus" type="number" value="2" min="1" required></label>
+      <label>Disk GB <input name="disk_gb" type="number" value="20" min="1" required></label>
+    </div>
+    <div class="grid two">
+      <label>Storage Pool
+        <select name="storage_pool">
+        {% for pool in pools %}<option value="{{ pool.name }}" {% if pool.name == default_pool %}selected{% endif %}>{{ pool.name }} - {{ pool.available_gb }} GB free</option>{% endfor %}
+        </select>
+      </label>
+      <label>Network
+        <select name="network">
+        {% for net in networks %}<option value="{{ net.name }}" {% if net.name == default_network %}selected{% endif %}>{{ net.name }} {% if net.bridge %}({{ net.bridge }}){% endif %}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="grid two">
+      <label>Installer ISO
+        <select name="iso_path">
+          <option value="">No ISO</option>
+          {% for iso in isos %}<option value="{{ iso.path }}">{{ iso.name }} - {{ iso.size_mb }} MB</option>{% endfor %}
+        </select>
+      </label>
+      <label>Firmware
+        <select name="firmware">
+          <option value="bios">BIOS</option>
+          <option value="uefi">UEFI</option>
+        </select>
+      </label>
+    </div>
+    <label class="check"><input name="start_after_create" type="checkbox" value="true"> Start VM after creation</label>
+    <label class="check"><input name="autostart" type="checkbox" value="true"> Start VM automatically with host</label>
+    <button class="button" type="submit">Create VM</button>
+  </form>
+</section>
+{% endblock %}

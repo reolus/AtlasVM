@@ -74,10 +74,6 @@
   <div>
     <h2>Interfaces</h2>
     <table><thead><tr><th>MAC</th><th>Network</th><th>Model</th><th>VLAN</th></tr></thead><tbody>{% for nic in vm.interfaces %}<tr><td>{{ nic.mac }}</td><td>{{ nic.network or nic.bridge }}</td><td>{{ nic.model }}</td><td>{% if nic.vlan_tag %}{{ nic.vlan_tag }}{% else %}<span class="muted">none</span>{% endif %}</td></tr>{% else %}<tr><td colspan="4">No interfaces found.</td></tr>{% endfor %}</tbody></table>
-    <br>
-    <form method="get" action="/vms/{{ vm.name }}/network" style="margin:0;">
-        <button type="submit">Edit Interfaces</button>
-    </form> 
   </div>
 </section>
 
