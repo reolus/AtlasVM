@@ -24,20 +24,6 @@ from app.services.doctor_service import run_doctor
 from app.services import zfs_service
 from app.services.libvirt_service import LibvirtService, VMCreateRequest
 from app.services.network_phase8 import NetworkPhase8Service
-from app.services.storage_phase9 import (
-    apply_storage_network,
-    delete_storage_network,
-    list_host_links as storage_host_links,
-    reconcile_storage_networks,
-    save_storage_network,
-    storage_overview,
-    apply_nfs_target,
-    delete_nfs_target,
-    list_nfs_targets,
-    save_nfs_target,
-    test_nfs_target,
-    unmount_nfs_target,
-)
 from app.services.host_mgmt_network import (
     apply_plan,
     cancel_rollback,
@@ -648,6 +634,109 @@ def delete_iso(filename: str, db: Session = Depends(get_db), user: str = Depends
     return RedirectResponse(url='/isos', status_code=303)
 
 
+@app.get('/storage', response_class=HTMLResponse)
+def storage_page(request: Request, user: str = Depends(require_user)):
+    lv = LibvirtService()
+    error = None
+    try:
+        pools = lv.list_storage_pools()
+    except Exception as exc:
+        pools = []
+        error = str(exc)
+    finally:
+        lv.close()
+    return templates.TemplateResponse('storage.html', {'request': request, 'app_name': settings.app_name, 'pools': pools, 'error': error,
+            'user': user,
+        })
+
+
+@app.get('/storage/{name}', response_class=HTMLResponse)
+def storage_detail(name: str, request: Request, user: str = Depends(require_user)):
+    lv = LibvirtService()
+    error = None
+    try:
+        pool = lv.get_storage_pool(name)
+    except Exception as exc:
+        pool = None
+        error = str(exc)
+    finally:
+        lv.close()
+    return templates.TemplateResponse('storage_detail.html', {'request': request, 'app_name': settings.app_name, 'pool': pool, 'error': error,
+            'user': user,
+        })
+
+
+@app.post('/storage/{name}/refresh')
+def storage_refresh(name: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    lv = LibvirtService()
+    try:
+        lv.refresh_storage_pool(name)
+        log_event(db, user, 'refresh_storage_pool', name, 'Refreshed storage pool')
+    finally:
+        lv.close()
+    return RedirectResponse(url=f'/storage/{name}', status_code=303)
+
+
+
+
+
+
+
+
+
+def _atlasvm_network_meta_file():
+    from pathlib import Path
+    return Path('/opt/atlasvm/atlasvm_network_meta.json')
+
+
+def _atlasvm_load_network_meta() -> dict:
+    import json
+
+    meta_file = _atlasvm_network_meta_file()
+    if not meta_file.exists():
+        return {}
+
+    try:
+        return json.loads(meta_file.read_text())
+    except Exception:
+        return {}
+
+
+def _atlasvm_save_network_meta(meta: dict) -> None:
+    import json
+
+    meta_file = _atlasvm_network_meta_file()
+    meta_file.write_text(json.dumps(meta, indent=2, sort_keys=True))
+
+
+def _atlasvm_get_network_vlan_tag(network_name: str) -> str:
+    meta = _atlasvm_load_network_meta()
+    network_meta = meta.get(network_name, {})
+    return str(network_meta.get('vlan_tag') or '').strip()
+
+
+def _atlasvm_set_network_vlan_tag(network_name: str, vlan_tag: str = '') -> None:
+    vlan_tag = str(vlan_tag or '').strip()
+
+    if vlan_tag:
+        vlan_id = int(vlan_tag)
+        if vlan_id < 1 or vlan_id > 4094:
+            raise RuntimeError('VLAN tag must be between 1 and 4094.')
+
+    meta = _atlasvm_load_network_meta()
+    network_meta = meta.get(network_name, {})
+    network_meta['vlan_tag'] = vlan_tag
+    meta[network_name] = network_meta
+    _atlasvm_save_network_meta(meta)
+
+
+
+
+
+
+
+
+
 
 
 
@@ -895,171 +984,6 @@ def host_network_rollback(user: str = Depends(require_admin)):
         return _redirect('/host/network', message='Rollback executed.')
     except Exception as exc:
         return _redirect('/host/network', error=str(exc))
-
-
-
-@app.get('/storage', response_class=HTMLResponse)
-def storage_page(request: Request, user: str = Depends(require_admin)):
-    return templates.TemplateResponse(
-        'storage.html',
-        {
-            **_view_context(request, user),
-            'overview': storage_overview(),
-        },
-    )
-
-
-@app.get('/storage/networks/new', response_class=HTMLResponse)
-def storage_network_new_page(request: Request, user: str = Depends(require_admin)):
-    return templates.TemplateResponse(
-        'storage_network_form.html',
-        {
-            **_view_context(request, user),
-            'host_links': storage_host_links(),
-        },
-    )
-
-
-@app.post('/storage/networks/new')
-def storage_network_new(
-    name: str = Form(''),
-    mode: str = Form(''),
-    parent_interface: str = Form(''),
-    vlan_tag: str = Form(''),
-    ip_cidr: str = Form(''),
-    gateway: str = Form(''),
-    dns_servers: str = Form(''),
-    mtu: str = Form(''),
-    purpose: str = Form(''),
-    notes: str = Form(''),
-    user: str = Depends(require_admin),
-):
-    try:
-        save_storage_network(
-            name=name,
-            mode=mode,
-            parent_interface=parent_interface,
-            vlan_tag=vlan_tag,
-            ip_cidr=ip_cidr,
-            gateway=gateway,
-            dns_servers=dns_servers,
-            mtu=mtu,
-            purpose=purpose,
-            notes=notes,
-        )
-        return _redirect('/storage', message='Storage network profile saved.')
-    except Exception as exc:
-        return _redirect('/storage/networks/new', error=str(exc))
-
-
-@app.post('/storage/networks/{name}/apply')
-def storage_network_apply(name: str, user: str = Depends(require_admin)):
-    try:
-        apply_storage_network(name)
-        return _redirect('/storage', message=f'Storage network {name} applied.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/networks/{name}/delete')
-def storage_network_delete(name: str, user: str = Depends(require_admin)):
-    try:
-        delete_storage_network(name)
-        return _redirect('/storage', message=f'Storage network {name} deleted.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/networks/reconcile')
-def storage_network_reconcile(user: str = Depends(require_admin)):
-    try:
-        reconcile_storage_networks()
-        return _redirect('/storage', message='Storage networks reconciled.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-
-@app.get('/storage/nfs/new', response_class=HTMLResponse)
-def nfs_new_page(request: Request, user: str = Depends(require_admin)):
-    overview = storage_overview()
-    return templates.TemplateResponse(
-        'nfs_form.html',
-        {
-            **_view_context(request, user),
-            'storage_networks': overview.get('storage_networks', {}),
-        },
-    )
-
-
-@app.post('/storage/nfs/new')
-def nfs_new(
-    name: str = Form(''),
-    storage_network: str = Form(''),
-    server: str = Form(''),
-    export_path: str = Form(''),
-    mount_path: str = Form(''),
-    nfs_version: str = Form('4'),
-    mount_options: str = Form('rw,_netdev,noatime'),
-    roles: str = Form(''),
-    create_libvirt_pool: str = Form(''),
-    libvirt_pool_name: str = Form(''),
-    user: str = Depends(require_admin),
-):
-    try:
-        save_nfs_target(
-            name=name,
-            storage_network=storage_network,
-            server=server,
-            export_path=export_path,
-            mount_path=mount_path,
-            nfs_version=nfs_version,
-            mount_options=mount_options,
-            roles=roles,
-            create_libvirt_pool=create_libvirt_pool,
-            libvirt_pool_name=libvirt_pool_name,
-        )
-        return _redirect('/storage', message='NFS target saved.')
-    except Exception as exc:
-        return _redirect('/storage/nfs/new', error=str(exc))
-
-
-@app.post('/storage/nfs/{name}/test')
-def nfs_test(name: str, user: str = Depends(require_admin)):
-    try:
-        result = test_nfs_target(name)
-        if result.get('showmount_returncode') == 0:
-            return _redirect('/storage', message=f'NFS target {name} responded to showmount.')
-        return _redirect('/storage', error=f'NFS test returned error: {result.get("showmount_stderr") or result.get("showmount_stdout")}')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/nfs/{name}/apply')
-def nfs_apply(name: str, user: str = Depends(require_admin)):
-    try:
-        apply_nfs_target(name)
-        return _redirect('/storage', message=f'NFS target {name} applied.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/nfs/{name}/unmount')
-def nfs_unmount(name: str, user: str = Depends(require_admin)):
-    try:
-        unmount_nfs_target(name)
-        return _redirect('/storage', message=f'NFS target {name} unmounted.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/nfs/{name}/delete')
-def nfs_delete(name: str, user: str = Depends(require_admin)):
-    try:
-        delete_nfs_target(name)
-        return _redirect('/storage', message=f'NFS target {name} deleted.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
 
 
 @app.get('/events', response_class=HTMLResponse)

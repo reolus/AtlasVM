@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section>
+  <h2>Create Network</h2>
+
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  {% if message %}
+  <div class="alert alert-success">{{ message }}</div>
+  {% endif %}
+
+  <form method="post" action="/networks/new">
+    <label>
+      Network Name
+      <input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" placeholder="atlasvm-vlan12">
+    </label>
+
+    <label>
+      Mode
+      <select name="mode">
+        <option value="nat" selected>NAT</option>
+        <option value="isolated">Isolated</option>
+      </select>
+    </label>
+
+    <label>
+      VLAN Tag
+      <input name="vlan_tag" type="number" min="1" max="4094" placeholder="blank for untagged">
+    </label>
+    <p><small>The VLAN tag belongs to the AtlasVM network. VM NICs attached to this network inherit the tag.</small></p>
+
+    <label>
+      Gateway IP
+      <input name="gateway_ip" placeholder="192.168.100.1">
+    </label>
+
+    <label>
+      Netmask
+      <input name="netmask" value="255.255.255.0">
+    </label>
+
+    <label>
+      DHCP Start
+      <input name="dhcp_start" placeholder="192.168.100.100">
+    </label>
+
+    <label>
+      DHCP End
+      <input name="dhcp_end" placeholder="192.168.100.200">
+    </label>
+
+    <label class="check">
+      <input name="start_now" type="checkbox" value="true" checked>
+      Start now
+    </label>
+
+    <label class="check">
+      <input name="autostart" type="checkbox" value="true">
+      Autostart
+    </label>
+
+    <button type="submit">Create Network</button>
+  </form>
+</section>
+
+{% endblock %}

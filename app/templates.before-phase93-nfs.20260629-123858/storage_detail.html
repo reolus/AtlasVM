@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+{% if pool %}
+<section>
+  <div class="section-title"><h2>Storage Pool: {{ pool.name }}</h2><form method="post" action="/storage/{{ pool.name }}/refresh"><button>Refresh</button></form></div>
+  <div class="grid cards">
+    <div class="card"><strong>Active</strong><span>{{ pool.active }}</span></div>
+    <div class="card"><strong>Capacity</strong><span>{{ pool.capacity_gb }} GB</span></div>
+    <div class="card"><strong>Available</strong><span>{{ pool.available_gb }} GB</span></div>
+    <div class="card"><strong>Path</strong><small>{{ pool.path }}</small></div>
+  </div>
+</section>
+<section>
+  <h2>Volumes</h2>
+  <table><thead><tr><th>Name</th><th>Capacity</th><th>Allocated</th><th>Path</th></tr></thead><tbody>
+    {% for vol in pool.volumes %}<tr><td>{{ vol.name }}</td><td>{{ vol.capacity_gb }} GB</td><td>{{ vol.allocation_gb }} GB</td><td><code>{{ vol.path }}</code></td></tr>{% else %}<tr><td colspan="4">No volumes found.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endif %}
+{% endblock %}

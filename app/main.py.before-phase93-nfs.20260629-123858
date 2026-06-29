@@ -31,12 +31,6 @@ from app.services.storage_phase9 import (
     reconcile_storage_networks,
     save_storage_network,
     storage_overview,
-    apply_nfs_target,
-    delete_nfs_target,
-    list_nfs_targets,
-    save_nfs_target,
-    test_nfs_target,
-    unmount_nfs_target,
 )
 from app.services.host_mgmt_network import (
     apply_plan,
@@ -975,89 +969,6 @@ def storage_network_reconcile(user: str = Depends(require_admin)):
     try:
         reconcile_storage_networks()
         return _redirect('/storage', message='Storage networks reconciled.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-
-@app.get('/storage/nfs/new', response_class=HTMLResponse)
-def nfs_new_page(request: Request, user: str = Depends(require_admin)):
-    overview = storage_overview()
-    return templates.TemplateResponse(
-        'nfs_form.html',
-        {
-            **_view_context(request, user),
-            'storage_networks': overview.get('storage_networks', {}),
-        },
-    )
-
-
-@app.post('/storage/nfs/new')
-def nfs_new(
-    name: str = Form(''),
-    storage_network: str = Form(''),
-    server: str = Form(''),
-    export_path: str = Form(''),
-    mount_path: str = Form(''),
-    nfs_version: str = Form('4'),
-    mount_options: str = Form('rw,_netdev,noatime'),
-    roles: str = Form(''),
-    create_libvirt_pool: str = Form(''),
-    libvirt_pool_name: str = Form(''),
-    user: str = Depends(require_admin),
-):
-    try:
-        save_nfs_target(
-            name=name,
-            storage_network=storage_network,
-            server=server,
-            export_path=export_path,
-            mount_path=mount_path,
-            nfs_version=nfs_version,
-            mount_options=mount_options,
-            roles=roles,
-            create_libvirt_pool=create_libvirt_pool,
-            libvirt_pool_name=libvirt_pool_name,
-        )
-        return _redirect('/storage', message='NFS target saved.')
-    except Exception as exc:
-        return _redirect('/storage/nfs/new', error=str(exc))
-
-
-@app.post('/storage/nfs/{name}/test')
-def nfs_test(name: str, user: str = Depends(require_admin)):
-    try:
-        result = test_nfs_target(name)
-        if result.get('showmount_returncode') == 0:
-            return _redirect('/storage', message=f'NFS target {name} responded to showmount.')
-        return _redirect('/storage', error=f'NFS test returned error: {result.get("showmount_stderr") or result.get("showmount_stdout")}')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/nfs/{name}/apply')
-def nfs_apply(name: str, user: str = Depends(require_admin)):
-    try:
-        apply_nfs_target(name)
-        return _redirect('/storage', message=f'NFS target {name} applied.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/nfs/{name}/unmount')
-def nfs_unmount(name: str, user: str = Depends(require_admin)):
-    try:
-        unmount_nfs_target(name)
-        return _redirect('/storage', message=f'NFS target {name} unmounted.')
-    except Exception as exc:
-        return _redirect('/storage', error=str(exc))
-
-
-@app.post('/storage/nfs/{name}/delete')
-def nfs_delete(name: str, user: str = Depends(require_admin)):
-    try:
-        delete_nfs_target(name)
-        return _redirect('/storage', message=f'NFS target {name} deleted.')
     except Exception as exc:
         return _redirect('/storage', error=str(exc))
 

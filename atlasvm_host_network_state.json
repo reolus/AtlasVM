@@ -1,7 +1,7 @@
 {
-  "applied_at": 1782751908,
-  "backup_dir": "/opt/atlasvm/backups/network/20260629-115148",
-  "confirmed_at": 1782751936,
+  "applied_at": 1782753415,
+  "backup_dir": "/opt/atlasvm/backups/network/20260629-121655",
+  "confirmed_at": 1782753429,
   "plan": {
     "dns_servers": "10.21.250.103,10.21.250.104",
     "gateway": "10.21.50.1",
@@ -12,7 +12,7 @@
     "vlan_tag": ""
   },
   "rollback_cancelled": true,
-  "rollback_timeout_seconds": 120,
+  "rollback_timeout_seconds": 180,
   "written_files": [
     "/etc/systemd/network/10-atlasvm-enp4s0f2np2.network"
   ]
