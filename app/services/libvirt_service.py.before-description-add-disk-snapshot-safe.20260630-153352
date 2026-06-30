@@ -495,83 +495,40 @@ class LibvirtService:
         }
 
     def update_vm_basic(self, name: str, memory_mb: int, vcpus: int, description: str | None = None) -> dict[str, Any]:
-        """Update basic VM settings without undefining/redefining the domain.
-
-        Snapshot-safe behavior:
-        - Description is updated with libvirt metadata.
-        - Memory and vCPU config are updated through libvirt setters.
-        - Memory/vCPU changes still require the VM to be shut down.
-        """
         domain = self.conn.lookupByName(name)
-
         if memory_mb < 256:
             raise ValueError('memory_mb must be at least 256')
         if vcpus < 1:
             raise ValueError('vcpus must be at least 1')
 
-        try:
-            xml_text = domain.XMLDesc(libvirt.VIR_DOMAIN_XML_INACTIVE)
-        except Exception:
-            xml_text = domain.XMLDesc()
-
-        root = ET.fromstring(xml_text)
-
+        root = ET.fromstring(domain.XMLDesc())
         existing_memory = root.find('./memory')
         existing_vcpu = root.find('./vcpu')
         existing_memory_mb = int((existing_memory.text or '0')) // 1024 if existing_memory is not None else None
         existing_vcpus = int(existing_vcpu.text or '0') if existing_vcpu is not None else None
-
         memory_changed = existing_memory_mb != memory_mb
         vcpu_changed = existing_vcpus != vcpus
 
         if domain.isActive() and (memory_changed or vcpu_changed):
             raise RuntimeError('Memory and vCPU changes require the VM to be shut down. Description-only edits are allowed while running.')
 
-        flags = libvirt.VIR_DOMAIN_AFFECT_CONFIG
-
-        if memory_changed:
-            memory_kib = memory_mb * 1024
-            try:
-                domain.setMemoryFlags(memory_kib, flags)
-            except Exception:
-                # Some drivers need max memory updated separately while inactive.
-                domain.setMaxMemory(memory_kib)
-                domain.setMemoryFlags(memory_kib, flags)
-
-        if vcpu_changed:
-            domain.setVcpusFlags(vcpus, flags)
-
-        marker = '[ATLASVM_TEMPLATE]'
-
-        try:
-            current_desc = domain.metadata(
-                libvirt.VIR_DOMAIN_METADATA_DESCRIPTION,
-                None,
-                0,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-            ) or ''
-        except Exception:
-            current_desc = root.findtext('./description') or ''
-
-        was_template = marker in current_desc
-        new_desc = (description or '').strip()
-
-        if was_template and marker not in new_desc:
-            if new_desc:
-                new_desc = new_desc + '\n\n' + marker
-            else:
-                new_desc = marker
-
-        domain.setMetadata(
-            libvirt.VIR_DOMAIN_METADATA_DESCRIPTION,
-            new_desc,
-            None,
-            None,
-            libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-        )
-
+        memory_kib = str(memory_mb * 1024)
+        for tag in ('memory', 'currentMemory'):
+            elem = root.find(f'./{tag}')
+            if elem is None:
+                elem = ET.SubElement(root, tag)
+                elem.attrib['unit'] = 'KiB'
+            elem.text = memory_kib
+        vcpu = root.find('./vcpu')
+        if vcpu is None:
+            vcpu = ET.SubElement(root, 'vcpu')
+        vcpu.text = str(vcpus)
+        desc = root.find('./description')
+        if desc is None:
+            desc = ET.SubElement(root, 'description')
+        desc.text = description or ''
+        self._redefine_domain(domain, root)
         return self.get_vm(name)
-
 
     def attach_iso(self, name: str, iso_path: str, live: bool = False) -> None:
         """Attach ISO media without undefining/redefining the VM.
@@ -672,91 +629,28 @@ class LibvirtService:
 
 
     def add_disk(self, name: str, size_gb: int, storage_pool: str | None = None) -> str:
-        """Add a disk without undefining/redefining the VM.
-
-        Snapshot-safe behavior:
-        - Creates the backing volume.
-        - Attaches the new disk XML to persistent VM config.
-        - Does not call _redefine_domain().
-        """
         domain = self.conn.lookupByName(name)
-
         if domain.isActive():
             raise RuntimeError('Adding disks from AtlasVM currently requires the VM to be shut down')
-
         if size_gb < 1:
             raise ValueError('size_gb must be at least 1')
-
         storage_pool = storage_pool or self.settings.default_storage_pool
-
         existing = self._domain_disk_paths(domain)
-
-        # Find the next unused disk index. Previous failed attempts may have
-        # created orphaned volumes, so do not assume len(existing) + 1 is safe.
         disk_index = len(existing) + 1
-        volume = None
-        last_error = None
-
-        for candidate_index in range(disk_index, disk_index + 50):
-            candidate_name = f'{name}-disk{candidate_index}'
-            try:
-                volume = create_volume_for_pool(
-                    storage_pool,
-                    candidate_name,
-                    size_gb,
-                    prefer_format='qcow2',
-                )
-                disk_index = candidate_index
-                break
-            except Exception as exc:
-                last_error = exc
-                if 'exists already' in str(exc) or 'already exists' in str(exc):
-                    continue
-                raise
-
-        if volume is None:
-            raise RuntimeError(f'Could not create a unique disk volume for {name}: {last_error}')
-
-        # Pick a target device that should not collide with existing virtio disks.
-        used_targets = set()
-        try:
-            xml_text_for_targets = domain.XMLDesc(libvirt.VIR_DOMAIN_XML_INACTIVE)
-        except Exception:
-            xml_text_for_targets = domain.XMLDesc()
-
-        target_root = ET.fromstring(xml_text_for_targets)
-        for disk_node in target_root.findall('./devices/disk'):
-            target_node = disk_node.find('./target')
-            if target_node is not None and target_node.attrib.get('dev'):
-                used_targets.add(target_node.attrib.get('dev'))
-
-        target_dev = None
-        for letter in 'bcdefghijklmnopqrstuvwxyz':
-            candidate_dev = f'vd{letter}'
-            if candidate_dev not in used_targets:
-                target_dev = candidate_dev
-                break
-
-        if target_dev is None:
-            raise RuntimeError('No available virtio disk target names remain')
-
-        disk = ET.Element('disk')
+        volume = create_volume_for_pool(storage_pool, f'{name}-disk{disk_index}', size_gb, prefer_format='qcow2')
+        root = ET.fromstring(domain.XMLDesc())
+        devices = root.find('./devices')
+        if devices is None:
+            raise RuntimeError('Domain XML has no devices section')
+        target_dev = f'vd{chr(ord("a") + disk_index)}'
+        disk = ET.SubElement(devices, 'disk')
         set_disk_source(disk, volume, target_dev=target_dev)
-
-        disk_xml = ET.tostring(disk, encoding='unicode')
-
-        domain.attachDeviceFlags(
-            disk_xml,
-            libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-        )
-
+        self._redefine_domain(domain, root)
         try:
             self.conn.storagePoolLookupByName(storage_pool).refresh(0)
         except Exception:
             pass
-
         return volume['path']
-
 
     def clone_vm(self, source_name: str, new_name: str, storage_pool: str | None = None) -> dict[str, Any]:
         if not re.match(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', new_name):

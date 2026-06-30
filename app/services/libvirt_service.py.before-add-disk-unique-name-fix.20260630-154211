@@ -690,55 +690,16 @@ class LibvirtService:
         storage_pool = storage_pool or self.settings.default_storage_pool
 
         existing = self._domain_disk_paths(domain)
-
-        # Find the next unused disk index. Previous failed attempts may have
-        # created orphaned volumes, so do not assume len(existing) + 1 is safe.
         disk_index = len(existing) + 1
-        volume = None
-        last_error = None
 
-        for candidate_index in range(disk_index, disk_index + 50):
-            candidate_name = f'{name}-disk{candidate_index}'
-            try:
-                volume = create_volume_for_pool(
-                    storage_pool,
-                    candidate_name,
-                    size_gb,
-                    prefer_format='qcow2',
-                )
-                disk_index = candidate_index
-                break
-            except Exception as exc:
-                last_error = exc
-                if 'exists already' in str(exc) or 'already exists' in str(exc):
-                    continue
-                raise
+        volume = create_volume_for_pool(
+            storage_pool,
+            f'{name}-disk{disk_index}',
+            size_gb,
+            prefer_format='qcow2',
+        )
 
-        if volume is None:
-            raise RuntimeError(f'Could not create a unique disk volume for {name}: {last_error}')
-
-        # Pick a target device that should not collide with existing virtio disks.
-        used_targets = set()
-        try:
-            xml_text_for_targets = domain.XMLDesc(libvirt.VIR_DOMAIN_XML_INACTIVE)
-        except Exception:
-            xml_text_for_targets = domain.XMLDesc()
-
-        target_root = ET.fromstring(xml_text_for_targets)
-        for disk_node in target_root.findall('./devices/disk'):
-            target_node = disk_node.find('./target')
-            if target_node is not None and target_node.attrib.get('dev'):
-                used_targets.add(target_node.attrib.get('dev'))
-
-        target_dev = None
-        for letter in 'bcdefghijklmnopqrstuvwxyz':
-            candidate_dev = f'vd{letter}'
-            if candidate_dev not in used_targets:
-                target_dev = candidate_dev
-                break
-
-        if target_dev is None:
-            raise RuntimeError('No available virtio disk target names remain')
+        target_dev = f'vd{chr(ord("a") + disk_index)}'
 
         disk = ET.Element('disk')
         set_disk_source(disk, volume, target_dev=target_dev)

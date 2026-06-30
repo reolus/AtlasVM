@@ -462,6 +462,70 @@ def create_snapshot_form_before_vm_action(
         return _redirect(f'/vms/{name}', error=str(exc))
 
 
+@app.post('/ui/vms/{name}/{action}')
+def vm_action(request: Request, name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
+    lv = LibvirtService()
+    task = start_task(db, user, action, name)
+    try:
+        if action in {'delete', 'delete-with-disks'} and get_user_role(user) != 'admin':
+            raise PermissionError('AtlasVM administrator rights are required for VM deletion')
+        if action == 'start':
+            lv.start_vm(name)
+        elif action == 'shutdown':
+            lv.shutdown_vm(name)
+        elif action == 'force-stop':
+            lv.force_stop_vm(name)
+        elif action == 'reboot':
+            lv.reboot_vm(name)
+        elif action == 'autostart-on':
+            lv.set_autostart(name, True)
+        elif action == 'autostart-off':
+            lv.set_autostart(name, False)
+        elif action == 'delete':
+            lv.delete_vm(name, delete_disks=False)
+            finish_task(db, task, 'success', 'VM deleted')
+            log_event(db, user, action, name, 'Deleted VM without disks')
+            return RedirectResponse(url='/', status_code=303)
+        elif action == 'delete-with-disks':
+            lv.delete_vm(name, delete_disks=True)
+            finish_task(db, task, 'success', 'VM and disks deleted')
+            log_event(db, user, action, name, 'Deleted VM and disks')
+            return RedirectResponse(url='/', status_code=303)
+        elif action == 'console':
+            display = lv.vnc_display(name)
+            if not display:
+                raise ValueError(f'VM {name} does not have an active VNC display. Make sure it is running and has VNC graphics enabled.')
+            host = request.headers.get('host', '').split(':')[0]
+            session = ConsoleService().start_novnc(name, display, request_host=host)
+            finish_task(db, task, 'success', f'Console opened: {session.url}')
+            log_event(db, user, 'open_console', name, session.url)
+            return RedirectResponse(url=session.url, status_code=303)
+        elif action == 'delete-confirm':
+            return RedirectResponse(url=f'/vms/{name}/delete-confirm', status_code=303)
+
+        elif action == 'clone':
+            return RedirectResponse(url=f'/vms/{name}/clone', status_code=303)
+
+        else:
+            if action == 'template':
+                LibvirtService().mark_vm_as_template(name)
+                return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+            if action == 'backup':
+                return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+            raise ValueError(f'Unsupported action: {action}')
+            log_event(db, user, action, name, f'UI action: {action}')
+            finish_task(db, task, 'success', f'Action completed: {action}')
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        log_event(db, user, f'{action}_failed', name, str(exc))
+        raise
+    finally:
+        lv.close()
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
 
 @app.post('/ui/vms/{name}/edit')
 def vm_edit_basic(name: str, memory_mb: int = Form(...), vcpus: int = Form(...), description: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
@@ -481,48 +545,35 @@ def vm_edit_basic(name: str, memory_mb: int = Form(...), vcpus: int = Form(...),
 
 
 @app.post('/ui/vms/{name}/iso/attach')
-def vm_attach_iso(
-    name: str,
-    iso_path: str = Form(...),
-    live: bool = Form(False),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_operator),
-):
+def vm_attach_iso(name: str, iso_path: str = Form(...), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'attach_iso', name)
     try:
-        lv.attach_iso(name, iso_path, live=live)
+        lv.attach_iso(name, iso_path)
         log_event(db, user, 'attach_iso', name, iso_path)
         finish_task(db, task, 'success', 'ISO attached')
-        return _redirect(f'/vms/{name}', message='ISO attached')
     except Exception as exc:
         finish_task(db, task, 'failed', str(exc))
-        log_event(db, user, 'attach_iso_failed', name, str(exc))
-        return _redirect(f'/vms/{name}', error=str(exc))
+        raise
     finally:
         lv.close()
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
 
 
 @app.post('/ui/vms/{name}/iso/eject')
-def vm_eject_iso(
-    name: str,
-    live: bool = Form(False),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_operator),
-):
+def vm_eject_iso(name: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'eject_iso', name)
     try:
-        lv.eject_iso(name, live=live)
+        lv.eject_iso(name)
         log_event(db, user, 'eject_iso', name, 'Ejected CD-ROM media')
         finish_task(db, task, 'success', 'ISO ejected')
-        return _redirect(f'/vms/{name}', message='ISO ejected')
     except Exception as exc:
         finish_task(db, task, 'failed', str(exc))
-        log_event(db, user, 'eject_iso_failed', name, str(exc))
-        return _redirect(f'/vms/{name}', error=str(exc))
+        raise
     finally:
         lv.close()
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
 
 
 @app.post('/ui/vms/{name}/disks/add')
@@ -645,72 +696,6 @@ def snapshot_action(name: str, snapshot: str, action: str, db: Session = Depends
         lv.close()
     return RedirectResponse(url=f'/vms/{name}', status_code=303)
 
-
-
-
-@app.post('/ui/vms/{name}/{action}')
-def vm_action(request: Request, name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
-    lv = LibvirtService()
-    task = start_task(db, user, action, name)
-    try:
-        if action in {'delete', 'delete-with-disks'} and get_user_role(user) != 'admin':
-            raise PermissionError('AtlasVM administrator rights are required for VM deletion')
-        if action == 'start':
-            lv.start_vm(name)
-        elif action == 'shutdown':
-            lv.shutdown_vm(name)
-        elif action == 'force-stop':
-            lv.force_stop_vm(name)
-        elif action == 'reboot':
-            lv.reboot_vm(name)
-        elif action == 'autostart-on':
-            lv.set_autostart(name, True)
-        elif action == 'autostart-off':
-            lv.set_autostart(name, False)
-        elif action == 'delete':
-            lv.delete_vm(name, delete_disks=False)
-            finish_task(db, task, 'success', 'VM deleted')
-            log_event(db, user, action, name, 'Deleted VM without disks')
-            return RedirectResponse(url='/', status_code=303)
-        elif action == 'delete-with-disks':
-            lv.delete_vm(name, delete_disks=True)
-            finish_task(db, task, 'success', 'VM and disks deleted')
-            log_event(db, user, action, name, 'Deleted VM and disks')
-            return RedirectResponse(url='/', status_code=303)
-        elif action == 'console':
-            display = lv.vnc_display(name)
-            if not display:
-                raise ValueError(f'VM {name} does not have an active VNC display. Make sure it is running and has VNC graphics enabled.')
-            host = request.headers.get('host', '').split(':')[0]
-            session = ConsoleService().start_novnc(name, display, request_host=host)
-            finish_task(db, task, 'success', f'Console opened: {session.url}')
-            log_event(db, user, 'open_console', name, session.url)
-            return RedirectResponse(url=session.url, status_code=303)
-        elif action == 'delete-confirm':
-            return RedirectResponse(url=f'/vms/{name}/delete-confirm', status_code=303)
-
-        elif action == 'clone':
-            return RedirectResponse(url=f'/vms/{name}/clone', status_code=303)
-
-        else:
-            if action == 'template':
-                LibvirtService().mark_vm_as_template(name)
-                return RedirectResponse(url=f'/vms/{name}', status_code=303)
-
-
-            if action == 'backup':
-                return RedirectResponse(url=f'/vms/{name}', status_code=303)
-
-            raise ValueError(f'Unsupported action: {action}')
-            log_event(db, user, action, name, f'UI action: {action}')
-            finish_task(db, task, 'success', f'Action completed: {action}')
-    except Exception as exc:
-        finish_task(db, task, 'failed', str(exc))
-        log_event(db, user, f'{action}_failed', name, str(exc))
-        raise
-    finally:
-        lv.close()
-    return RedirectResponse(url=f'/vms/{name}', status_code=303)
 
 
 @app.get('/templates', response_class=HTMLResponse)

@@ -90,11 +90,9 @@
         {% for iso in isos %}<option value="{{ iso.path }}" {% if current_iso is defined and current_iso and (current_iso == iso.path or current_iso.endswith('/' ~ iso.name)) %}selected{% endif %}>{{ iso.name }}</option>{% endfor %}
       </select>
       {% if current_iso %}<small>Loaded: <code>{{ current_iso }}</code></small>{% endif %}
-      <span><button>Attach ISO</button><label class="check"><input name="live" type="checkbox" value="true"> Apply while VM is running</label></span>
+      <button>Attach ISO</button>
     </form>
-    <form method="post" action="/ui/vms/{{ vm.name }}/iso/eject">
-	    <span><button>Eject ISO</button><label class="check"><input name="live" type="checkbox" value="true"> Apply while VM is running</label></span>
-    </form>
+    <form method="post" action="/ui/vms/{{ vm.name }}/iso/eject"><button>Eject ISO</button></form>
   </div>
   <div>
     <h2>Backup</h2>
