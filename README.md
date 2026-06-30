@@ -163,3 +163,8 @@ See:
 ## Phase 7.5 UI cleanup
 
 Phase 7.5 adds the new wide AtlasVM logo, removes duplicate header title text, introduces a branded login screen with signed browser-session cookies, and keeps HTTP Basic auth fallback for scripts and curl.
+
+
+## Phase 10
+
+Phase 10 adds storage-aware backup, restore-as-new, retention, backup targets, and clone/delete improvements for file-backed and LVM-backed VM disks. See `docs/PHASE_TEN_DESIGN.md` and `docs/PHASE_TEN_UPGRADE.md`.

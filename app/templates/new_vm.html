@@ -13,16 +13,8 @@
     <div class="grid two">
       <label>Storage Pool
         <select name="storage_pool">
-        {% for pool in pools %}
-          <option value="{{ pool.name }}" {% if pool.name == default_pool %}selected{% endif %} {% if pool.supported is defined and not pool.supported %}disabled{% endif %}>
-            {{ pool.name }}
-            {% if pool.type is defined %}- {{ pool.type }}{% endif %}
-            {% if pool.mode is defined %}/ {{ pool.mode }}{% endif %}
-            {% if pool.available is defined %}- {{ pool.available }} free{% elif pool.available_gb is defined %}- {{ pool.available_gb }} GB free{% endif %}
-          </option>
-        {% endfor %}
+        {% for pool in pools %}<option value="{{ pool.name }}" {% if pool.name == default_pool %}selected{% endif %}>{{ pool.name }} - {{ pool.available_gb }} GB free</option>{% endfor %}
         </select>
-        <small>Directory pools create qcow2 files. Logical/LVM pools create raw block volumes.</small>
       </label>
       <label>Network
         <select name="network">

@@ -97,6 +97,13 @@
   <div>
     <h2>Backup</h2>
     <form method="post" action="/ui/vms/{{ vm.name }}/backup">
+      <label>Target
+        <select name="target_name">
+          {% for target in backup_targets %}
+          <option value="{{ target.name }}" {% if not target.enabled or not target.writable %}disabled{% endif %}>{{ target.name }} - {{ target.kind }}{% if not target.writable %} (not writable){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
       <label class="check"><input name="require_shutdown" type="checkbox" value="true" checked> Require VM shutdown</label>
       <label class="check"><input name="compress" type="checkbox" value="true" checked> Compress archive</label>
       <button>Backup VM</button>

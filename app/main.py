@@ -298,8 +298,8 @@ def logout():
     return response
 
 
-def _job_backup_vm(name: str, compress: bool, require_shutdown: bool) -> str:
-    result = BackupService().create_backup(name, compress=compress, require_shutdown=require_shutdown)
+def _job_backup_vm(name: str, compress: bool, require_shutdown: bool, target_name: str | None = None) -> str:
+    result = BackupService().create_backup(name, compress=compress, require_shutdown=require_shutdown, target_name=target_name)
     return result.archive_path or result.backup_dir
 
 
@@ -321,8 +321,8 @@ def _job_clone_template(template_name: str, new_name: str, storage_pool: str | N
         lv.close()
 
 
-def _job_restore_backup_as_new(backup_dir: str, new_name: str, storage_pool: str | None = None) -> str:
-    result = BackupService().restore_as_new_vm(backup_dir, new_name, storage_pool)
+def _job_restore_backup_as_new(backup_dir: str, new_name: str, storage_pool: str | None = None, network_name: str | None = None, start_after_restore: bool = False) -> str:
+    result = BackupService().restore_as_new_vm(backup_dir, new_name, storage_pool, network_name=network_name, start_after_restore=start_after_restore)
     return f"Restored backup as {result['name']} with disks: {result.get('disks', '')}"
 
 
@@ -412,8 +412,10 @@ def vm_detail(name: str, request: Request, error_msg: str | None = Query(None, a
         error = str(exc)
     finally:
         lv.close()
-    backups = BackupService().list_backups(name)
-    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'error': error, 'success': success, 'current_iso': current_iso, 'metrics': metrics,
+    backup_service = BackupService()
+    backups = backup_service.list_backups(name)
+    backup_targets = backup_service.list_targets()
+    return templates.TemplateResponse('vm_detail.html', {'request': request, 'app_name': settings.app_name, 'vm': vm, 'isos': isos, 'pools': pools, 'backups': backups, 'backup_targets': backup_targets, 'error': error, 'success': success, 'current_iso': current_iso, 'metrics': metrics,
             'user': user,
         })
 
@@ -551,13 +553,16 @@ def vm_clone(name: str, new_name: str = Form(...), storage_pool: str = Form(''),
 
 
 @app.post('/ui/vms/{name}/backup')
-def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = Form(True), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = Form(True), target_name: str = Form('default'), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     try:
-        task_id = enqueue_task(user, 'backup_vm', name, _job_backup_vm, name, compress, require_shutdown)
-        log_event(db, user, 'queue_backup_vm', name, f'Queued backup; task={task_id}')
-        return _redirect('/tasks', message=f'Backup queued as task {task_id}')
+        target = target_name or 'default'
+        task_id = enqueue_task(user, 'backup_vm', name, _job_backup_vm, name, compress, require_shutdown, target)
+        log_event(db, user, 'queue_backup_vm', name, f'Queued backup to {target}; task={task_id}')
+        return RedirectResponse(url=f'/vms/{name}', status_code=303)
     except Exception as exc:
-        return _redirect(f'/vms/{name}', error=str(exc))
+        log_event(db, user, 'queue_backup_vm_failed', name, str(exc))
+        return RedirectResponse(url=f'/vms/{name}?error={exc}', status_code=303)
+
 
 
 @app.post('/ui/vms/{name}/delete-confirm')
@@ -1472,39 +1477,6 @@ def vm_disk_remove(
         return _redirect(f'/vms/{vm_name}/disks', error=str(exc))
 
 
-
-@app.post('/vms/{name}/network/clean-vlan')
-def vm_network_clean_vlan(
-    name: str,
-    mac_address: str = Form(...),
-    apply_live: bool = Form(False),
-    user: str = Depends(require_operator),
-):
-    from urllib.parse import quote
-
-    settings = get_settings()
-
-    try:
-        result = remove_vm_interface_vlan_tag(
-            vm_name=name,
-            mac_address=mac_address,
-            apply_live=apply_live,
-            libvirt_uri=settings.libvirt_uri,
-        )
-
-        message = result.get('message') or f"Cleaned NIC {result.get('mac')} using {result.get('mode')}."
-
-        return RedirectResponse(
-            url=f'/vms/{name}/network?message={quote(message)}',
-            status_code=303,
-        )
-    except Exception as exc:
-        return RedirectResponse(
-            url=f'/vms/{name}/network?error={quote(str(exc))}',
-            status_code=303,
-        )
-
-
 @app.get('/events', response_class=HTMLResponse)
 def events_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(250).all()
@@ -1523,10 +1495,63 @@ def tasks_page(request: Request, db: Session = Depends(get_db), user: str = Depe
 
 @app.get('/backups', response_class=HTMLResponse)
 def backups_page(request: Request, user: str = Depends(require_user)):
-    backups = BackupService().list_backups()
-    return templates.TemplateResponse('backups.html', {'request': request, 'app_name': settings.app_name, 'backups': backups, 'backup_path': settings.backup_path, 'retention': BackupService().retention_policy(), 'message': request.query_params.get('message'), 'error': request.query_params.get('error'),
-            'user': user,
-        })
+    svc = BackupService()
+    backups = svc.list_backups()
+    targets = svc.list_targets()
+    try:
+        pools = list_storage_pools_for_disks()
+    except Exception:
+        pools = []
+    try:
+        _, _, networks, _, _ = _lv_data()
+    except Exception:
+        networks = []
+    return templates.TemplateResponse(
+        'backups.html',
+        {
+            **_view_context(request, user),
+            'backups': backups,
+            'backup_path': settings.backup_path,
+            'retention': svc.retention_policy(),
+            'targets': targets,
+            'pools': pools,
+            'networks': networks,
+        },
+    )
+
+
+@app.post('/backups/targets')
+def backups_save_target(
+    name: str = Form(...),
+    path: str = Form(...),
+    kind: str = Form('custom'),
+    label: str = Form(''),
+    enabled: bool = Form(True),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_operator),
+):
+    try:
+        BackupService().save_target(name=name, path=path, kind=kind, label=label, enabled=enabled)
+        log_event(db, user, 'backup_target_save', name, path)
+        return _redirect('/backups', message=f'Saved backup target {name}')
+    except Exception as exc:
+        log_event(db, user, 'backup_target_save_failed', name, str(exc))
+        return _redirect('/backups', error=str(exc))
+
+
+@app.post('/backups/targets/delete')
+def backups_delete_target(
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_operator),
+):
+    try:
+        BackupService().delete_target(name)
+        log_event(db, user, 'backup_target_delete', name, 'Deleted backup target metadata')
+        return _redirect('/backups', message=f'Deleted backup target {name}')
+    except Exception as exc:
+        log_event(db, user, 'backup_target_delete_failed', name, str(exc))
+        return _redirect('/backups', error=str(exc))
 
 
 @app.post('/backups/restore-definition')
@@ -1539,8 +1564,7 @@ def restore_backup_definition(backup_dir: str = Form(...), new_name: str = Form(
         return RedirectResponse(url=f"/vms/{result['name']}", status_code=303)
     except Exception as exc:
         finish_task(db, task, 'failed', str(exc))
-        raise
-
+        return _redirect('/backups', error=str(exc))
 
 
 @app.post('/backups/restore-as-new')
@@ -1548,15 +1572,28 @@ def restore_backup_as_new(
     backup_dir: str = Form(...),
     new_name: str = Form(...),
     storage_pool: str = Form(''),
+    network_name: str = Form(''),
+    start_after_restore: bool = Form(False),
     db: Session = Depends(get_db),
     user: str = Depends(require_operator),
 ):
     try:
-        task_id = enqueue_task(user, 'restore_backup_as_new', backup_dir, _job_restore_backup_as_new, backup_dir, new_name, storage_pool or None)
+        task_id = enqueue_task(
+            user,
+            'restore_backup_as_new',
+            backup_dir,
+            _job_restore_backup_as_new,
+            backup_dir,
+            new_name,
+            storage_pool or None,
+            network_name or None,
+            start_after_restore,
+        )
         log_event(db, user, 'queue_restore_backup_as_new', new_name, f'Queued restore from {backup_dir}; task={task_id}')
         return _redirect('/tasks', message=f'Restore queued as task {task_id}')
     except Exception as exc:
         return _redirect('/backups', error=str(exc))
+
 
 
 @app.get('/zfs', response_class=HTMLResponse)
@@ -1625,9 +1662,9 @@ def zfs_delete_export(path: str = Form(...), db: Session = Depends(get_db), user
 
 
 @app.post('/backups/prune')
-def backups_prune(vm_name: str = Form(''), keep_last: int | None = Form(None), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+def backups_prune(vm_name: str = Form(''), keep_last: int | None = Form(None), target_name: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     try:
-        result = BackupService().prune_backups(vm_name.strip() or None, keep_last=keep_last)
+        result = BackupService().prune_backups(vm_name.strip() or None, keep_last=keep_last, target_name=target_name or None)
         log_event(db, user, 'backup_prune', vm_name or 'all', str(result))
         return _redirect('/backups', message=f"Backup retention applied; deleted {result['deleted_count']} item(s)")
     except Exception as exc:
@@ -1638,13 +1675,9 @@ def backups_prune(vm_name: str = Form(''), keep_last: int | None = Form(None), d
 @app.get('/doctor', response_class=HTMLResponse)
 def doctor_page(request: Request, user: str = Depends(require_user)):
     checks = run_doctor()
-    return templates.TemplateResponse(
-        'doctor.html',
-        {
-            **_view_context(request, user),
-            'checks': checks,
-        },
-    )
+    return templates.TemplateResponse('doctor.html', {'request': request, 'app_name': settings.app_name, 'checks': checks,
+            'user': user,
+        })
 
 
 @app.get('/settings', response_class=HTMLResponse)

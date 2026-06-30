@@ -5,16 +5,10 @@
   <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
     <div>
       <h2>Network Interfaces: {{ name }}</h2>
-      <p>VM NICs attach to AtlasVM networks. VLAN tags belong to the AtlasVM network or host bridge, not the VM NIC.</p>
+      <p>VM NICs attach to AtlasVM networks. VLAN tags are owned by the network and inherited by the VM NIC.</p>
     </div>
     <form method="get" action="/vms/{{ name }}" style="margin:0;"><button type="submit">Back to VM</button></form>
   </div>
-
-  {% if running %}
-  <p><span class="pill">running</span> Live changes require the apply-live checkbox.</p>
-  {% else %}
-  <p><span class="pill">offline</span> Changes will be saved to the VM config and apply on next boot.</p>
-  {% endif %}
 
   {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
   {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
@@ -28,11 +22,9 @@
         <th>#</th>
         <th>MAC</th>
         <th>Type</th>
-        <th>Network / Source</th>
+        <th>Network</th>
         <th>Model</th>
-        <th>Network VLAN</th>
-        <th>VM NIC VLAN</th>
-        <th>Status</th>
+        <th>NIC VLAN</th>
       </tr>
     </thead>
     <tbody>
@@ -41,67 +33,12 @@
         <td>{{ iface.index }}</td>
         <td><code>{{ iface.mac }}</code></td>
         <td>{{ iface.type }}</td>
-        <td>
-          <code>{{ iface.source }}</code>
-          {% if iface.source_kind %}<br><small>{{ iface.source_kind }}</small>{% endif %}
-        </td>
+        <td>{{ iface.source }}</td>
         <td>{{ iface.model }}</td>
-        <td>
-          {% if iface.network_vlan_tag %}
-          {{ iface.network_vlan_tag }}
-          {% else %}
-          <span class="muted">untagged</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if iface.vm_vlan_tag %}
-          <span class="danger">{{ iface.vm_vlan_tag }}</span>
-          {% else %}
-          <span class="muted">none</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if iface.warning %}
-          <span class="danger">{{ iface.warning }}</span>
-          <form method="post" action="/vms/{{ name }}/network/clean-vlan" style="margin-top:.5rem;">
-            <input type="hidden" name="mac_address" value="{{ iface.mac }}">
-            <label class="check">
-              <input name="apply_live" type="checkbox" value="true">
-              Apply live
-            </label>
-            <button type="submit">Clean VLAN Tag</button>
-          </form>
-          {% else %}
-          OK
-          {% endif %}
-        </td>
+        <td>{% if iface.vlan_tag %}{{ iface.vlan_tag }}{% else %}<span class="muted">untagged</span>{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="8">No network interfaces found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-
-<section>
-  <h3>Available Networks</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Network</th>
-        <th>State</th>
-        <th>VLAN</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for net in networks %}
-      <tr>
-        <td><code>{{ net.name }}</code></td>
-        <td>{% if net.active %}active{% else %}<span class="danger">inactive</span>{% endif %}</td>
-        <td>{% if net.vlan_tag %}{{ net.vlan_tag }}{% else %}<span class="muted">untagged</span>{% endif %}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="3">No libvirt networks found.</td></tr>
+      <tr><td colspan="6">No network interfaces found.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -124,9 +61,7 @@
         New Network
         <select name="network_name" required>
           {% for net in networks %}
-          <option value="{{ net.name }}" {% if not net.active %}disabled{% endif %}>
-            {{ net.label }}{% if not net.active %} (inactive){% endif %}
-          </option>
+          <option value="{{ net.name }}">{{ net.name }}{% if net.vlan_tag %} - VLAN {{ net.vlan_tag }}{% else %} - untagged{% endif %}</option>
           {% endfor %}
         </select>
       </label>
@@ -147,9 +82,7 @@
         Network
         <select name="network_name" required>
           {% for net in networks %}
-          <option value="{{ net.name }}" {% if not net.active %}disabled{% endif %}>
-            {{ net.label }}{% if not net.active %} (inactive){% endif %}
-          </option>
+          <option value="{{ net.name }}">{{ net.name }}{% if net.vlan_tag %} - VLAN {{ net.vlan_tag }}{% else %} - untagged{% endif %}</option>
           {% endfor %}
         </select>
       </label>
@@ -159,7 +92,6 @@
         <select name="model_type">
           <option value="virtio" selected>virtio</option>
           <option value="e1000e">e1000e</option>
-          <option value="e1000">e1000</option>
           <option value="rtl8139">rtl8139</option>
         </select>
       </label>

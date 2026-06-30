@@ -12,13 +12,14 @@ from typing import Any
 import libvirt
 
 from app.core.config import get_settings
-from app.services.vm_storage_integration import (
-    build_vm_disk_xml,
-    create_vm_disk_volume,
+from app.services.vm_storage_utils import (
+    create_volume_from_image,
     delete_disk_source,
+    disk_records_from_domain_xml,
     disk_sources_from_domain_xml,
+    qemu_virtual_size_gb,
+    set_disk_source,
 )
-
 
 
 @dataclass
@@ -441,14 +442,11 @@ class LibvirtService:
         domain = self.conn.lookupByName(name)
         if domain.isActive():
             domain.destroy()
-
         disk_paths = self._domain_disk_paths(domain) if delete_disks else []
-
         try:
             domain.undefineFlags(libvirt.VIR_DOMAIN_UNDEFINE_NVRAM)
         except Exception:
             domain.undefine()
-
         for disk_path in disk_paths:
             try:
                 delete_disk_source(disk_path)
@@ -457,8 +455,8 @@ class LibvirtService:
 
     def create_vm(self, req: VMCreateRequest) -> dict[str, Any]:
         self._validate_vm_request(req)
-        disk_info = self._create_vm_disk(req)
-        xml = self._build_domain_xml(req, disk_info)
+        disk_path = self._create_qcow2_disk(req)
+        xml = self._build_domain_xml(req, disk_path)
         domain = self.conn.defineXML(xml)
         if domain is None:
             raise RuntimeError('libvirt failed to define the VM')
@@ -632,16 +630,22 @@ class LibvirtService:
             if graphics.attrib.get('type') == 'vnc':
                 graphics.attrib['port'] = '-1'
                 graphics.attrib['autoport'] = 'yes'
-        for idx, disk in enumerate(root.findall('./devices/disk')):
+        disk_number = 0
+        for disk in root.findall('./devices/disk'):
             if disk.attrib.get('device') != 'disk':
                 continue
             src = disk.find('source')
-            if src is None or 'file' not in src.attrib:
+            if src is None:
                 continue
-            source_disk = src.attrib['file']
-            new_disk = str(Path(target_path) / f'{new_name}-disk{idx + 1}.qcow2')
-            subprocess.run(['qemu-img', 'convert', '-O', 'qcow2', source_disk, new_disk], check=True)
-            src.attrib['file'] = new_disk
+            source_disk = src.attrib.get('file') or src.attrib.get('dev') or src.attrib.get('name')
+            if not source_disk:
+                continue
+            disk_number += 1
+            size_gb = qemu_virtual_size_gb(source_disk, fallback_gb=1)
+            volume = create_volume_from_image(storage_pool, f'{new_name}-disk{disk_number}', source_disk, size_gb, prefer_format='qcow2')
+            target = disk.find('target')
+            target_dev = target.attrib.get('dev') if target is not None else f'vd{chr(ord("a") + disk_number - 1)}'
+            set_disk_source(disk, volume, target_dev=target_dev)
         xml = ET.tostring(root, encoding='unicode')
         domain = self.conn.defineXML(xml)
         if domain is None:
@@ -718,7 +722,7 @@ class LibvirtService:
                 target = disk.find('target')
                 source = disk.find('source')
                 dev = target.attrib.get('dev') if target is not None else None
-                path = source.attrib.get('file') if source is not None else None
+                path = (source.attrib.get('file') or source.attrib.get('dev') or source.attrib.get('name')) if source is not None else None
                 item = {'device': dev, 'path': path, 'rd_bytes': None, 'wr_bytes': None, 'rd_requests': None, 'wr_requests': None}
                 if dev:
                     try:
@@ -825,15 +829,23 @@ class LibvirtService:
         if not re.match(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', name):
             raise ValueError('Snapshot name may contain letters, numbers, hyphens, and underscores')
 
-    def _create_vm_disk(self, req: VMCreateRequest) -> dict[str, Any]:
-        return create_vm_disk_volume(
-            pool_name=req.storage_pool,
-            vm_name=req.name,
-            size_gb=req.disk_gb,
-            disk_index=1,
-        )
+    def _create_qcow2_disk(self, req: VMCreateRequest) -> str:
+        pool = self.conn.storagePoolLookupByName(req.storage_pool)
+        if not pool.isActive():
+            pool.create()
+        pool.refresh(0)
+        pool_xml = ET.fromstring(pool.XMLDesc())
+        target_path = pool_xml.findtext('./target/path')
+        if not target_path:
+            raise RuntimeError(f'Storage pool has no target path: {req.storage_pool}')
+        disk_path = str(Path(target_path) / f'{req.name}.qcow2')
+        if Path(disk_path).exists():
+            raise ValueError(f'Disk already exists: {disk_path}')
+        subprocess.run(['qemu-img', 'create', '-f', 'qcow2', disk_path, f'{req.disk_gb}G'], check=True)
+        pool.refresh(0)
+        return disk_path
 
-    def _build_domain_xml(self, req: VMCreateRequest, disk_info: dict[str, Any]) -> str:
+    def _build_domain_xml(self, req: VMCreateRequest, disk_path: str) -> str:
         memory_kib = req.memory_mb * 1024
         cdrom_xml = ''
         boot_order = "<boot dev='cdrom'/><boot dev='hd'/>" if req.iso_path else "<boot dev='hd'/>"
@@ -850,7 +862,6 @@ class LibvirtService:
               <readonly/>
             </disk>
             """
-        primary_disk_xml = build_vm_disk_xml(disk_info, target_dev='vda')
         metadata = html.escape(req.description or '')
         return f"""
         <domain type='kvm'>
@@ -875,7 +886,11 @@ class LibvirtService:
           <on_crash>restart</on_crash>
           <devices>
             <emulator>/usr/bin/qemu-system-x86_64</emulator>
-            {primary_disk_xml}
+            <disk type='file' device='disk'>
+              <driver name='qemu' type='qcow2'/>
+              <source file='{html.escape(disk_path)}'/>
+              <target dev='vda' bus='virtio'/>
+            </disk>
             {cdrom_xml}
             <interface type='network'>
               <source network='{html.escape(req.network)}'/>
