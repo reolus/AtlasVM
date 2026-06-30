@@ -123,7 +123,9 @@
       </label>
       <button type="submit">Create Snapshot</button>
     </form>
-<table><thead><tr><th>Name</th><th>Description</th><th>Actions</th></tr></thead><tbody>
+
+  <a class="button" href="#snapshots">Snapshots</a>
+  <table><thead><tr><th>Name</th><th>Description</th><th>Actions</th></tr></thead><tbody>
     {% for snap in vm.snapshots %}
       <tr><td>{{ snap.name }}</td><td>{{ snap.description }}</td><td class="actions"><form method="post" action="/ui/vms/{{ vm.name }}/snapshots/{{ snap.name }}/revert"><button class="danger">Revert</button></form><form method="post" action="/ui/vms/{{ vm.name }}/snapshots/{{ snap.name }}/delete"><button>Delete</button></form></td></tr>
     {% else %}<tr><td colspan="4">No snapshots. Time travel has not yet been monetized here.</td></tr>{% endfor %}

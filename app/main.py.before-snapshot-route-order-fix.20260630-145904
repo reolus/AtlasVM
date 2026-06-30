@@ -435,33 +435,6 @@ def vm_detail(name: str, request: Request, error_msg: str | None = Query(None, a
         })
 
 
-
-@app.post('/ui/vms/{name}/snapshots')
-def create_snapshot_form_before_vm_action(
-    name: str,
-    snapshot_name: str = Form(...),
-    description: str = Form(''),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_operator),
-):
-    """Create a VM snapshot.
-
-    This route must be declared before the generic /ui/vms/{name}/{action}
-    route, otherwise FastAPI treats "snapshots" as a generic VM action.
-    """
-    task = start_task(db, user, 'create_snapshot', name)
-    try:
-        lv = LibvirtService()
-        lv.create_snapshot(name, snapshot_name, description or None)
-        log_event(db, user, 'create_snapshot', name, snapshot_name)
-        finish_task(db, task, 'success', f'Created snapshot {snapshot_name}')
-        return _redirect(f'/vms/{name}', message=f'Created snapshot {snapshot_name}')
-    except Exception as exc:
-        finish_task(db, task, 'failed', str(exc))
-        log_event(db, user, 'create_snapshot_failed', name, str(exc))
-        return _redirect(f'/vms/{name}', error=str(exc))
-
-
 @app.post('/ui/vms/{name}/{action}')
 def vm_action(request: Request, name: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
