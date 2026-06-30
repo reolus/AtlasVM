@@ -481,13 +481,12 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
 
         else:
             if action == 'template':
-                LibvirtService().mark_vm_as_template(name)
-                return RedirectResponse(url=f'/vms/{name}', status_code=303)
+        service.mark_vm_as_template(name)
+        return RedirectResponse(url=f'/vms/{name}', status_code=303)
 
-
-            raise ValueError(f'Unsupported action: {action}')
-            log_event(db, user, action, name, f'UI action: {action}')
-            finish_task(db, task, 'success', f'Action completed: {action}')
+    raise ValueError(f'Unsupported action: {action}')
+        log_event(db, user, action, name, f'UI action: {action}')
+        finish_task(db, task, 'success', f'Action completed: {action}')
     except Exception as exc:
         finish_task(db, task, 'failed', str(exc))
         log_event(db, user, f'{action}_failed', name, str(exc))

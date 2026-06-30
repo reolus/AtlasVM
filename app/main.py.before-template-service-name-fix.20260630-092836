@@ -481,7 +481,7 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
 
         else:
             if action == 'template':
-                LibvirtService().mark_vm_as_template(name)
+                service.mark_vm_as_template(name)
                 return RedirectResponse(url=f'/vms/{name}', status_code=303)
 
 

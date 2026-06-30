@@ -687,20 +687,19 @@ class LibvirtService:
         except Exception:
             current_desc = ""
 
-        lines = []
-        for line in current_desc.splitlines():
-            if line.strip() != marker:
-                lines.append(line)
-
-        cleaned = "\n".join(lines).strip()
+        lines = [line for line in current_desc.splitlines() if line.strip() != marker]
 
         if enabled:
-            if cleaned:
-                new_desc = cleaned + "\n\n" + marker
+            if lines:
+                new_desc = "
+".join(lines).rstrip() + "
+
+" + marker
             else:
                 new_desc = marker
         else:
-            new_desc = cleaned
+            new_desc = "
+".join(lines).strip()
 
         domain.setMetadata(
             libvirt.VIR_DOMAIN_METADATA_DESCRIPTION,
@@ -710,11 +709,10 @@ class LibvirtService:
             libvirt.VIR_DOMAIN_AFFECT_CONFIG,
         )
 
-        if enabled:
-            try:
-                domain.setAutostart(0)
-            except Exception:
-                pass
+        try:
+            domain.setAutostart(0 if enabled else domain.autostart())
+        except Exception:
+            pass
 
         return {
             "name": name,

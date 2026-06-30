@@ -663,65 +663,21 @@ class LibvirtService:
 
 
     def set_template(self, name: str, enabled: bool = True) -> dict[str, Any]:
-        """Mark or unmark a VM as an AtlasVM template.
-
-        Snapshot-safe implementation:
-        - Does not undefine/redefine the domain.
-        - Updates only the libvirt description metadata.
-        - Requires the VM to be shut down.
-        """
         domain = self.conn.lookupByName(name)
-
         if domain.isActive():
-            raise RuntimeError("Converting a VM to or from a template requires the VM to be shut down")
-
-        marker = "[ATLASVM_TEMPLATE]"
-
-        try:
-            current_desc = domain.metadata(
-                libvirt.VIR_DOMAIN_METADATA_DESCRIPTION,
-                None,
-                0,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-            ) or ""
-        except Exception:
-            current_desc = ""
-
-        lines = []
-        for line in current_desc.splitlines():
-            if line.strip() != marker:
-                lines.append(line)
-
-        cleaned = "\n".join(lines).strip()
-
-        if enabled:
-            if cleaned:
-                new_desc = cleaned + "\n\n" + marker
-            else:
-                new_desc = marker
-        else:
-            new_desc = cleaned
-
-        domain.setMetadata(
-            libvirt.VIR_DOMAIN_METADATA_DESCRIPTION,
-            new_desc,
-            None,
-            None,
-            libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-        )
-
-        if enabled:
-            try:
-                domain.setAutostart(0)
-            except Exception:
-                pass
-
-        return {
-            "name": name,
-            "is_template": enabled,
-            "description": new_desc,
-        }
-
+            raise RuntimeError('Converting a VM to or from a template requires the VM to be shut down')
+        root = ET.fromstring(domain.XMLDesc())
+        desc = root.find('./description')
+        if desc is None:
+            desc = ET.SubElement(root, 'description')
+        description = desc.text or ''
+        marker = '[ATLASVM_TEMPLATE]'
+        if enabled and marker not in description:
+            desc.text = (description + '\n' + marker).strip()
+        elif not enabled:
+            desc.text = description.replace(marker, '').strip()
+        self._redefine_domain(domain, root)
+        return self.get_vm(name)
 
     def list_templates(self) -> list[dict[str, Any]]:
         return [vm for vm in self.list_vms() if vm.get('is_template')]
