@@ -173,3 +173,10 @@ Phase 10 adds storage-aware backup, restore-as-new, retention, backup targets, a
 ## Phase 11.1 - Node Registry and Local Node API
 
 Adds AtlasVM node registration, token-protected local node API endpoints, node health UI, and remote inventory preview. This is the multi-node foundation only. Migration and HA are intentionally not included yet.
+
+## Phase 11.2 - Multi-node VM Inventory
+
+This package includes Phase 11.2, which makes the `/vms` page node-aware. It can display local and registered remote VMs, filter by node, and expose rich VM inventory through token-protected node APIs. Remote VM rows are intentionally view-only in this stage.
+
+See `docs/PHASE_ELEVEN_STAGE_TWO.md` for install and test notes.
+

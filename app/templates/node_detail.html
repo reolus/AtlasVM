@@ -32,8 +32,20 @@
 <section class="grid two">
   <div>
     <h3>VMs</h3>
-    <table><thead><tr><th>Name</th><th>Active</th><th>UUID</th></tr></thead><tbody>
-      {% for vm in inventory.libvirt.vms %}<tr><td>{{ vm.name }}</td><td>{{ vm.active }}</td><td><code>{{ vm.uuid }}</code></td></tr>{% else %}<tr><td colspan="3">No VMs.</td></tr>{% endfor %}
+    <table><thead><tr><th>Name</th><th>State</th><th>vCPU</th><th>Memory</th><th>UUID</th></tr></thead><tbody>
+      {% if inventory.vm_inventory is defined and inventory.vm_inventory.vms is defined %}
+        {% for vm in inventory.vm_inventory.vms %}
+        <tr>
+          <td>{{ vm.name }}</td>
+          <td>{{ vm.state }}</td>
+          <td>{{ vm.vcpu or '-' }}</td>
+          <td>{% if vm.memory %}{{ (vm.memory | int / 1024 / 1024) | round(1) }} GiB{% else %}-{% endif %}</td>
+          <td><code>{{ vm.uuid }}</code></td>
+        </tr>
+        {% else %}<tr><td colspan="5">No VMs.</td></tr>{% endfor %}
+      {% else %}
+        {% for vm in inventory.libvirt.vms %}<tr><td>{{ vm.name }}</td><td>{{ 'running' if vm.active else 'offline' }}</td><td>-</td><td>-</td><td><code>{{ vm.uuid }}</code></td></tr>{% else %}<tr><td colspan="5">No VMs.</td></tr>{% endfor %}
+      {% endif %}
     </tbody></table>
   </div>
   <div>

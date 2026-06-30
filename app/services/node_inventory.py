@@ -8,6 +8,7 @@ from typing import Any
 
 from app.services.doctor_service import run_doctor
 from app.services.node_registry import local_node_self
+from app.services.vm_inventory import list_vm_inventory
 
 
 def run(cmd: list[str], timeout: int = 6) -> subprocess.CompletedProcess:
@@ -117,9 +118,16 @@ def doctor_summary() -> dict[str, int]:
 
 
 def node_inventory() -> dict[str, Any]:
+    vm_inventory = {'total': 0, 'running': 0, 'offline': 0, 'vms': [], 'error': ''}
+    try:
+        vm_inventory = list_vm_inventory()
+    except Exception as exc:
+        vm_inventory['error'] = str(exc)
+
     return {
         'self': local_node_self(),
         'health': host_health(),
         'libvirt': libvirt_inventory(),
+        'vm_inventory': vm_inventory,
         'doctor': doctor_summary(),
     }

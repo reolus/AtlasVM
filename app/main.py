@@ -84,6 +84,7 @@ from app.services.node_registry import (
 )
 from app.services.node_inventory import host_health, node_inventory
 from app.services.node_client import enrich_nodes, node_inventory_remote
+from app.services.multinode_vm_inventory import multinode_vm_inventory, local_multinode_inventory
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -1417,12 +1418,16 @@ def iscsi_lvm_thin_apply(
 
 
 @app.get('/vms', response_class=HTMLResponse)
-def vms_page(request: Request, user: str = Depends(require_admin)):
+def vms_page(
+    request: Request,
+    node: str = Query('all'),
+    user: str = Depends(require_admin),
+):
     return templates.TemplateResponse(
         'vms.html',
         {
             **_view_context(request, user),
-            'inventory': list_vm_inventory(),
+            'inventory': multinode_vm_inventory(selected_node_id=node),
         },
     )
 
@@ -1709,6 +1714,14 @@ def api_node_inventory(request: Request):
     data = node_inventory()
     data['ok'] = True
     return data
+
+
+
+@app.get('/api/node/vms')
+def api_node_vms(request: Request):
+    _require_node_token(request)
+    data = local_multinode_inventory()
+    return {'ok': True, 'self': local_node_self(), 'vm_inventory': data}
 
 
 @app.get('/api/node/doctor')

@@ -19,15 +19,9 @@
   font-weight: 800;
   line-height: 1;
 }
-.vm-good {
-  color: var(--success, #5cb85c);
-}
-.vm-bad {
-  color: var(--danger, #d9534f);
-}
-.vm-small {
-  font-size: 0.9rem;
-}
+.vm-good { color: var(--success, #5cb85c); }
+.vm-bad { color: var(--danger, #d9534f); }
+.vm-small { font-size: 0.9rem; }
 .vm-pill {
   display: inline-block;
   border: 1px solid var(--border, #444);
@@ -35,26 +29,50 @@
   padding: 0.15rem 0.55rem;
   font-size: 0.85rem;
 }
-.vm-pill.running {
-  color: var(--success, #5cb85c);
+.vm-pill.running { color: var(--success, #5cb85c); }
+.vm-pill.offline { color: var(--danger, #d9534f); }
+.vm-pill.remote { color: #7ab7ff; }
+.vm-pill.local { color: var(--success, #5cb85c); }
+.vm-table code { word-break: break-all; }
+.vm-muted { opacity: 0.75; }
+.vm-node-filter {
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+  align-items: end;
+  margin-top: 1rem;
 }
-.vm-pill.offline {
-  color: var(--danger, #d9534f);
-}
-.vm-table code {
-  word-break: break-all;
-}
-.vm-muted {
-  opacity: 0.75;
+.vm-node-filter label { min-width: 260px; }
+.vm-node-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
 }
 </style>
 
 <section>
   <h2>Virtual Machines</h2>
-  <p>Inventory and status for VMs on this AtlasVM host. Not the dashboard. Revolutionary, apparently.</p>
+  <p>Node-aware VM inventory across this AtlasVM host and registered nodes. Remote VMs are visible here, but destructive remote actions are still parked outside like they deserve.</p>
 
   {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
   {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+
+  <form class="vm-node-filter" method="get" action="/vms">
+    <label>
+      Node
+      <select name="node">
+        <option value="all" {% if inventory.selected_node_id == 'all' %}selected{% endif %}>All registered nodes</option>
+        {% for n in inventory.nodes %}
+        <option value="{{ n.node_id }}" {% if inventory.selected_node_id == n.node_id %}selected{% endif %}>
+          {{ n.name or n.api_url }}{% if n.local %} (local){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Filter</button>
+    <a href="/nodes">Manage Nodes</a>
+  </form>
 </section>
 
 <section class="vm-summary-grid">
@@ -78,6 +96,32 @@
   <div class="vm-card">
     <h3>Actions</h3>
     <p><a href="/vms/new">Create VM</a></p>
+    <p><a href="/nodes">Nodes</a></p>
+  </div>
+</section>
+
+<section>
+  <h3>Node Status</h3>
+  <div class="vm-node-status-grid">
+    {% for node in inventory.node_statuses %}
+    <div class="vm-card">
+      <h4>{{ node.name or node.api_url }}</h4>
+      <p>
+        {% if node.ok %}
+        <span class="vm-pill running">online</span>
+        {% else %}
+        <span class="vm-pill offline">offline</span>
+        {% endif %}
+        {% if node.local %}<span class="vm-pill local">local</span>{% else %}<span class="vm-pill remote">remote</span>{% endif %}
+      </p>
+      <p><strong>{{ node.vm_count }}</strong> VM(s)</p>
+      {% if node.latency_ms is defined and node.latency_ms is not none %}<p><small>{{ node.latency_ms }} ms</small></p>{% endif %}
+      {% if node.error %}<p class="vm-bad"><small>{{ node.error }}</small></p>{% endif %}
+      <p><a href="/nodes/{{ node.node_id }}">Node Detail</a></p>
+    </div>
+    {% else %}
+    <div class="vm-card">No node status records.</div>
+    {% endfor %}
   </div>
 </section>
 
@@ -87,6 +131,7 @@
   <table class="vm-table">
     <thead>
       <tr>
+        <th>Node</th>
         <th>Name</th>
         <th>State</th>
         <th>vCPU</th>
@@ -101,6 +146,13 @@
     <tbody>
       {% for vm in inventory.vms %}
       <tr>
+        <td>
+          <strong>{{ vm.node_name }}</strong>
+          <br>
+          {% if vm.node_local %}<span class="vm-pill local">local</span>{% else %}<span class="vm-pill remote">remote</span>{% endif %}
+          {% if vm.node_source %}<br><small class="vm-muted">{{ vm.node_source }}</small>{% endif %}
+        </td>
+
         <td>
           <strong>{{ vm.name }}</strong>
           {% if vm.uuid %}
@@ -171,14 +223,19 @@
 
         <td>
           <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+            {% if vm.node_local %}
             <a href="/vms/{{ vm.name }}">Details</a>
             <a href="/vms/{{ vm.name }}/console">Console</a>
             <a href="/vms/{{ vm.name }}/disks">Disks</a>
+            {% else %}
+            <a href="/nodes/{{ vm.node_id }}">Node Detail</a>
+            <span class="vm-muted">remote actions later</span>
+            {% endif %}
           </div>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9">No VMs found.</td></tr>
+      <tr><td colspan="10">No VMs found.</td></tr>
       {% endfor %}
     </tbody>
   </table>
