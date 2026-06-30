@@ -228,8 +228,13 @@
             <a href="/vms/{{ vm.name }}/console">Console</a>
             <a href="/vms/{{ vm.name }}/disks">Disks</a>
             {% else %}
-            <a href="/nodes/{{ vm.node_id }}">Node Detail</a>
-            <span class="vm-muted">remote actions later</span>
+            <a href="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}">Remote Detail</a>
+            <a href="{{ vm.node_api_url }}/vms/{{ vm.name }}/console" target="_blank">Console</a>
+            {% if vm.running %}
+            <form method="post" action="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}/shutdown" style="display:inline;" onsubmit="return confirm('Gracefully shut down {{ vm.name }} on {{ vm.node_name }}?');"><button type="submit">Shutdown</button></form>
+            {% else %}
+            <form method="post" action="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}/start" style="display:inline;" onsubmit="return confirm('Start {{ vm.name }} on {{ vm.node_name }}?');"><button type="submit">Start</button></form>
+            {% endif %}
             {% endif %}
           </div>
         </td>

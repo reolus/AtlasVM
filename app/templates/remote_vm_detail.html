@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.remote-vm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.remote-vm-card {
+  border: 1px solid var(--border, #333);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--panel, rgba(255,255,255,0.03));
+}
+.remote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: center;
+}
+.remote-actions form { margin: 0; }
+.remote-muted { opacity: .75; }
+.remote-good { color: var(--success, #5cb85c); }
+.remote-bad { color: var(--danger, #d9534f); }
+</style>
+
+<section>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <div>
+      <h2>Remote VM: {{ vm_name }}</h2>
+      <p>Node: <strong>{{ node.name }}</strong> <code>{{ node.api_url }}</code></p>
+    </div>
+    <div>
+      <a href="/nodes/{{ node.node_id }}"><button type="button">Node Detail</button></a>
+      <a href="/vms?node={{ node.node_id }}"><button type="button">VM List</button></a>
+    </div>
+  </div>
+
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+</section>
+
+{% if vm %}
+<section class="remote-vm-grid">
+  <div class="remote-vm-card">
+    <h3>Status</h3>
+    <p>
+      {% if vm.running %}
+      <span class="pill success">{{ vm.state }}</span>
+      {% else %}
+      <span class="pill failed">{{ vm.state }}</span>
+      {% endif %}
+    </p>
+    <p><strong>UUID:</strong> <code>{{ vm.uuid or '-' }}</code></p>
+    <p><strong>vCPU:</strong> {{ vm.vcpu or '-' }}</p>
+    <p><strong>Memory:</strong> {% if vm.memory %}{{ (vm.memory | int / 1024 / 1024) | round(1) }} GiB{% else %}-{% endif %}</p>
+    <p><strong>Autostart:</strong> {{ 'yes' if vm.autostart else 'no' }}</p>
+  </div>
+
+  <div class="remote-vm-card">
+    <h3>Remote Safe Actions</h3>
+    <p class="remote-muted">These actions execute on the owning node through its token-protected node API.</p>
+    <div class="remote-actions">
+      {% if vm.running %}
+      <form method="post" action="/nodes/{{ node.node_id }}/vms/{{ vm.name }}/shutdown" onsubmit="return confirm('Gracefully shut down {{ vm.name }} on {{ node.name }}?');">
+        <button type="submit">Shutdown</button>
+      </form>
+      <form method="post" action="/nodes/{{ node.node_id }}/vms/{{ vm.name }}/reboot" onsubmit="return confirm('Reboot {{ vm.name }} on {{ node.name }}?');">
+        <button type="submit">Reboot</button>
+      </form>
+      <form method="post" action="/nodes/{{ node.node_id }}/vms/{{ vm.name }}/poweroff" onsubmit="return confirm('FORCE power off {{ vm.name }} on {{ node.name }}? This is not graceful.');">
+        <button class="danger" type="submit">Force Power Off</button>
+      </form>
+      {% else %}
+      <form method="post" action="/nodes/{{ node.node_id }}/vms/{{ vm.name }}/start" onsubmit="return confirm('Start {{ vm.name }} on {{ node.name }}?');">
+        <button type="submit">Start</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="remote-vm-grid">
+  <div class="remote-vm-card">
+    <h3>Disks</h3>
+    <table>
+      <thead><tr><th>Target</th><th>Type</th><th>Format</th><th>Source</th></tr></thead>
+      <tbody>
+        {% for d in vm.disks %}
+        <tr>
+          <td><code>{{ d.target or '-' }}</code></td>
+          <td>{{ d.device or '-' }} / {{ d.type or '-' }}</td>
+          <td>{{ d.format or '-' }}</td>
+          <td><code>{{ d.source or '-' }}</code></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">No disks reported.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="remote-vm-card">
+    <h3>Network Interfaces</h3>
+    <table>
+      <thead><tr><th>Source</th><th>Model</th><th>MAC</th></tr></thead>
+      <tbody>
+        {% for nic in vm.interfaces %}
+        <tr>
+          <td><code>{{ nic.source or '-' }}</code></td>
+          <td>{{ nic.model or '-' }}</td>
+          <td><code>{{ nic.mac or '-' }}</code></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3">No NICs reported.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h3>Console</h3>
+  <p class="remote-muted">Open the console directly on the owning node. Remote console proxying through the manager comes later, because naturally consoles are never just one layer of annoying.</p>
+  <p><a href="{{ node.api_url }}/vms/{{ vm.name }}/console" target="_blank">Open console on {{ node.name }}</a></p>
+</section>
+{% endif %}
+
+{% endblock %}

@@ -52,3 +52,50 @@ def enrich_nodes(nodes: list[dict[str, Any]], include_inventory: bool = False) -
             item['remote_status'] = node_inventory_remote(item) if include_inventory else node_health(item)
         enriched.append(item)
     return enriched
+
+
+
+def post_node_json(node: dict[str, Any], path: str, payload: dict[str, Any] | None = None, timeout: int = 8) -> dict[str, Any]:
+    api_url = str(node.get('api_url') or '').rstrip('/')
+    if not api_url:
+        return {'ok': False, 'error': 'Node API URL is missing.'}
+
+    token = str(node.get('token') or '')
+    url = api_url + path
+    body = json.dumps(payload or {}).encode('utf-8')
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={'Accept': 'application/json', 'Content-Type': 'application/json'},
+        method='POST',
+    )
+    if token:
+        request.add_header('X-AtlasVM-Node-Token', token)
+
+    ctx = ssl._create_unverified_context()
+    started = time.time()
+    try:
+        with urllib.request.urlopen(request, timeout=timeout, context=ctx) as response:
+            raw = response.read().decode('utf-8')
+            data = json.loads(raw or '{}')
+            data.setdefault('ok', True)
+            data['_latency_ms'] = int((time.time() - started) * 1000)
+            return data
+    except urllib.error.HTTPError as exc:
+        try:
+            raw = exc.read().decode('utf-8')
+        except Exception:
+            raw = ''
+        return {'ok': False, 'error': f'HTTP {exc.code}: {exc.reason} {raw}'.strip(), '_latency_ms': int((time.time() - started) * 1000)}
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc), '_latency_ms': int((time.time() - started) * 1000)}
+
+
+def node_vm_detail_remote(node: dict[str, Any], vm_name: str) -> dict[str, Any]:
+    from urllib.parse import quote
+    return fetch_node_json(node, f'/api/node/vms/{quote(vm_name, safe="")}', timeout=8)
+
+
+def node_vm_action_remote(node: dict[str, Any], vm_name: str, action: str) -> dict[str, Any]:
+    from urllib.parse import quote
+    return post_node_json(node, f'/api/node/vms/{quote(vm_name, safe="")}/{action}', payload={}, timeout=10)

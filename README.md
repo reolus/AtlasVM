@@ -184,3 +184,10 @@ See `docs/PHASE_ELEVEN_STAGE_TWO.md` for install and test notes.
 
 Phase 11.3 adds multi-node compatibility and cluster readiness checks. Use `/nodes/compatibility` to compare registered nodes before planning migration or HA. Node version now comes from the `VERSION` file instead of README decoration, because a logo is not a semantic version no matter how confidently Markdown behaves.
 
+
+
+## Phase 11.4 - Safe Remote Node Controls
+
+Phase 11.4 adds conservative remote VM controls through token-protected node APIs. Registered nodes can now expose a VM detail endpoint and accept start, graceful shutdown, reboot, and force power-off requests. The manager node can display a remote VM detail page and trigger those safe actions without adding migration, HA, remote delete, or remote disk/network editing yet.
+
+New endpoints include `GET /api/node/vms/{vm_name}` and `POST /api/node/vms/{vm_name}/{action}` where action is `start`, `shutdown`, `reboot`, or `poweroff`.

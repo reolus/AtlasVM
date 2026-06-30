@@ -83,9 +83,10 @@ from app.services.node_registry import (
     local_node_self,
 )
 from app.services.node_inventory import host_health, node_inventory
-from app.services.node_client import enrich_nodes, node_inventory_remote
+from app.services.node_client import enrich_nodes, node_inventory_remote, node_vm_detail_remote, node_vm_action_remote
 from app.services.multinode_vm_inventory import multinode_vm_inventory, local_multinode_inventory
 from app.services.node_compatibility import all_node_compatibility, compatibility_for_node_id
+from app.services.remote_vm_actions import local_vm_detail_payload, perform_local_vm_action
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -1725,6 +1726,25 @@ def api_node_vms(request: Request):
     return {'ok': True, 'self': local_node_self(), 'vm_inventory': data}
 
 
+
+
+@app.get('/api/node/vms/{vm_name}')
+def api_node_vm_detail(vm_name: str, request: Request):
+    _require_node_token(request)
+    try:
+        return local_vm_detail_payload(vm_name)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.post('/api/node/vms/{vm_name}/{action}')
+def api_node_vm_action(vm_name: str, action: str, request: Request):
+    _require_node_token(request)
+    try:
+        return perform_local_vm_action(vm_name, action)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
 @app.get('/api/node/doctor')
 def api_node_doctor(request: Request):
     _require_node_token(request)
@@ -1810,6 +1830,65 @@ def node_compatibility_page(node_id: str, request: Request, user: str = Depends(
             'result': result,
         },
     )
+
+
+
+@app.get('/nodes/{node_id}/vms/{vm_name}', response_class=HTMLResponse)
+def remote_vm_detail_page(node_id: str, vm_name: str, request: Request, user: str = Depends(require_operator)):
+    node = get_node(node_id)
+    if not node:
+        return _redirect('/nodes', error='Node not found.')
+
+    local_self = local_node_self()
+    if node.get('node_id') == local_self.get('node_id') or node.get('local'):
+        return RedirectResponse(url=f'/vms/{vm_name}', status_code=303)
+
+    result = node_vm_detail_remote(node, vm_name)
+    return templates.TemplateResponse(
+        'remote_vm_detail.html',
+        {
+            **_view_context(request, user),
+            'node': node,
+            'vm_name': vm_name,
+            'result': result,
+            'vm': result.get('vm') if result.get('ok') else None,
+            'error': request.query_params.get('error') or ('' if result.get('ok') else result.get('error', 'Remote VM lookup failed.')),
+            'message': request.query_params.get('message'),
+        },
+    )
+
+
+@app.post('/nodes/{node_id}/vms/{vm_name}/{action}')
+def remote_vm_action(node_id: str, vm_name: str, action: str, user: str = Depends(require_operator)):
+    from urllib.parse import quote
+
+    node = get_node(node_id)
+    if not node:
+        return _redirect('/nodes', error='Node not found.')
+
+    if action not in {'start', 'shutdown', 'reboot', 'poweroff'}:
+        return _redirect(f'/nodes/{node_id}/vms/{vm_name}', error=f'Unsupported remote VM action: {action}')
+
+    local_self = local_node_self()
+    try:
+        if node.get('node_id') == local_self.get('node_id') or node.get('local'):
+            result = perform_local_vm_action(vm_name, action)
+        else:
+            result = node_vm_action_remote(node, vm_name, action)
+
+        if not result.get('ok'):
+            raise RuntimeError(result.get('error') or 'Remote VM action failed.')
+
+        message = result.get('message') or f'{action} completed for {vm_name}.'
+        return RedirectResponse(
+            url=f'/nodes/{node_id}/vms/{quote(vm_name, safe="")}?message={quote(message)}',
+            status_code=303,
+        )
+    except Exception as exc:
+        return RedirectResponse(
+            url=f'/nodes/{node_id}/vms/{quote(vm_name, safe="")}?error={quote(str(exc))}',
+            status_code=303,
+        )
 
 @app.get('/nodes/{node_id}', response_class=HTMLResponse)
 def node_detail_page(node_id: str, request: Request, user: str = Depends(require_admin)):
