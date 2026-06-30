@@ -11,6 +11,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from app.core.version import atlasvm_version as _atlasvm_version
+
 NODE_FILE = Path('/opt/atlasvm/atlasvm_nodes.json')
 NODE_ID_FILE = Path('/opt/atlasvm/atlasvm_node_id')
 NODE_TOKEN_FILE = Path('/opt/atlasvm/atlasvm_node_token')
@@ -182,12 +184,7 @@ def local_primary_ip() -> str:
 
 
 def atlasvm_version() -> str:
-    readme = Path('/opt/atlasvm/README.md')
-    if readme.exists():
-        for line in readme.read_text(errors='ignore').splitlines()[:20]:
-            if 'Phase' in line or 'AtlasVM' in line:
-                return line.strip().lstrip('#').strip()
-    return 'AtlasVM development build'
+    return _atlasvm_version()
 
 
 def local_node_self() -> dict[str, Any]:

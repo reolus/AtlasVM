@@ -180,3 +180,7 @@ This package includes Phase 11.2, which makes the `/vms` page node-aware. It can
 
 See `docs/PHASE_ELEVEN_STAGE_TWO.md` for install and test notes.
 
+## Phase 11.3 - Node Compatibility
+
+Phase 11.3 adds multi-node compatibility and cluster readiness checks. Use `/nodes/compatibility` to compare registered nodes before planning migration or HA. Node version now comes from the `VERSION` file instead of README decoration, because a logo is not a semantic version no matter how confidently Markdown behaves.
+

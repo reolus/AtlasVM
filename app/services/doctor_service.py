@@ -112,4 +112,30 @@ def run_doctor() -> list[dict[str, Any]]:
     except Exception as exc:
         add('backup service loads', False, str(exc), 'Backups')
 
+
+    try:
+        from app.services.node_registry import list_nodes, get_local_node_id
+        from app.services.node_client import node_health
+
+        nodes = list_nodes()
+        local_id = get_local_node_id()
+        add('node registry readable', True, f'{len(nodes)} node(s)', 'Cluster')
+        add('local node registered', any(node.get('node_id') == local_id for node in nodes), local_id, 'Cluster')
+
+        for node in nodes:
+            if not node.get('enabled', True):
+                add(f"node {node.get('name') or node.get('node_id')} enabled", True, 'disabled node skipped', 'Cluster', 'info')
+                continue
+            status = node_health(node)
+            node_name = node.get('name') or node.get('api_url') or node.get('node_id')
+            add(
+                f'node {node_name} reachable',
+                bool(status.get('ok')),
+                status.get('error') or f"latency={status.get('_latency_ms', '-')}ms",
+                'Cluster',
+                'ok' if status.get('ok') else 'warning',
+            )
+    except Exception as exc:
+        add('node registry checks', False, str(exc), 'Cluster')
+
     return checks

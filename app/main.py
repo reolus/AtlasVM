@@ -85,6 +85,7 @@ from app.services.node_registry import (
 from app.services.node_inventory import host_health, node_inventory
 from app.services.node_client import enrich_nodes, node_inventory_remote
 from app.services.multinode_vm_inventory import multinode_vm_inventory, local_multinode_inventory
+from app.services.node_compatibility import all_node_compatibility, compatibility_for_node_id
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -1730,6 +1731,12 @@ def api_node_doctor(request: Request):
     return {'ok': True, 'self': local_node_self(), 'checks': run_doctor()}
 
 
+@app.get('/api/node/compatibility')
+def api_node_compatibility(request: Request):
+    _require_node_token(request)
+    return {'ok': True, 'self': local_node_self(), 'compatibility': all_node_compatibility()}
+
+
 @app.get('/nodes', response_class=HTMLResponse)
 def nodes_page(request: Request, user: str = Depends(require_admin)):
     ensure_local_node_registered()
@@ -1774,13 +1781,44 @@ def nodes_register_local(user: str = Depends(require_admin)):
         return _redirect('/nodes', error=str(exc))
 
 
+
+@app.get('/nodes/compatibility', response_class=HTMLResponse)
+def nodes_compatibility_page(request: Request, user: str = Depends(require_admin)):
+    result = all_node_compatibility()
+    return templates.TemplateResponse(
+        'node_compatibility.html',
+        {
+            **_view_context(request, user),
+            'mode': 'all',
+            'result': result,
+        },
+    )
+
+
+@app.get('/nodes/{node_id}/compatibility', response_class=HTMLResponse)
+def node_compatibility_page(node_id: str, request: Request, user: str = Depends(require_admin)):
+    node = get_node(node_id)
+    if not node:
+        return _redirect('/nodes', error='Node not found.')
+    result = compatibility_for_node_id(node_id)
+    return templates.TemplateResponse(
+        'node_compatibility.html',
+        {
+            **_view_context(request, user),
+            'mode': 'single',
+            'node': node,
+            'result': result,
+        },
+    )
+
 @app.get('/nodes/{node_id}', response_class=HTMLResponse)
 def node_detail_page(node_id: str, request: Request, user: str = Depends(require_admin)):
     node = get_node(node_id)
     if not node:
         return _redirect('/nodes', error='Node not found.')
     inventory = node_inventory_remote(node)
-    return templates.TemplateResponse('node_detail.html', {**_view_context(request, user), 'node': node, 'inventory': inventory})
+    compatibility = compatibility_for_node_id(node_id)
+    return templates.TemplateResponse('node_detail.html', {**_view_context(request, user), 'node': node, 'inventory': inventory, 'compatibility': compatibility})
 
 
 @app.post('/nodes/{node_id}/delete')

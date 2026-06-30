@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.compat-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.compat-card {
+  border: 1px solid var(--border, #333);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--panel, rgba(255,255,255,0.03));
+}
+.compat-number { font-size: 1.8rem; font-weight: 700; }
+.compat-ok { color: #5cb85c; }
+.compat-warning { color: #f0ad4e; }
+.compat-error { color: #d9534f; }
+.compat-info { opacity: .8; }
+.compat-detail { max-width: 860px; word-break: break-word; }
+.compat-node { margin-top: 2rem; }
+</style>
+
+<section>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <div>
+      <h2>Node Compatibility</h2>
+      <p>Checks whether registered nodes are ready for shared operations, migration planning, and the future HA circus nobody should enter unprepared.</p>
+    </div>
+    <div>
+      <a href="/nodes"><button type="button">Back to Nodes</button></a>
+    </div>
+  </div>
+</section>
+
+{% if mode == 'single' %}
+  {% set items = [{'node': node, 'compatibility': result}] %}
+{% else %}
+  {% set items = result.nodes if result.nodes is defined else [] %}
+{% endif %}
+
+{% for item in items %}
+  {% set compat = item.compatibility if item.compatibility is defined else item %}
+  {% set summary = compat.summary or {} %}
+  <section class="compat-node">
+    <h3>{{ item.node.name if item.node is defined else item.name }}</h3>
+    <p>
+      {% if compat.ready %}
+      <span class="pill success">cluster-ready</span>
+      {% else %}
+      <span class="pill failed">not ready</span>
+      {% endif %}
+      {% if compat.remote is defined and compat.remote.api_url is defined %}<code>{{ compat.remote.api_url }}</code>{% elif item.api_url is defined %}<code>{{ item.api_url }}</code>{% endif %}
+    </p>
+
+    <div class="compat-summary">
+      <div class="compat-card"><div class="compat-number compat-ok">{{ summary.ok or 0 }}</div><div>OK</div></div>
+      <div class="compat-card"><div class="compat-number compat-warning">{{ summary.warning or 0 }}</div><div>Warnings</div></div>
+      <div class="compat-card"><div class="compat-number compat-error">{{ summary.error or 0 }}</div><div>Errors</div></div>
+      <div class="compat-card"><div class="compat-number compat-info">{{ summary.info or 0 }}</div><div>Info</div></div>
+    </div>
+
+    {% set categories = compat.checks | map(attribute='category') | unique | list %}
+    {% for category in categories %}
+    <h4>{{ category }}</h4>
+    <table>
+      <thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead>
+      <tbody>
+        {% for check in compat.checks if check.category == category %}
+        <tr>
+          <td>{{ check.name }}</td>
+          <td>
+            {% if check.severity == 'ok' %}<span class="pill success">ok</span>
+            {% elif check.severity == 'info' %}<span class="pill">info</span>
+            {% else %}<span class="pill failed">warning</span>{% endif %}
+          </td>
+          <td class="compat-detail"><code>{{ check.detail }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+  </section>
+{% else %}
+<section>
+  <div class="alert">No enabled nodes registered yet. Register the local node first, then add a second host when the machines are done pretending they are independent kingdoms.</div>
+</section>
+{% endfor %}
+
+{% endblock %}

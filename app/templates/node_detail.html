@@ -7,7 +7,10 @@
       <h2>{{ node.name }}</h2>
       <p><code>{{ node.api_url }}</code></p>
     </div>
-    <a href="/nodes"><button type="button">Back to Nodes</button></a>
+    <div>
+      <a href="/nodes/{{ node.node_id }}/compatibility"><button type="button">Compatibility</button></a>
+      <a href="/nodes"><button type="button">Back to Nodes</button></a>
+    </div>
   </div>
 </section>
 
@@ -27,6 +30,19 @@
   <div class="alert">{{ inventory.error }}</div>
   {% endif %}
 </section>
+
+
+{% if compatibility is defined %}
+<section>
+  <h3>Compatibility Summary</h3>
+  {% if compatibility.ready %}
+  <p><span class="pill success">cluster-ready</span> No warnings found for this node pair.</p>
+  {% else %}
+  <p><span class="pill failed">not ready</span> {{ compatibility.summary.warning or 0 }} warning(s), {{ compatibility.summary.error or 0 }} error(s).</p>
+  {% endif %}
+  <p><a href="/nodes/{{ node.node_id }}/compatibility">View full compatibility report</a></p>
+</section>
+{% endif %}
 
 {% if inventory.ok and inventory.libvirt is defined %}
 <section class="grid two">
