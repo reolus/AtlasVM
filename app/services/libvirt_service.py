@@ -12,6 +12,13 @@ from typing import Any
 import libvirt
 
 from app.core.config import get_settings
+from app.services.vm_storage_integration import (
+    build_vm_disk_xml,
+    create_vm_disk_volume,
+    delete_disk_source,
+    disk_sources_from_domain_xml,
+)
+
 from app.services.vm_storage_utils import (
     create_volume_from_image,
     delete_disk_source,
@@ -455,8 +462,8 @@ class LibvirtService:
 
     def create_vm(self, req: VMCreateRequest) -> dict[str, Any]:
         self._validate_vm_request(req)
-        disk_path = self._create_qcow2_disk(req)
-        xml = self._build_domain_xml(req, disk_path)
+        disk_info = self._create_vm_disk(req)
+        xml = self._build_domain_xml(req, disk_info)
         domain = self.conn.defineXML(xml)
         if domain is None:
             raise RuntimeError('libvirt failed to define the VM')
@@ -830,22 +837,19 @@ class LibvirtService:
             raise ValueError('Snapshot name may contain letters, numbers, hyphens, and underscores')
 
     def _create_qcow2_disk(self, req: VMCreateRequest) -> str:
-        pool = self.conn.storagePoolLookupByName(req.storage_pool)
-        if not pool.isActive():
-            pool.create()
-        pool.refresh(0)
-        pool_xml = ET.fromstring(pool.XMLDesc())
-        target_path = pool_xml.findtext('./target/path')
-        if not target_path:
-            raise RuntimeError(f'Storage pool has no target path: {req.storage_pool}')
-        disk_path = str(Path(target_path) / f'{req.name}.qcow2')
-        if Path(disk_path).exists():
-            raise ValueError(f'Disk already exists: {disk_path}')
-        subprocess.run(['qemu-img', 'create', '-f', 'qcow2', disk_path, f'{req.disk_gb}G'], check=True)
-        pool.refresh(0)
-        return disk_path
+        disk_info = self._create_vm_disk(req)
+        return disk_info["path"]
 
-    def _build_domain_xml(self, req: VMCreateRequest, disk_path: str) -> str:
+
+    def _create_vm_disk(self, req: VMCreateRequest) -> dict[str, Any]:
+        return create_vm_disk_volume(
+            pool_name=req.storage_pool,
+            vm_name=req.name,
+            size_gb=req.disk_gb,
+            disk_index=1,
+        )
+
+    def _build_domain_xml(self, req: VMCreateRequest, disk_info: dict[str, Any]) -> str:
         memory_kib = req.memory_mb * 1024
         cdrom_xml = ''
         boot_order = "<boot dev='cdrom'/><boot dev='hd'/>" if req.iso_path else "<boot dev='hd'/>"
@@ -862,6 +866,7 @@ class LibvirtService:
               <readonly/>
             </disk>
             """
+        primary_disk_xml = build_vm_disk_xml(disk_info, target_dev='vda')
         metadata = html.escape(req.description or '')
         return f"""
         <domain type='kvm'>
@@ -886,11 +891,7 @@ class LibvirtService:
           <on_crash>restart</on_crash>
           <devices>
             <emulator>/usr/bin/qemu-system-x86_64</emulator>
-            <disk type='file' device='disk'>
-              <driver name='qemu' type='qcow2'/>
-              <source file='{html.escape(disk_path)}'/>
-              <target dev='vda' bus='virtio'/>
-            </disk>
+            {primary_disk_xml}
             {cdrom_xml}
             <interface type='network'>
               <source network='{html.escape(req.network)}'/>
@@ -956,6 +957,7 @@ class LibvirtService:
 
     def _domain_disk_paths(self, domain: libvirt.virDomain) -> list[str]:
         return disk_sources_from_domain_xml(domain.XMLDesc())
+
 
     def _domain_interfaces(self, domain: libvirt.virDomain) -> list[dict[str, str | None]]:
         interfaces = []

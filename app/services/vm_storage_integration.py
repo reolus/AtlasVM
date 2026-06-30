@@ -23,6 +23,27 @@ def validate_volume_name(name: str) -> str:
     return name
 
 
+def safe_lv_name(vm_name: str, disk_index: int = 1) -> str:
+    base = validate_volume_name(vm_name)
+
+    # LVM-backed disks are raw block devices. Do not name them .qcow2.
+    for suffix in [".qcow2", ".raw", ".img"]:
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+
+    return validate_volume_name(f"{base}-disk{disk_index}")
+
+
+def safe_qcow2_name(vm_name: str, disk_index: int = 1) -> str:
+    base = validate_volume_name(vm_name)
+
+    for suffix in [".qcow2", ".raw", ".img"]:
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+
+    return validate_volume_name(f"{base}-disk{disk_index}.qcow2")
+
+
 def pool_xml(pool_name: str) -> ET.Element:
     result = run(["virsh", "pool-dumpxml", pool_name], check=False)
     if result.returncode != 0:
@@ -47,6 +68,13 @@ def ensure_pool_active(pool_name: str) -> None:
     run(["virsh", "pool-refresh", pool_name], check=False)
 
 
+def volume_path(pool_name: str, volume_name: str) -> str:
+    result = run(["virsh", "vol-path", "--pool", pool_name, volume_name], check=False)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr or f"Could not resolve volume path for {volume_name}.")
+    return result.stdout.strip()
+
+
 def create_vm_disk_volume(
     pool_name: str,
     vm_name: str,
@@ -60,31 +88,32 @@ def create_vm_disk_volume(
         raise RuntimeError("Disk size must be at least 1 GB.")
 
     ensure_pool_active(pool_name)
-
     ptype = pool_type(pool_name)
 
     if ptype == "logical":
-        volume_name = f"{vm_name}-disk{disk_index}"
-        volume_name = validate_volume_name(volume_name)
+        volume_name = safe_lv_name(vm_name, disk_index)
 
         create = run(
-            ["virsh", "vol-create-as", "--pool", pool_name, "--name", volume_name, "--capacity", f"{size_gb}G"],
+            [
+                "virsh", "vol-create-as",
+                "--pool", pool_name,
+                "--name", volume_name,
+                "--capacity", f"{size_gb}G",
+            ],
             check=False,
         )
+
         if create.returncode != 0:
             raise RuntimeError(create.stderr or create.stdout or "Failed to create LVM logical volume.")
 
-        path = run(["virsh", "vol-path", "--pool", pool_name, volume_name], check=False)
-        if path.returncode != 0:
-            raise RuntimeError(path.stderr or "Logical volume was created, but libvirt could not resolve its path.")
-
+        path = volume_path(pool_name, volume_name)
         run(["virsh", "pool-refresh", pool_name], check=False)
 
         return {
             "pool": pool_name,
             "pool_type": ptype,
             "volume": volume_name,
-            "path": path.stdout.strip(),
+            "path": path,
             "disk_type": "block",
             "source_attr": "dev",
             "driver_type": "raw",
@@ -92,8 +121,7 @@ def create_vm_disk_volume(
         }
 
     if ptype in {"dir", "fs", "netfs"}:
-        volume_name = f"{vm_name}-disk{disk_index}.qcow2"
-        volume_name = validate_volume_name(volume_name)
+        volume_name = safe_qcow2_name(vm_name, disk_index)
 
         create = run(
             [
@@ -105,20 +133,18 @@ def create_vm_disk_volume(
             ],
             check=False,
         )
+
         if create.returncode != 0:
             raise RuntimeError(create.stderr or create.stdout or "Failed to create qcow2 disk volume.")
 
-        path = run(["virsh", "vol-path", "--pool", pool_name, volume_name], check=False)
-        if path.returncode != 0:
-            raise RuntimeError(path.stderr or "Disk volume was created, but libvirt could not resolve its path.")
-
+        path = volume_path(pool_name, volume_name)
         run(["virsh", "pool-refresh", pool_name], check=False)
 
         return {
             "pool": pool_name,
             "pool_type": ptype,
             "volume": volume_name,
-            "path": path.stdout.strip(),
+            "path": path,
             "disk_type": "file",
             "source_attr": "file",
             "driver_type": "qcow2",
@@ -133,6 +159,10 @@ def build_vm_disk_xml(disk: dict[str, Any], target_dev: str = "vda") -> str:
     source_attr = disk.get("source_attr") or ("dev" if disk_type == "block" else "file")
     source_path = disk.get("path") or ""
     driver_type = disk.get("driver_type") or ("raw" if disk_type == "block" else "qcow2")
+
+    if disk_type == "block":
+        source_attr = "dev"
+        driver_type = "raw"
 
     if not source_path:
         raise RuntimeError("Disk source path is missing.")
@@ -199,17 +229,10 @@ def delete_disk_source(source_path: str) -> dict[str, Any]:
         }
 
     if source_path.startswith("/dev/"):
-        if not (source_path.startswith("/dev/mapper/") or len(Path(source_path).parts) >= 3):
-            raise RuntimeError(f"Refusing to remove suspicious block device path: {source_path}")
-
         result = run(["lvremove", "-y", source_path], check=False)
         if result.returncode != 0:
             raise RuntimeError(result.stderr or result.stdout or f"Failed to remove logical volume {source_path}.")
-
-        return {
-            "deleted": True,
-            "message": f"Removed logical volume {source_path}.",
-        }
+        return {"deleted": True, "message": f"Removed logical volume {source_path}."}
 
     file_path = Path(source_path)
 
