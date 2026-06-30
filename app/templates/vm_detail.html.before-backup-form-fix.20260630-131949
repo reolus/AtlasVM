@@ -96,7 +96,7 @@
   </div>
   <div>
     <h2>Backup</h2>
-    <form method="post" action="/vms/{{ vm.name }}/backup">
+    <form method="post" action="/ui/vms/{{ vm.name }}/backup">
       <label>Target
         <select name="target_name">
           {% for target in backup_targets %}

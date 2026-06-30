@@ -575,7 +575,6 @@ def vm_clone(name: str, new_name: str = Form(...), storage_pool: str = Form(''),
         return _redirect(f'/vms/{name}', error=str(exc))
 
 
-@app.post('/vms/{name}/backup')
 @app.post('/ui/vms/{name}/backup')
 def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = Form(True), target_name: str = Form('default'), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     try:
@@ -2794,48 +2793,4 @@ def vm_network_remove(
             status_code=303,
         )
 
-
-@app.post('/tasks/{task_id}/kill')
-def task_kill(task_id: int, db: Session = Depends(get_db), user: str = Depends(require_operator)):
-    """Mark a hung AtlasVM task as failed.
-
-    This clears stale task_log rows. It does not kill an OS process because
-    task_log does not store a process ID.
-    """
-    import sqlite3
-    from datetime import datetime
-
-    conn = sqlite3.connect('/opt/atlasvm/atlasvm.db')
-    conn.row_factory = sqlite3.Row
-
-    try:
-        row = conn.execute(
-            "select id, action, target, status, message from task_log where id = ?",
-            (task_id,),
-        ).fetchone()
-
-        if row is None:
-            return _redirect('/tasks', error=f'Task {task_id} was not found')
-
-        if row['status'] != 'running':
-            return _redirect('/tasks', error=f'Task {task_id} is not running')
-
-        finished_at = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')
-        old_message = row['message'] or ''
-        message = f'Marked failed by {user}. Previous message: {old_message}'.strip()
-
-        conn.execute(
-            "update task_log set status = ?, finished_at = ?, message = ? where id = ? and status = ?",
-            ('failed', finished_at, message, task_id, 'running'),
-        )
-        conn.commit()
-
-        try:
-            log_event(db, user, 'kill_task', str(task_id), f"{row['action']} on {row['target']} marked failed")
-        except Exception:
-            pass
-
-        return _redirect('/tasks', message=f'Task {task_id} marked failed')
-    finally:
-        conn.close()
 

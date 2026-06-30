@@ -575,7 +575,6 @@ def vm_clone(name: str, new_name: str = Form(...), storage_pool: str = Form(''),
         return _redirect(f'/vms/{name}', error=str(exc))
 
 
-@app.post('/vms/{name}/backup')
 @app.post('/ui/vms/{name}/backup')
 def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = Form(True), target_name: str = Form('default'), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     try:
