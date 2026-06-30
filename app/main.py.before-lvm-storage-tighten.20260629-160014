@@ -1638,13 +1638,9 @@ def backups_prune(vm_name: str = Form(''), keep_last: int | None = Form(None), d
 @app.get('/doctor', response_class=HTMLResponse)
 def doctor_page(request: Request, user: str = Depends(require_user)):
     checks = run_doctor()
-    return templates.TemplateResponse(
-        'doctor.html',
-        {
-            **_view_context(request, user),
-            'checks': checks,
-        },
-    )
+    return templates.TemplateResponse('doctor.html', {'request': request, 'app_name': settings.app_name, 'checks': checks,
+            'user': user,
+        })
 
 
 @app.get('/settings', response_class=HTMLResponse)

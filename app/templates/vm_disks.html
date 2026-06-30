@@ -58,7 +58,7 @@
           <option value="">Select pool</option>
           {% for p in pools %}
           <option value="{{ p.name }}" {% if not p.supported or p.state != 'active' %}disabled{% endif %}>
-            {{ p.name }} - {{ p.type }} / {{ p.mode }}{% if p.state != 'active' %} (inactive){% endif %}{% if not p.supported %} (unsupported){% endif %}
+            {{ p.name }} - {{ p.type }} / {{ p.mode }}{% if p.mode == 'lvm-thin' %} (raw LV){% endif %}{% if p.state != 'active' %} (inactive){% endif %}{% if not p.supported %} (unsupported){% endif %}
           </option>
           {% endfor %}
         </select>

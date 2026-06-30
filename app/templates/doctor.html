@@ -1,10 +1,110 @@
 {% extends "base.html" %}
 {% block content %}
+
+<style>
+.doctor-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.doctor-card {
+  border: 1px solid var(--border, #333);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--panel, rgba(255,255,255,0.03));
+}
+.doctor-number {
+  font-size: 2rem;
+  font-weight: 700;
+}
+.doctor-ok { color: #5cb85c; }
+.doctor-warning { color: #f0ad4e; }
+.doctor-error { color: #d9534f; }
+.doctor-info { opacity: .8; }
+.doctor-detail {
+  max-width: 780px;
+  white-space: normal;
+  word-break: break-word;
+}
+.doctor-category {
+  margin-top: 2rem;
+}
+</style>
+
 <section>
-  <h2>AtlasVM Doctor</h2>
-  <p>Configuration sanity checks, because apparently software needs a wellness visit.</p>
-  <table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody>
-    {% for check in checks %}<tr><td>{{ check.name }}</td><td><span class="pill {{ 'success' if check.ok else 'failed' }}">{{ check.status }}</span></td><td><code>{{ check.detail }}</code></td></tr>{% endfor %}
-  </tbody></table>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <div>
+      <h2>AtlasVM Doctor</h2>
+      <p>Configuration, virtualization, storage, and network sanity checks. Because apparently even hypervisors need a clipboard and a tongue depressor.</p>
+    </div>
+    <div>
+      <form method="get" action="/doctor">
+        <button type="submit">Run Again</button>
+      </form>
+    </div>
+  </div>
 </section>
+
+{% set ok_count = checks | selectattr("severity", "equalto", "ok") | list | length %}
+{% set warning_count = checks | selectattr("severity", "equalto", "warning") | list | length %}
+{% set error_count = checks | selectattr("severity", "equalto", "error") | list | length %}
+{% set info_count = checks | selectattr("severity", "equalto", "info") | list | length %}
+
+<section class="doctor-summary">
+  <div class="doctor-card">
+    <div class="doctor-number doctor-ok">{{ ok_count }}</div>
+    <div>OK</div>
+  </div>
+  <div class="doctor-card">
+    <div class="doctor-number doctor-warning">{{ warning_count }}</div>
+    <div>Warnings</div>
+  </div>
+  <div class="doctor-card">
+    <div class="doctor-number doctor-error">{{ error_count }}</div>
+    <div>Errors</div>
+  </div>
+  <div class="doctor-card">
+    <div class="doctor-number doctor-info">{{ info_count }}</div>
+    <div>Info</div>
+  </div>
+</section>
+
+{% set categories = checks | map(attribute='category') | unique | list %}
+
+{% for category in categories %}
+<section class="doctor-category">
+  <h3>{{ category }}</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Check</th>
+        <th>Status</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for check in checks if check.category == category %}
+      <tr>
+        <td>{{ check.name }}</td>
+        <td>
+          {% if check.severity == 'ok' %}
+          <span class="pill success">ok</span>
+          {% elif check.severity == 'info' %}
+          <span class="pill">info</span>
+          {% elif check.severity == 'error' %}
+          <span class="pill failed">error</span>
+          {% else %}
+          <span class="pill failed">warning</span>
+          {% endif %}
+        </td>
+        <td class="doctor-detail"><code>{{ check.detail }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+
 {% endblock %}
