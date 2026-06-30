@@ -13,8 +13,9 @@
     <div class="grid two">
       <label>Storage Pool
         <select name="storage_pool">
-        {% for pool in pools %}<option value="{{ pool.name }}" {% if pool.name == default_pool %}selected{% endif %}>{{ pool.name }} - {{ pool.available_gb }} GB free</option>{% endfor %}
+        {% for pool in pools %}<option value="{{ pool.name }}" {% if pool.name == default_pool %}selected{% endif %}>{{ pool.name }} - {{ pool.display_available_gb|default(pool.available_gb) }} GB {{ pool.display_available_label|default('free') }}</option>{% endfor %}
         </select>
+        <small>LVM-thin pools show thin-pool free space, not leftover VG space. Miracles, but with math.</small>
       </label>
       <label>Network
         <select name="network">

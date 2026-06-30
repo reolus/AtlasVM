@@ -191,3 +191,8 @@ Phase 11.3 adds multi-node compatibility and cluster readiness checks. Use `/nod
 Phase 11.4 adds conservative remote VM controls through token-protected node APIs. Registered nodes can now expose a VM detail endpoint and accept start, graceful shutdown, reboot, and force power-off requests. The manager node can display a remote VM detail page and trigger those safe actions without adding migration, HA, remote delete, or remote disk/network editing yet.
 
 New endpoints include `GET /api/node/vms/{vm_name}` and `POST /api/node/vms/{vm_name}/{action}` where action is `start`, `shutdown`, `reboot`, or `poweroff`.
+
+
+## LVM-thin storage display and creation fix
+
+Logical pools backed by LVM-thin now show thin-pool usable space in the New VM form and create VM disks as raw block thin LVs instead of qcow2 files under `/dev`.

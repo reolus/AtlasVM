@@ -55,6 +55,137 @@ def volume_path(pool_name: str, volume_name: str) -> str:
     return result.stdout.strip()
 
 
+def _bytes_to_gb(value: float | int) -> float:
+    try:
+        return round(float(value) / 1024 / 1024 / 1024, 2)
+    except Exception:
+        return 0.0
+
+
+def _lvm_report() -> dict[str, Any]:
+    result = run(
+        [
+            'lvs',
+            '--reportformat', 'json',
+            '--units', 'b',
+            '--nosuffix',
+            '-o', 'lv_name,vg_name,lv_attr,lv_size,data_percent,metadata_percent,pool_lv,origin,lv_path',
+        ],
+        check=False,
+    )
+    if result.returncode != 0:
+        return {'ok': False, 'error': result.stderr or result.stdout or 'lvs failed', 'lvs': []}
+    try:
+        data = json.loads(result.stdout or '{}')
+        rows = data.get('report', [{}])[0].get('lv', [])
+        return {'ok': True, 'error': '', 'lvs': rows}
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc), 'lvs': []}
+
+
+def logical_pool_vg_name(pool_name: str) -> str:
+    root = pool_xml(pool_name)
+    if root.get('type') != 'logical':
+        return ''
+    return root.findtext('./source/name') or ''
+
+
+def find_thinpool_for_vg(vg_name: str) -> dict[str, Any] | None:
+    report = _lvm_report()
+    if not report.get('ok'):
+        return None
+    candidates = []
+    for row in report.get('lvs', []):
+        if row.get('vg_name') != vg_name:
+            continue
+        attr = row.get('lv_attr') or ''
+        # LVM thin pools generally show lv_attr beginning with 't', for example twi-aotz--.
+        if attr.startswith('t'):
+            candidates.append(row)
+    if not candidates:
+        return None
+    # Prefer the conventional name, then the largest thin pool.
+    candidates.sort(key=lambda r: (0 if r.get('lv_name') == 'thinpool' else 1, -float(r.get('lv_size') or 0)))
+    row = candidates[0]
+    size_bytes = float(row.get('lv_size') or 0)
+    data_percent = float(row.get('data_percent') or 0)
+    metadata_percent = float(row.get('metadata_percent') or 0)
+    used_bytes = size_bytes * (data_percent / 100.0)
+    free_bytes = max(0.0, size_bytes - used_bytes)
+    return {
+        'vg_name': vg_name,
+        'thinpool_name': row.get('lv_name') or '',
+        'lv_attr': row.get('lv_attr') or '',
+        'size_bytes': size_bytes,
+        'used_bytes': used_bytes,
+        'free_bytes': free_bytes,
+        'size_gb': _bytes_to_gb(size_bytes),
+        'used_gb': _bytes_to_gb(used_bytes),
+        'free_gb': _bytes_to_gb(free_bytes),
+        'data_percent': round(data_percent, 2),
+        'metadata_percent': round(metadata_percent, 2),
+    }
+
+
+def lvm_pool_thin_info(pool_name: str) -> dict[str, Any] | None:
+    try:
+        if pool_type(pool_name) != 'logical':
+            return None
+        vg_name = logical_pool_vg_name(pool_name)
+        if not vg_name:
+            return None
+        info = find_thinpool_for_vg(vg_name)
+        if not info:
+            return None
+        info['pool_name'] = pool_name
+        return info
+    except Exception:
+        return None
+
+
+def create_lvm_thin_volume(pool_name: str, volume_name: str, size_gb: int) -> dict[str, Any]:
+    pool_name = validate_simple_name(pool_name, 'pool name')
+    volume_name = validate_simple_name(volume_name, 'volume name')
+    if volume_name.endswith('.qcow2'):
+        volume_name = volume_name[:-6]
+    if volume_name.endswith('.raw'):
+        volume_name = volume_name[:-4]
+    if volume_name.endswith('.img'):
+        volume_name = volume_name[:-4]
+    volume_name = validate_simple_name(volume_name, 'volume name')
+
+    vg_name = logical_pool_vg_name(pool_name)
+    if not vg_name:
+        raise RuntimeError(f'Logical pool {pool_name} does not expose a source VG name')
+    thin = find_thinpool_for_vg(vg_name)
+    if not thin:
+        raise RuntimeError(f'No LVM thin pool found in VG {vg_name}.')
+
+    cmd = ['lvcreate', '-V', f'{size_gb}G', '-T', f'{vg_name}/{thin["thinpool_name"]}', '-n', volume_name]
+    result = run(cmd, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr or result.stdout or 'Failed to create LVM thin volume')
+
+    run(['virsh', 'pool-refresh', pool_name], check=False)
+    try:
+        path = volume_path(pool_name, volume_name)
+    except Exception:
+        path = f'/dev/{vg_name}/{volume_name}'
+
+    return {
+        'pool': pool_name,
+        'volume': volume_name,
+        'path': path,
+        'pool_type': 'logical',
+        'disk_type': 'block',
+        'source_attr': 'dev',
+        'driver_type': 'raw',
+        'format': 'raw',
+        'thin': True,
+        'thinpool': thin,
+    }
+
+
 def create_volume_for_pool(pool_name: str, volume_name: str, size_gb: int, prefer_format: str = 'qcow2') -> dict[str, Any]:
     pool_name = validate_simple_name(pool_name, 'pool name')
     volume_name = validate_simple_name(volume_name, 'volume name')
@@ -65,8 +196,16 @@ def create_volume_for_pool(pool_name: str, volume_name: str, size_gb: int, prefe
     ptype = pool_type(pool_name)
 
     if ptype == 'logical':
+        thin = lvm_pool_thin_info(pool_name)
+        if thin:
+            return create_lvm_thin_volume(pool_name, volume_name, size_gb)
+
         if volume_name.endswith('.qcow2'):
             volume_name = volume_name[:-6]
+        if volume_name.endswith('.raw'):
+            volume_name = volume_name[:-4]
+        if volume_name.endswith('.img'):
+            volume_name = volume_name[:-4]
         cmd = ['virsh', 'vol-create-as', '--pool', pool_name, '--name', volume_name, '--capacity', f'{size_gb}G']
         result = run(cmd, check=False)
         if result.returncode != 0:
@@ -81,6 +220,7 @@ def create_volume_for_pool(pool_name: str, volume_name: str, size_gb: int, prefe
             'source_attr': 'dev',
             'driver_type': 'raw',
             'format': 'raw',
+            'thin': False,
         }
 
     if ptype in {'dir', 'fs', 'netfs'}:
