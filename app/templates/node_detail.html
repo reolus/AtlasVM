@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <div>
+      <h2>{{ node.name }}</h2>
+      <p><code>{{ node.api_url }}</code></p>
+    </div>
+    <a href="/nodes"><button type="button">Back to Nodes</button></a>
+  </div>
+</section>
+
+<section>
+  <h3>Health</h3>
+  {% if inventory.ok %}
+  <table>
+    <tr><th>Node ID</th><td><code>{{ inventory.self.node_id }}</code></td></tr>
+    <tr><th>Hostname</th><td>{{ inventory.self.hostname }}</td></tr>
+    <tr><th>IP</th><td>{{ inventory.self.management_ip }}</td></tr>
+    <tr><th>Version</th><td>{{ inventory.self.version }}</td></tr>
+    <tr><th>Memory</th><td>{{ inventory.health.memory.used_percent }}% used</td></tr>
+    <tr><th>Root Disk</th><td>{{ inventory.health.root_disk.used_percent }}% used</td></tr>
+    <tr><th>Doctor</th><td>{{ inventory.doctor.warning }} warning(s), {{ inventory.doctor.error }} error(s)</td></tr>
+  </table>
+  {% else %}
+  <div class="alert">{{ inventory.error }}</div>
+  {% endif %}
+</section>
+
+{% if inventory.ok and inventory.libvirt is defined %}
+<section class="grid two">
+  <div>
+    <h3>VMs</h3>
+    <table><thead><tr><th>Name</th><th>Active</th><th>UUID</th></tr></thead><tbody>
+      {% for vm in inventory.libvirt.vms %}<tr><td>{{ vm.name }}</td><td>{{ vm.active }}</td><td><code>{{ vm.uuid }}</code></td></tr>{% else %}<tr><td colspan="3">No VMs.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <div>
+    <h3>Networks</h3>
+    <table><thead><tr><th>Name</th><th>Active</th></tr></thead><tbody>
+      {% for net in inventory.libvirt.networks %}<tr><td>{{ net.name }}</td><td>{{ net.active }}</td></tr>{% else %}<tr><td colspan="2">No networks.</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</section>
+
+<section>
+  <h3>Storage Pools</h3>
+  <table><thead><tr><th>Name</th><th>Active</th><th>Detail</th></tr></thead><tbody>
+    {% for pool in inventory.libvirt.pools %}<tr><td>{{ pool.name }}</td><td>{{ pool.active }}</td><td>{{ pool.error if pool.error is defined else '' }}</td></tr>{% else %}<tr><td colspan="3">No pools.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endif %}
+
+{% endblock %}

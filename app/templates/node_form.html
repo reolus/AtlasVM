@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <h2>Add AtlasVM Node</h2>
+  <form method="post" action="/nodes">
+    <label>Name <input name="name" placeholder="atlasvm-02"></label>
+    <label>API URL <input name="api_url" placeholder="https://10.21.50.35" required></label>
+    <label>Node Token <input name="token" type="password" placeholder="remote node token"></label>
+    <label>Role
+      <select name="role">
+        <option value="worker">worker</option>
+        <option value="primary">primary</option>
+        <option value="witness-ready">witness-ready</option>
+      </select>
+    </label>
+    <label class="check"><input name="enabled" type="checkbox" value="true" checked> Enabled</label>
+    <button type="submit">Save Node</button>
+  </form>
+</section>
+{% endblock %}

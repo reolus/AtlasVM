@@ -168,3 +168,8 @@ Phase 7.5 adds the new wide AtlasVM logo, removes duplicate header title text, i
 ## Phase 10
 
 Phase 10 adds storage-aware backup, restore-as-new, retention, backup targets, and clone/delete improvements for file-backed and LVM-backed VM disks. See `docs/PHASE_TEN_DESIGN.md` and `docs/PHASE_TEN_UPGRADE.md`.
+
+
+## Phase 11.1 - Node Registry and Local Node API
+
+Adds AtlasVM node registration, token-protected local node API endpoints, node health UI, and remote inventory preview. This is the multi-node foundation only. Migration and HA are intentionally not included yet.

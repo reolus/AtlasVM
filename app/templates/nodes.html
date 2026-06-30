@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <div>
+      <h2>AtlasVM Nodes</h2>
+      <p>Register AtlasVM hosts and verify node health before we even pretend HA exists.</p>
+    </div>
+    <div>
+      <form method="post" action="/nodes/register-local" style="display:inline;"><button type="submit">Register Local Node</button></form>
+      <a href="/nodes/new"><button type="button">Add Node</button></a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h3>Registered Nodes</h3>
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Role</th><th>API URL</th><th>Status</th><th>Latency</th><th>Version / Detail</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for node in nodes %}
+      {% set status = node.remote_status or {} %}
+      <tr>
+        <td><strong>{{ node.name }}</strong><br><small><code>{{ node.node_id }}</code></small></td>
+        <td>{{ node.role }}</td>
+        <td><code>{{ node.api_url }}</code></td>
+        <td>{% if status.ok %}<span class="pill success">online</span>{% else %}<span class="pill failed">offline</span>{% endif %}</td>
+        <td>{{ status._latency_ms if status._latency_ms is defined else '-' }} ms</td>
+        <td>{% if status.self is defined %}{{ status.self.version }}{% elif status.error is defined %}<span class="danger">{{ status.error }}</span>{% else %}-{% endif %}</td>
+        <td>
+          <a href="/nodes/{{ node.node_id }}">Details</a>
+          <form method="post" action="/nodes/{{ node.node_id }}/delete" style="display:inline;" onsubmit="return confirm('Delete node {{ node.name }} from registry?');">
+            <button class="danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">No nodes registered yet. Lonely little hypervisor island.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h3>Local Node Token</h3>
+  <p>Use this token when registering this host from another AtlasVM node.</p>
+  <p><code>{{ local_token }}</code></p>
+  <p><small>Stored at <code>/opt/atlasvm/atlasvm_node_token</code>. Treat it like a password, because that is what it is, despite humanity's heroic efforts to name secrets something else.</small></p>
+</section>
+
+{% endblock %}

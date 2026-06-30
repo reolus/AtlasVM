@@ -1,7 +1,7 @@
 from pathlib import Path
 from shutil import copyfileobj
 
-from fastapi import Depends, FastAPI, File, Form, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -72,6 +72,18 @@ from app.services.host_mgmt_network import (
     save_plan,
 )
 from app.services.network_reconcile import reconcile_all
+from app.services.node_registry import (
+    delete_node,
+    ensure_local_node_registered,
+    get_node,
+    get_node_token,
+    list_nodes,
+    upsert_node,
+    validate_node_token,
+    local_node_self,
+)
+from app.services.node_inventory import host_health, node_inventory
+from app.services.node_client import enrich_nodes, node_inventory_remote
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -1671,6 +1683,97 @@ def backups_prune(vm_name: str = Form(''), keep_last: int | None = Form(None), t
         log_event(db, user, 'backup_prune_failed', vm_name or 'all', str(exc))
         return _redirect('/backups', error=str(exc))
 
+
+
+def _require_node_token(request: Request) -> None:
+    token = request.headers.get('X-AtlasVM-Node-Token') or request.query_params.get('node_token')
+    if not validate_node_token(token):
+        raise HTTPException(status_code=401, detail='Invalid or missing AtlasVM node token.')
+
+
+@app.get('/api/node/self')
+def api_node_self(request: Request):
+    _require_node_token(request)
+    return local_node_self()
+
+
+@app.get('/api/node/health')
+def api_node_health(request: Request):
+    _require_node_token(request)
+    return {'ok': True, 'self': local_node_self(), 'health': host_health()}
+
+
+@app.get('/api/node/inventory')
+def api_node_inventory(request: Request):
+    _require_node_token(request)
+    data = node_inventory()
+    data['ok'] = True
+    return data
+
+
+@app.get('/api/node/doctor')
+def api_node_doctor(request: Request):
+    _require_node_token(request)
+    return {'ok': True, 'self': local_node_self(), 'checks': run_doctor()}
+
+
+@app.get('/nodes', response_class=HTMLResponse)
+def nodes_page(request: Request, user: str = Depends(require_admin)):
+    ensure_local_node_registered()
+    nodes = enrich_nodes(list_nodes(), include_inventory=False)
+    return templates.TemplateResponse(
+        'nodes.html',
+        {
+            **_view_context(request, user),
+            'nodes': nodes,
+            'local_token': get_node_token(),
+        },
+    )
+
+
+@app.get('/nodes/new', response_class=HTMLResponse)
+def node_new_page(request: Request, user: str = Depends(require_admin)):
+    return templates.TemplateResponse('node_form.html', {**_view_context(request, user)})
+
+
+@app.post('/nodes')
+def node_save(
+    name: str = Form(''),
+    api_url: str = Form(...),
+    token: str = Form(''),
+    role: str = Form('worker'),
+    enabled: str = Form(''),
+    user: str = Depends(require_admin),
+):
+    try:
+        node = upsert_node(name=name, api_url=api_url, token=token, role=role, enabled=str(enabled).lower() in {'1','true','yes','on'})
+        return _redirect('/nodes', message=f"Saved node {node.get('name')}.")
+    except Exception as exc:
+        return _redirect('/nodes/new', error=str(exc))
+
+
+@app.post('/nodes/register-local')
+def nodes_register_local(user: str = Depends(require_admin)):
+    try:
+        node = ensure_local_node_registered()
+        return _redirect('/nodes', message=f"Registered local node {node.get('name')}.")
+    except Exception as exc:
+        return _redirect('/nodes', error=str(exc))
+
+
+@app.get('/nodes/{node_id}', response_class=HTMLResponse)
+def node_detail_page(node_id: str, request: Request, user: str = Depends(require_admin)):
+    node = get_node(node_id)
+    if not node:
+        return _redirect('/nodes', error='Node not found.')
+    inventory = node_inventory_remote(node)
+    return templates.TemplateResponse('node_detail.html', {**_view_context(request, user), 'node': node, 'inventory': inventory})
+
+
+@app.post('/nodes/{node_id}/delete')
+def node_delete(node_id: str, user: str = Depends(require_admin)):
+    delete_node(node_id)
+    return _redirect('/nodes', message='Node deleted from registry.')
 
 @app.get('/doctor', response_class=HTMLResponse)
 def doctor_page(request: Request, user: str = Depends(require_user)):
