@@ -202,3 +202,24 @@ button.compact, .button.compact { min-height: 1.95rem; padding: .34rem .55rem; b
 .nic-resource-row > div { min-width: 0; }
 .nic-resource-row strong { display: block; overflow-wrap: anywhere; }
 @media (max-width: 760px) { .nic-resource-row { grid-template-columns: 1fr; } }
+
+/* Phase 11.5.7: Remote VM detail and multi-node readiness polish. */
+.remote-detail-hero .vm-description { max-width: 68rem; }
+.remote-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.remote-detail-tabs { top: 82px; }
+.remote-action-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.disabled-card { opacity: .68; }
+.disabled-card button:disabled { cursor: not-allowed; filter: saturate(.6); opacity: .7; }
+.remote-resource-list { margin-top: .2rem; }
+.remote-node-row { grid-template-columns: minmax(11rem, .8fr) minmax(16rem, 1.2fr) minmax(7rem, .35fr); }
+.remote-resource-grid { align-items: start; }
+.remote-resource-header { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; margin-bottom: .65rem; }
+.remote-resource-header strong { color: #fff; overflow-wrap: anywhere; }
+.remote-disk-row { display: grid; gap: .28rem; }
+.remote-notice { border-color: rgba(84,182,255,.35); background: rgba(84,182,255,.08); color: var(--text-soft); }
+.remote-limit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
+.remote-limits-panel { border-color: rgba(255,209,102,.32); }
+@media (max-width: 920px) {
+  .remote-node-row { grid-template-columns: 1fr; }
+  .remote-detail-tabs { position: relative; top: auto; }
+}
