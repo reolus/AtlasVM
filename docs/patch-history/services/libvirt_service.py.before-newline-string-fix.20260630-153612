@@ -558,7 +558,9 @@ class LibvirtService:
 
         if was_template and marker not in new_desc:
             if new_desc:
-                new_desc = new_desc + '\n\n' + marker
+                new_desc = new_desc + '
+
+' + marker
             else:
                 new_desc = marker
 
@@ -671,14 +673,13 @@ class LibvirtService:
         domain.updateDeviceFlags(cdrom_xml, flags)
 
 
-    def add_disk(self, name: str, size_gb: int, storage_pool: str | None = None) -> dict[str, Any]:
+    def add_disk(self, name: str, size_gb: int, storage_pool: str | None = None) -> str:
         """Add a disk without undefining/redefining the VM.
 
         Snapshot-safe behavior:
         - Creates the backing volume.
-        - Attaches the disk XML using attachDeviceFlags.
-        - Rolls back the newly-created volume if attach fails.
-        - Does not call _redefine_domain() or defineXML() on the VM.
+        - Attaches the new disk XML to persistent VM config.
+        - Does not call _redefine_domain().
         """
         domain = self.conn.lookupByName(name)
 
@@ -692,80 +693,32 @@ class LibvirtService:
 
         existing = self._domain_disk_paths(domain)
         disk_index = len(existing) + 1
-        volume = None
-        last_error = None
 
-        for candidate_index in range(disk_index, disk_index + 50):
-            candidate_name = f'{name}-disk{candidate_index}'
-            try:
-                volume = create_volume_for_pool(storage_pool, candidate_name, size_gb, prefer_format='qcow2')
-                disk_index = candidate_index
-                break
-            except Exception as exc:
-                last_error = exc
-                if 'exists already' in str(exc) or 'already exists' in str(exc):
-                    continue
-                raise
+        volume = create_volume_for_pool(
+            storage_pool,
+            f'{name}-disk{disk_index}',
+            size_gb,
+            prefer_format='qcow2',
+        )
 
-        if volume is None:
-            raise RuntimeError(f'Could not create a unique disk volume for {name}: {last_error}')
-
-        used_targets = set()
-        try:
-            xml_text_for_targets = domain.XMLDesc(libvirt.VIR_DOMAIN_XML_INACTIVE)
-        except Exception:
-            xml_text_for_targets = domain.XMLDesc()
-
-        target_root = ET.fromstring(xml_text_for_targets)
-        for disk_node in target_root.findall('./devices/disk'):
-            target_node = disk_node.find('./target')
-            if target_node is not None and target_node.attrib.get('dev'):
-                used_targets.add(target_node.attrib.get('dev'))
-
-        target_dev = None
-        for letter in 'bcdefghijklmnopqrstuvwxyz':
-            candidate_dev = f'vd{letter}'
-            if candidate_dev not in used_targets:
-                target_dev = candidate_dev
-                break
-
-        if target_dev is None:
-            try:
-                delete_disk_source(volume.get('path') or volume.get('source') or '', pool_name=storage_pool)
-            except Exception:
-                pass
-            raise RuntimeError('No available virtio disk target names remain')
+        target_dev = f'vd{chr(ord("a") + disk_index)}'
 
         disk = ET.Element('disk')
         set_disk_source(disk, volume, target_dev=target_dev)
+
         disk_xml = ET.tostring(disk, encoding='unicode')
 
-        try:
-            domain.attachDeviceFlags(disk_xml, libvirt.VIR_DOMAIN_AFFECT_CONFIG)
-        except Exception:
-            try:
-                delete_disk_source(volume.get('path') or volume.get('source') or '', pool_name=storage_pool)
-            except Exception:
-                pass
-            try:
-                self.conn.storagePoolLookupByName(storage_pool).refresh(0)
-            except Exception:
-                pass
-            raise
+        domain.attachDeviceFlags(
+            disk_xml,
+            libvirt.VIR_DOMAIN_AFFECT_CONFIG,
+        )
 
         try:
             self.conn.storagePoolLookupByName(storage_pool).refresh(0)
         except Exception:
             pass
 
-        return {
-            'target': target_dev,
-            'volume': volume.get('name') or f'{name}-disk{disk_index}',
-            'path': volume.get('path') or volume.get('source') or '',
-            'pool': storage_pool,
-            'format': volume.get('format') or 'qcow2',
-            'mode': 'config',
-        }
+        return volume['path']
 
 
     def clone_vm(self, source_name: str, new_name: str, storage_pool: str | None = None) -> dict[str, Any]:
@@ -1130,15 +1083,15 @@ class LibvirtService:
         """
 
     def _redefine_domain(self, domain: libvirt.virDomain, root: ET.Element) -> None:
-        """Disabled by design.
-
-        Undefine/redefine breaks VMs with snapshots and must not be used for
-        routine VM edits. Keep this guard so accidental legacy calls fail loudly
-        instead of corrupting a perfectly innocent Tuesday.
-        """
-        name = domain.name() if domain is not None else 'unknown'
-        raise RuntimeError(f'_redefine_domain is disabled for VM {name}; use snapshot-safe libvirt update APIs instead')
-
+        xml = ET.tostring(root, encoding='unicode')
+        name = domain.name()
+        try:
+            domain.undefineFlags(libvirt.VIR_DOMAIN_UNDEFINE_NVRAM)
+        except Exception:
+            domain.undefine()
+        new_domain = self.conn.defineXML(xml)
+        if new_domain is None:
+            raise RuntimeError(f'libvirt failed to redefine VM {name}')
 
     def _domain_summary(self, domain: libvirt.virDomain, include_xml: bool = False, include_snapshots: bool = False) -> dict[str, Any]:
         state_code, _ = domain.state()
@@ -1241,16 +1194,59 @@ class LibvirtService:
         }.get(state_code, 'unknown')
 
     def mark_vm_as_template(self, vm_name: str) -> dict:
-        """Backward-compatible wrapper for older callers.
+        """Mark a stopped VM as an AtlasVM template.
 
-        Kept so old routes/scripts do not break, but it now delegates to the
-        snapshot-safe metadata implementation instead of redefining the domain.
+        This does not clone or seal the guest. It marks metadata and disables autostart.
+        The VM should be shut down before conversion.
         """
-        result = self.set_template(vm_name, True)
+        domain = self.conn.lookupByName(vm_name)
+
+        if domain.isActive():
+            raise RuntimeError("VM must be shut down before it can be marked as a template.")
+
+        try:
+            domain.setAutostart(0)
+        except Exception:
+            pass
+
+        xml = domain.XMLDesc(0)
+
+        # Add or update AtlasVM metadata. Libvirt metadata APIs are fussy across versions,
+        # so defineXML is the least glamorous but most reliable hammer.
+        if "<metadata>" not in xml:
+            xml = xml.replace(
+                "</domain>",
+                """  <metadata>
+    <atlasvm:template xmlns:atlasvm="https://atlasvm.local/schema">true</atlasvm:template>
+  </metadata>
+</domain>""",
+                1,
+            )
+        elif "atlasvm:template" not in xml:
+            xml = xml.replace(
+                "</metadata>",
+                """    <atlasvm:template xmlns:atlasvm="https://atlasvm.local/schema">true</atlasvm:template>
+  </metadata>""",
+                1,
+            )
+        else:
+            import re
+            xml = re.sub(
+                r"<atlasvm:template[^>]*>.*?</atlasvm:template>",
+                '<atlasvm:template xmlns:atlasvm="https://atlasvm.local/schema">true</atlasvm:template>',
+                xml,
+                flags=re.S,
+            )
+
+        # Remove UUID so libvirt does not complain on redefine edge cases.
+        # But since we are redefining the same VM, keep UUID. Yes, computers are annoying.
+        self.conn.defineXML(xml)
+
         return {
             "ok": True,
             "vm": vm_name,
             "template": True,
             "message": f"{vm_name} was marked as a template.",
-            **result,
         }
+
+

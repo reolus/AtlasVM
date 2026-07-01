@@ -8,46 +8,55 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header class="atlas-topbar">
-  <div class="atlas-topbar-inner">
-    <a class="atlas-brand" href="/">
-      <img src="/static/atlasvm-logo.png" alt="AtlasVM" class="atlas-logo">
-    </a>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/">
+        <img src="/static/atlasvm-logo.png" alt="AtlasVM">
+        <span>AtlasVM</span>
+      </a>
+      <nav class="side-nav">
+        <a href="/">Dashboard</a>
+        <a href="/vms">Virtual Machines</a>
+        <a href="/nodes">Nodes</a>
+        <a href="/storage">Storage</a>
+        <a href="/networks">Networks</a>
+        <a href="/templates">Templates</a>
+        <a href="/isos">ISOs</a>
+        <a href="/backups">Backups</a>
+        <a href="/tasks">Tasks</a>
+        <a href="/host/network">Host Network</a>
+        <a href="/zfs">ZFS</a>
+        <a href="/doctor">Doctor</a>
+        <a href="/audit">Audit</a>
+        <a href="/settings">Settings</a>
+        <a href="/users">Users</a>
+      </nav>
+    </aside>
 
-    <nav class="atlas-nav">
-      <a href="/">Dashboard</a>
-      <a href="/vms">VMs</a>
-      <a href="/storage">Storage</a>
-      <a href="/backups">Backups</a>
-      <a href="/nodes">Nodes</a>
-      <a href="/templates">Templates</a>
-      <a href="/networks">Networks</a>
-      <a href="/host/network">Host Network</a>
-      <a href="/zfs">ZFS</a>
-      <a href="/tasks">Tasks</a>
-      <a href="/audit">Audit</a>
-      <a href="/settings">Settings</a>
-      <a href="/users">Users</a>
-    </nav>
+    <div class="main-shell">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">AtlasVM Control Plane</div>
+          <div class="page-path">{{ request.url.path if request is defined else '' }}</div>
+        </div>
+        <div class="userbar">
+          {% if request.url.path != '/login' %}
+          <span class="user-pill">{{ user if user is defined and user else 'Signed in' }}</span>
+          <form method="post" action="/logout"><button class="button secondary" type="submit">Logout</button></form>
+          {% else %}
+          <a class="button" href="/login">Login</a>
+          {% endif %}
+        </div>
+      </header>
 
-    <div class="atlas-userbar">
-      {% if request.url.path != '/login' %}
-        <span class="atlas-user">{{ user if user is defined and user else 'Signed in' }}</span>
-        <form method="post" action="/logout" class="atlas-logout-form">
-          <button type="submit" class="atlas-logout-button">Logout</button>
-        </form>
-      {% else %}
-        <a class="atlas-login-link" href="/login">Login</a>
-      {% endif %}
+      <main class="content">
+        {% set q_error = request.query_params.get('error') if request is defined else None %}
+        {% set q_message = request.query_params.get('message') if request is defined else None %}
+        {% if error or q_error %}<div class="alert danger">{{ error or q_error }}</div>{% endif %}
+        {% if success or message or q_message %}<div class="alert success">{{ success or message or q_message }}</div>{% endif %}
+        {% block content %}{% endblock %}
+      </main>
     </div>
   </div>
-</header>
-  <main>
-    {% set q_error = request.query_params.get('error') if request is defined else None %}
-    {% set q_message = request.query_params.get('message') if request is defined else None %}
-    {% if error or q_error %}<div class="alert">{{ error or q_error }}</div>{% endif %}
-    {% if success or message or q_message %}<div class="notice success">{{ success or message or q_message }}</div>{% endif %}
-    {% block content %}{% endblock %}
-  </main>
 </body>
 </html>

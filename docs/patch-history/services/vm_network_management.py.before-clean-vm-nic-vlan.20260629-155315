@@ -291,16 +291,15 @@ def update_vm_interface(
 
             mode = "live+config"
         else:
-            flags = libvirt.VIR_DOMAIN_AFFECT_CONFIG
-            try:
-                dom.detachDeviceFlags(old_iface_xml, flags)
-                dom.attachDeviceFlags(new_iface_xml, flags)
-            except Exception as exc:
-                try:
-                    dom.attachDeviceFlags(old_iface_xml, flags)
-                except Exception:
-                    pass
-                raise RuntimeError(f"Failed to update NIC configuration: {exc}")
+            devices = root.find("./devices")
+            if devices is None:
+                raise RuntimeError("VM XML does not contain devices section.")
+
+            position = list(devices).index(selected)
+            devices.remove(selected)
+            devices.insert(position, ET.fromstring(new_iface_xml))
+
+            conn.defineXML(ET.tostring(root, encoding="unicode"))
             mode = "config"
 
         return {
@@ -348,8 +347,15 @@ def add_vm_interface(
             dom.attachDeviceFlags(new_iface_xml, flags)
             mode = "live+config"
         else:
-            flags = libvirt.VIR_DOMAIN_AFFECT_CONFIG
-            dom.attachDeviceFlags(new_iface_xml, flags)
+            xml = dom.XMLDesc(libvirt.VIR_DOMAIN_XML_INACTIVE)
+            root = ET.fromstring(xml)
+
+            devices = root.find("./devices")
+            if devices is None:
+                raise RuntimeError("VM XML does not contain devices section.")
+
+            devices.append(ET.fromstring(new_iface_xml))
+            conn.defineXML(ET.tostring(root, encoding="unicode"))
             mode = "config"
 
         return {
@@ -397,108 +403,18 @@ def remove_vm_interface(
             dom.detachDeviceFlags(old_iface_xml, flags)
             mode = "live+config"
         else:
-            flags = libvirt.VIR_DOMAIN_AFFECT_CONFIG
-            dom.detachDeviceFlags(old_iface_xml, flags)
+            devices = root.find("./devices")
+            if devices is None:
+                raise RuntimeError("VM XML does not contain devices section.")
+
+            devices.remove(selected)
+            conn.defineXML(ET.tostring(root, encoding="unicode"))
             mode = "config"
 
         return {
             "vm": vm_name,
             "mac": mac_address,
             "mode": mode,
-        }
-    finally:
-        conn.close()
-
-
-def remove_vm_interface_vlan_tag(
-    vm_name: str,
-    mac_address: str,
-    apply_live: bool,
-    libvirt_uri: str,
-) -> dict[str, Any]:
-    """
-    Remove a VM-side VLAN tag from a NIC.
-
-    AtlasVM expects VLAN tagging to happen at the host/libvirt network layer.
-    This removes only <vlan> from the VM interface XML.
-    """
-    vm_name = validate_vm_name(vm_name)
-    mac_address = normalize_mac(mac_address)
-
-    if not mac_address:
-        raise RuntimeError("MAC address is required.")
-
-    conn = libvirt.open(libvirt_uri)
-    if conn is None:
-        raise RuntimeError("Could not connect to libvirt.")
-
-    try:
-        dom = conn.lookupByName(vm_name)
-        is_active = bool(dom.isActive())
-
-        if is_active and not apply_live:
-            raise RuntimeError('VM is running. Check "Apply live" to clean this NIC now, or shut down the VM first.')
-
-        xml_flags = 0 if is_active else libvirt.VIR_DOMAIN_XML_INACTIVE
-        xml = dom.XMLDesc(xml_flags)
-        root = ET.fromstring(xml)
-
-        selected = find_interface_by_mac(root, mac_address)
-        vlan_el = selected.find("vlan")
-
-        if vlan_el is None:
-            return {
-                "vm": vm_name,
-                "mac": mac_address,
-                "mode": "none",
-                "message": "NIC does not have a VM-side VLAN tag.",
-            }
-
-        old_iface_xml = ET.tostring(selected, encoding="unicode")
-
-        clean_iface = ET.fromstring(old_iface_xml)
-        clean_vlan = clean_iface.find("vlan")
-        if clean_vlan is not None:
-            clean_iface.remove(clean_vlan)
-
-        clean_iface_xml = ET.tostring(clean_iface, encoding="unicode")
-
-        if is_active:
-            flags = libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
-
-            try:
-                dom.detachDeviceFlags(old_iface_xml, flags)
-            except Exception as exc:
-                raise RuntimeError(f"Failed to detach VLAN-tagged NIC: {exc}")
-
-            try:
-                dom.attachDeviceFlags(clean_iface_xml, flags)
-            except Exception as exc:
-                try:
-                    dom.attachDeviceFlags(old_iface_xml, flags)
-                except Exception:
-                    pass
-                raise RuntimeError(f"Failed to attach cleaned NIC. Original NIC rollback was attempted. Error: {exc}")
-
-            mode = "live+config"
-        else:
-            flags = libvirt.VIR_DOMAIN_AFFECT_CONFIG
-            try:
-                dom.detachDeviceFlags(old_iface_xml, flags)
-                dom.attachDeviceFlags(clean_iface_xml, flags)
-            except Exception as exc:
-                try:
-                    dom.attachDeviceFlags(old_iface_xml, flags)
-                except Exception:
-                    pass
-                raise RuntimeError(f"Failed to clean NIC configuration: {exc}")
-            mode = "config"
-
-        return {
-            "vm": vm_name,
-            "mac": mac_address,
-            "mode": mode,
-            "message": f"Removed VM-side VLAN tag from NIC {mac_address} using {mode}.",
         }
     finally:
         conn.close()

@@ -436,33 +436,7 @@ def vm_detail(name: str, request: Request, error_msg: str | None = Query(None, a
 
 
 
-@app.post('/ui/vms/{name}/snapshots')
-def create_snapshot_form_before_vm_action(
-    name: str,
-    snapshot_name: str = Form(...),
-    description: str = Form(''),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_operator),
-):
-    """Create a VM snapshot.
-
-    This route must be declared before the generic /ui/vms/{name}/{action}
-    route, otherwise FastAPI treats "snapshots" as a generic VM action.
-    """
-    task = start_task(db, user, 'create_snapshot', name)
-    try:
-        lv = LibvirtService()
-        lv.create_snapshot(name, snapshot_name, description or None)
-        log_event(db, user, 'create_snapshot', name, snapshot_name)
-        finish_task(db, task, 'success', f'Created snapshot {snapshot_name}')
-        return _redirect(f'/vms/{name}', message=f'Created snapshot {snapshot_name}')
-    except Exception as exc:
-        finish_task(db, task, 'failed', str(exc))
-        log_event(db, user, 'create_snapshot_failed', name, str(exc))
-        return _redirect(f'/vms/{name}', error=str(exc))
-
-
-
+@app.post('/vms/{name}/edit')
 @app.post('/ui/vms/{name}/edit')
 def vm_edit_basic(name: str, memory_mb: int = Form(...), vcpus: int = Form(...), description: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
@@ -480,6 +454,7 @@ def vm_edit_basic(name: str, memory_mb: int = Form(...), vcpus: int = Form(...),
     return RedirectResponse(url=f'/vms/{name}', status_code=303)
 
 
+@app.post('/vms/{name}/iso/attach')
 @app.post('/ui/vms/{name}/iso/attach')
 def vm_attach_iso(
     name: str,
@@ -503,6 +478,7 @@ def vm_attach_iso(
         lv.close()
 
 
+@app.post('/vms/{name}/iso/eject')
 @app.post('/ui/vms/{name}/iso/eject')
 def vm_eject_iso(
     name: str,
@@ -525,20 +501,24 @@ def vm_eject_iso(
         lv.close()
 
 
+@app.post('/vms/{name}/disks/add')
 @app.post('/ui/vms/{name}/disks/add')
 def vm_add_disk(name: str, size_gb: int = Form(...), storage_pool: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'add_disk', name)
     try:
         disk = lv.add_disk(name, size_gb, storage_pool or None)
-        log_event(db, user, 'add_disk', name, disk)
-        finish_task(db, task, 'success', f'Added disk {disk}')
+        target = disk.get('target', 'disk') if isinstance(disk, dict) else 'disk'
+        path = disk.get('path', str(disk)) if isinstance(disk, dict) else str(disk)
+        log_event(db, user, 'add_disk', name, f'{target}: {path}')
+        finish_task(db, task, 'success', f'Added disk {target}')
+        return _redirect(f'/vms/{name}/disks', message=f'Added disk {target}')
     except Exception as exc:
         finish_task(db, task, 'failed', str(exc))
-        raise
+        log_event(db, user, 'add_disk_failed', name, str(exc))
+        return _redirect(f'/vms/{name}/disks', error=str(exc))
     finally:
         lv.close()
-    return RedirectResponse(url=f'/vms/{name}', status_code=303)
 
 
 @app.post('/ui/vms/{name}/clone')
@@ -566,7 +546,7 @@ def vm_backup(name: str, compress: bool = Form(False), require_shutdown: bool = 
 
 
 @app.post('/ui/vms/{name}/delete-confirm')
-def vm_delete_confirm(name: str, confirm_name: str = Form(...), delete_disks: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_admin)):
+def vm_delete_confirm_legacy(name: str, confirm_name: str = Form(...), delete_disks: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_admin)):
     if confirm_name != name:
         raise ValueError('Confirmation name did not match VM name')
     lv = LibvirtService()
@@ -609,6 +589,7 @@ def vm_console_page(name: str, request: Request, url: str = '', user: str = Depe
         })
 
 
+@app.post('/vms/{name}/snapshots')
 @app.post('/ui/vms/{name}/snapshots')
 def create_snapshot_form(name: str, snapshot_name: str = Form(...), description: str = Form(''), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
@@ -625,6 +606,7 @@ def create_snapshot_form(name: str, snapshot_name: str = Form(...), description:
     return RedirectResponse(url=f'/vms/{name}', status_code=303)
 
 
+@app.post('/vms/{name}/snapshots/{snapshot}/{action}')
 @app.post('/ui/vms/{name}/snapshots/{snapshot}/{action}')
 def snapshot_action(name: str, snapshot: str, action: str, db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
@@ -727,6 +709,7 @@ def templates_page(request: Request, user: str = Depends(require_user)):
     return templates.TemplateResponse('templates.html', context)
 
 
+@app.post('/vms/{name}/template')
 @app.post('/ui/vms/{name}/template')
 def vm_set_template(name: str, enabled: str = Form('true'), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
@@ -1069,6 +1052,22 @@ def storage_page(request: Request, user: str = Depends(require_admin)):
             'overview': storage_overview(),
         },
     )
+
+
+
+@app.post('/storage/{pool_name}/refresh')
+def storage_pool_refresh(pool_name: str, user: str = Depends(require_admin)):
+    lv = LibvirtService()
+    try:
+        pool = lv.conn.storagePoolLookupByName(pool_name)
+        if not pool.isActive():
+            pool.create()
+        pool.refresh(0)
+        return _redirect('/storage', message=f'Refreshed storage pool {pool_name}')
+    except Exception as exc:
+        return _redirect('/storage', error=str(exc))
+    finally:
+        lv.close()
 
 
 @app.get('/storage/networks/new', response_class=HTMLResponse)
@@ -1501,30 +1500,6 @@ def vm_disks_page(vm_name: str, request: Request, user: str = Depends(require_ad
         )
     except Exception as exc:
         return _redirect('/vms', error=str(exc))
-
-
-@app.post('/vms/{vm_name}/disks/add')
-def vm_disk_add(
-    vm_name: str,
-    pool_name: str = Form(''),
-    disk_name: str = Form(''),
-    size_gb: int = Form(0),
-    fmt: str = Form('qcow2'),
-    user: str = Depends(require_admin),
-):
-    try:
-        result = add_disk_to_vm(
-            vm_name=vm_name,
-            pool_name=pool_name,
-            disk_name=disk_name,
-            size_gb=size_gb,
-            fmt=fmt,
-        )
-        target = result.get('attach', {}).get('target', '')
-        mode = result.get('attach', {}).get('attach_mode', '')
-        return _redirect(f'/vms/{vm_name}/disks', message=f'Disk added as {target} using {mode}.')
-    except Exception as exc:
-        return _redirect(f'/vms/{vm_name}/disks', error=str(exc))
 
 
 @app.post('/vms/{vm_name}/disks/{target_dev}/remove')
@@ -2340,86 +2315,6 @@ def vm_clone_submit(
             status_code=303,
         )
 
-@app.post('/vms/{name}/edit')
-def vm_edit_submit(
-    name: str,
-    memory_mb: int = Form(...),
-    vcpus: int = Form(...),
-    description: str = Form(''),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_operator),
-):
-    from urllib.parse import quote
-    import libvirt
-
-    settings = get_settings()
-
-    try:
-        if memory_mb < 128:
-            raise RuntimeError('Memory must be at least 128 MB.')
-
-        if vcpus < 1:
-            raise RuntimeError('vCPU count must be at least 1.')
-
-        conn = libvirt.open(settings.libvirt_uri)
-        if conn is None:
-            raise RuntimeError('Could not connect to libvirt.')
-
-        try:
-            dom = conn.lookupByName(name)
-
-            if dom.isActive():
-                raise RuntimeError('Shut down the VM before changing memory or vCPU settings.')
-
-            mem_kib = int(memory_mb) * 1024
-            cpu_count = int(vcpus)
-
-            # Update persistent/inactive VM config only.
-            # Maximums first, then current values, because libvirt enjoys making order matter.
-            dom.setMemoryFlags(
-                mem_kib,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG | libvirt.VIR_DOMAIN_MEM_MAXIMUM,
-            )
-            dom.setMemoryFlags(
-                mem_kib,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-            )
-
-            dom.setVcpusFlags(
-                cpu_count,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG | libvirt.VIR_DOMAIN_VCPU_MAXIMUM,
-            )
-            dom.setVcpusFlags(
-                cpu_count,
-                libvirt.VIR_DOMAIN_AFFECT_CONFIG,
-            )
-
-        finally:
-            conn.close()
-
-        try:
-            if 'log_event' in globals():
-                log_event(db, user, 'edit_vm', name, f'memory_mb={memory_mb}, vcpus={vcpus}')
-        except Exception:
-            pass
-
-        return RedirectResponse(
-            url=f'/vms/{name}?message={quote("Updated VM settings. Start the VM for the new values to take effect.")}',
-            status_code=303,
-        )
-
-    except Exception as exc:
-        try:
-            if 'log_event' in globals():
-                log_event(db, user, 'edit_vm_failed', name, str(exc))
-        except Exception:
-            pass
-
-        return RedirectResponse(
-            url=f'/vms/{name}?error={quote(str(exc))}',
-            status_code=303,
-        )
-
 @app.get('/vms/{name}/network')
 
 
@@ -2534,25 +2429,16 @@ def vm_network_page(
 def _atlasvm_build_interface_xml(network_name: str, mac: str = '', model_type: str = 'virtio', vlan_tag: str = '') -> str:
     import xml.etree.ElementTree as ET
 
+    # VM-side VLAN tags are intentionally not written into the guest interface XML.
+    # VLAN placement belongs on the host bridge/libvirt network layer, not inside
+    # each VM NIC definition. Keeping it out avoids libvirt warnings and gives
+    # multi-node networking one sane place to reason about tags.
     iface = ET.Element("interface", {"type": "network"})
 
     if mac:
         ET.SubElement(iface, "mac", {"address": mac})
 
     ET.SubElement(iface, "source", {"network": network_name})
-
-    vlan_tag = str(vlan_tag or '').strip()
-    if not vlan_tag:
-        vlan_tag = NetworkPhase8Service(settings.libvirt_uri).get_vlan_tag(network_name)
-
-    if vlan_tag:
-        vlan_id = int(vlan_tag)
-        if vlan_id < 1 or vlan_id > 4094:
-            raise RuntimeError('VLAN tag must be between 1 and 4094.')
-
-        vlan_el = ET.SubElement(iface, "vlan")
-        ET.SubElement(vlan_el, "tag", {"id": str(vlan_id)})
-
     ET.SubElement(iface, "model", {"type": model_type or "virtio"})
 
     return ET.tostring(iface, encoding="unicode")
@@ -2657,16 +2543,16 @@ def vm_network_update(
 
                     raise RuntimeError(f'Failed to attach updated NIC: {exc}')
             else:
-                parent = root.find("./devices")
-                if parent is None:
-                    raise RuntimeError('VM XML does not contain devices section.')
-
-                insert_at = list(parent).index(selected)
-                parent.remove(selected)
-                parent.insert(insert_at, ET.fromstring(new_iface_xml))
-
-                new_xml = ET.tostring(root, encoding="unicode")
-                conn.defineXML(new_xml)
+                flags = libvirt.VIR_DOMAIN_AFFECT_CONFIG
+                try:
+                    dom.detachDeviceFlags(old_iface_xml, flags)
+                    dom.attachDeviceFlags(new_iface_xml, flags)
+                except Exception as exc:
+                    try:
+                        dom.attachDeviceFlags(old_iface_xml, flags)
+                    except Exception:
+                        pass
+                    raise RuntimeError(f'Failed to update NIC configuration: {exc}')
 
         finally:
             conn.close()
@@ -2738,15 +2624,8 @@ def vm_network_add(
                 flags = libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
                 dom.attachDeviceFlags(new_iface_xml, flags)
             else:
-                xml = dom.XMLDesc(libvirt.VIR_DOMAIN_XML_INACTIVE)
-                root = ET.fromstring(xml)
-                devices = root.find("./devices")
-                if devices is None:
-                    raise RuntimeError('VM XML does not contain devices section.')
-
-                devices.append(ET.fromstring(new_iface_xml))
-                new_xml = ET.tostring(root, encoding="unicode")
-                conn.defineXML(new_xml)
+                flags = libvirt.VIR_DOMAIN_AFFECT_CONFIG
+                dom.attachDeviceFlags(new_iface_xml, flags)
 
         finally:
             conn.close()
@@ -2809,13 +2688,8 @@ def vm_network_remove(
                 flags = libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
                 dom.detachDeviceFlags(old_iface_xml, flags)
             else:
-                devices = root.find("./devices")
-                if devices is None:
-                    raise RuntimeError('VM XML does not contain devices section.')
-
-                devices.remove(selected)
-                new_xml = ET.tostring(root, encoding="unicode")
-                conn.defineXML(new_xml)
+                flags = libvirt.VIR_DOMAIN_AFFECT_CONFIG
+                dom.detachDeviceFlags(old_iface_xml, flags)
 
         finally:
             conn.close()
