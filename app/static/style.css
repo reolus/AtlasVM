@@ -31,7 +31,7 @@ a:hover { text-decoration: underline; }
 .login-form { display: grid; gap: .9rem; }
 .login-button { width: fit-content; min-width: 120px; }
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 260px minmax(0, 1fr); }
-.sidebar { position: sticky; top: 0; height: 100vh; min-height: 100%; padding: 1.05rem 1rem; border-right: 1px solid var(--border); background: rgba(5, 11, 20, .82); backdrop-filter: blur(14px); overflow-y: auto; }
+.sidebar { position: absolute; top: 0; height: 100vh; min-height: 100%; padding: 1.05rem 1rem; border-right: 1px solid var(--border); background: rgba(5, 11, 20, .82); backdrop-filter: blur(14px); overflow-y: auto; }
 .brand { display: flex; align-items: center; justify-content: flex-start; padding: .45rem .45rem 1.25rem; color: var(--text); }
 .brand img { width: 168px; max-width: 100%; height: auto; object-fit: contain; display: block; }
 .side-nav { display: grid; gap: .22rem; margin-top: .15rem; }
