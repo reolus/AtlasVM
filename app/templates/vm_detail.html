@@ -125,13 +125,15 @@
       </div>
       <a class="button secondary" href="/vms/{{ vm.name }}/disks">Manage Disks</a>
     </div>
-    <div class="table-scroll">
-      <table class="data-table vm-detail-table">
-        <thead><tr><th>Disk path</th></tr></thead>
-        <tbody>
-          {% for disk in vm.disks %}<tr><td><code>{{ disk }}</code></td></tr>{% else %}<tr><td class="empty-cell">No disks found.</td></tr>{% endfor %}
-        </tbody>
-      </table>
+    <div class="resource-list disk-resource-list">
+      {% for disk in vm.disks %}
+      <div class="resource-row disk-resource-row">
+        <span class="resource-label">Disk path</span>
+        <code class="wrap-code">{{ disk }}</code>
+      </div>
+      {% else %}
+      <div class="empty-cell">No disks found.</div>
+      {% endfor %}
     </div>
   </div>
 
@@ -143,15 +145,25 @@
       </div>
       <a class="button secondary" href="/vms/{{ vm.name }}/network">Manage NICs</a>
     </div>
-    <div class="table-scroll">
-      <table class="data-table vm-detail-table">
-        <thead><tr><th>MAC</th><th>Network / Bridge</th><th>Model</th></tr></thead>
-        <tbody>
-          {% for nic in vm.interfaces %}
-          <tr><td><code>{{ nic.mac }}</code></td><td><code>{{ nic.network or nic.bridge or '-' }}</code></td><td>{{ nic.model or '-' }}</td></tr>
-          {% else %}<tr><td colspan="3" class="empty-cell">No interfaces found.</td></tr>{% endfor %}
-        </tbody>
-      </table>
+    <div class="resource-list nic-resource-list">
+      {% for nic in vm.interfaces %}
+      <div class="resource-row nic-resource-row">
+        <div>
+          <span class="resource-label">MAC</span>
+          <code class="wrap-code">{{ nic.mac }}</code>
+        </div>
+        <div>
+          <span class="resource-label">Network / Bridge</span>
+          <code class="wrap-code">{{ nic.network or nic.bridge or '-' }}</code>
+        </div>
+        <div>
+          <span class="resource-label">Model</span>
+          <strong>{{ nic.model or '-' }}</strong>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty-cell">No interfaces found.</div>
+      {% endfor %}
     </div>
   </div>
 </section>

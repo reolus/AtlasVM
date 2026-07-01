@@ -192,3 +192,13 @@ button.compact, .button.compact { min-height: 1.95rem; padding: .34rem .55rem; b
   .vm-snapshot-form { grid-template-columns: 1fr; }
   .vm-detail-table, .compact-table, .snapshot-table { min-width: 680px; }
 }
+
+/* Phase 11.5.6: VM detail storage/network no-scroll resource cards. */
+.resource-list { display: grid; gap: .65rem; width: 100%; max-width: 100%; min-width: 0; }
+.resource-row { min-width: 0; padding: .78rem .85rem; border: 1px solid var(--border); border-radius: .85rem; background: rgba(5,11,20,.24); }
+.resource-label { display: block; margin-bottom: .35rem; color: var(--muted); font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.wrap-code { display: block; width: 100%; max-width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.45; }
+.nic-resource-row { display: grid; grid-template-columns: minmax(11rem, .85fr) minmax(10rem, 1.1fr) minmax(5rem, .45fr); gap: .9rem; align-items: start; }
+.nic-resource-row > div { min-width: 0; }
+.nic-resource-row strong { display: block; overflow-wrap: anywhere; }
+@media (max-width: 760px) { .nic-resource-row { grid-template-columns: 1fr; } }
