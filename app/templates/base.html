@@ -71,7 +71,6 @@
       <div class="sidebar-meta">
         <div class="sidebar-product">AtlasVM Community Edition</div>
         <div class="sidebar-tagline">Single-node virtualization management</div>
-        <div class="sidebar-company">by Rock Bluffs Labs, LLC</div>
       </div>
       <nav class="side-nav" aria-label="Primary navigation">
         <a class="{{ 'active' if current_path == '/' else '' }}" href="/">Dashboard</a>
@@ -89,6 +88,9 @@
         <a class="{{ 'active' if current_path.startswith('/settings') else '' }}" href="/settings">Settings</a>
         <a class="{{ 'active' if current_path.startswith('/users') else '' }}" href="/users">Users</a>
       </nav>
+	  <div class="sidebar-meta">
+        <div class="sidebar-company">Rock Bluffs Labs, LLC</div>
+      </div>
     </aside>
 
     <div class="main-shell">
