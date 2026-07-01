@@ -95,6 +95,7 @@ a:hover { text-decoration: underline; }
 .side-nav a { color: var(--muted); padding: .67rem .78rem; border: 1px solid transparent; border-radius: .8rem; transition: background .16s ease, color .16s ease, border-color .16s ease, transform .16s ease; }
 .side-nav a:hover { color: var(--text); background: rgba(84,182,255,.12); border-color: rgba(84,182,255,.2); text-decoration: none; }
 .side-nav a.active { color: #ffffff; background: linear-gradient(90deg, rgba(84,182,255,.2), rgba(124,218,255,.08)); border-color: rgba(84,182,255,.4); box-shadow: inset 3px 0 0 var(--accent); }
+.sidebar-footer { margin-top: auto; }
 .main-shell { min-width: 0; }
 .topbar { min-height: 82px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.55rem; border-bottom: 1px solid var(--border); background: rgba(7, 17, 31, .72); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 3; }
 .eyebrow { text-transform: uppercase; letter-spacing: .11em; color: var(--accent-2); font-size: .72rem; font-weight: 800; }
