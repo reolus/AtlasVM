@@ -1,84 +1,190 @@
 {% extends "base.html" %}
 {% block content %}
 
-<section>
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
-    <div>
-      <h2>{{ node.name }}</h2>
-      <p><code>{{ node.api_url }}</code></p>
+{% set online = inventory.ok %}
+{% set summary = compatibility.summary if compatibility is defined and compatibility.summary is defined else {} %}
+{% set compat_ready = compatibility.ready if compatibility is defined else false %}
+
+<section class="hero-card node-detail-hero">
+  <div>
+    <div class="eyebrow">Node detail</div>
+    <h1>{{ node.name }}</h1>
+    <p class="muted wrap-text">{{ node.api_url }}</p>
+    <div class="vm-hero-meta">
+      {% if online %}<span class="pill running">online</span>{% else %}<span class="pill failed">offline</span>{% endif %}
+      <span class="pill">{{ node.role }}</span>
+      {% if node.local %}<span class="pill local">local</span>{% else %}<span class="pill remote">remote</span>{% endif %}
+      {% if compat_ready %}<span class="pill success">compatible</span>{% else %}<span class="pill failed">compatibility warnings</span>{% endif %}
     </div>
-    <div>
-      <a href="/nodes/{{ node.node_id }}/compatibility"><button type="button">Compatibility</button></a>
-      <a href="/nodes"><button type="button">Back to Nodes</button></a>
-    </div>
+  </div>
+  <div class="hero-actions">
+    <a class="button secondary" href="/nodes/{{ node.node_id }}/compatibility">Compatibility</a>
+    <a class="button secondary" href="/vms?node={{ node.node_id }}">Node VMs</a>
+    <a class="button" href="/nodes">Back to Nodes</a>
   </div>
 </section>
 
-<section>
-  <h3>Health</h3>
-  {% if inventory.ok %}
-  <table>
-    <tr><th>Node ID</th><td><code>{{ inventory.self.node_id }}</code></td></tr>
-    <tr><th>Hostname</th><td>{{ inventory.self.hostname }}</td></tr>
-    <tr><th>IP</th><td>{{ inventory.self.management_ip }}</td></tr>
-    <tr><th>Version</th><td>{{ inventory.self.version }}</td></tr>
-    <tr><th>Memory</th><td>{{ inventory.health.memory.used_percent }}% used</td></tr>
-    <tr><th>Root Disk</th><td>{{ inventory.health.root_disk.used_percent }}% used</td></tr>
-    <tr><th>Doctor</th><td>{{ inventory.doctor.warning }} warning(s), {{ inventory.doctor.error }} error(s)</td></tr>
-  </table>
-  {% else %}
-  <div class="alert">{{ inventory.error }}</div>
-  {% endif %}
-</section>
+<nav class="vm-detail-tabs node-detail-tabs">
+  <a href="#health">Health</a>
+  <a href="#readiness">Readiness</a>
+  <a href="#vms">VMs</a>
+  <a href="#networks">Networks</a>
+  <a href="#storage">Storage</a>
+</nav>
 
+<div class="cards node-health-grid" id="health">
+  <div class="stat-card">
+    <span>Reachability</span>
+    <strong class="{{ 'text-success' if online else 'text-danger' }}">{{ 'Online' if online else 'Offline' }}</strong>
+    <small>AtlasVM node API response.</small>
+  </div>
+  <div class="stat-card">
+    <span>Hostname</span>
+    <strong class="wrap-text">{% if online and inventory.self is defined %}{{ inventory.self.hostname }}{% else %}-{% endif %}</strong>
+    <small>Remote self-report.</small>
+  </div>
+  <div class="stat-card">
+    <span>Version</span>
+    <strong>{% if online and inventory.self is defined %}{{ inventory.self.version }}{% else %}-{% endif %}</strong>
+    <small>Version alignment matters before Phase 12.</small>
+  </div>
+  <div class="stat-card">
+    <span>Doctor</span>
+    <strong>{% if online and inventory.doctor is defined %}{{ inventory.doctor.warning }} W / {{ inventory.doctor.error }} E{% else %}-{% endif %}</strong>
+    <small>Warnings and errors reported by the node.</small>
+  </div>
+  <div class="stat-card">
+    <span>Memory</span>
+    <strong>{% if online and inventory.health is defined %}{{ inventory.health.memory.used_percent }}%{% else %}-{% endif %}</strong>
+    <small>Used memory on the owning host.</small>
+  </div>
+  <div class="stat-card">
+    <span>Root Disk</span>
+    <strong>{% if online and inventory.health is defined %}{{ inventory.health.root_disk.used_percent }}%{% else %}-{% endif %}</strong>
+    <small>Root filesystem usage.</small>
+  </div>
+</div>
 
-{% if compatibility is defined %}
-<section>
-  <h3>Compatibility Summary</h3>
-  {% if compatibility.ready %}
-  <p><span class="pill success">cluster-ready</span> No warnings found for this node pair.</p>
-  {% else %}
-  <p><span class="pill failed">not ready</span> {{ compatibility.summary.warning or 0 }} warning(s), {{ compatibility.summary.error or 0 }} error(s).</p>
-  {% endif %}
-  <p><a href="/nodes/{{ node.node_id }}/compatibility">View full compatibility report</a></p>
+{% if not online %}
+<section class="panel danger-zone">
+  <h2>Node Unavailable</h2>
+  <div class="alert danger">{{ inventory.error }}</div>
+  <p class="muted">Check the remote atlasvm.service, nginx proxy, API URL, token, firewall, and DNS. The usual small committee of things.</p>
 </section>
 {% endif %}
 
-{% if inventory.ok and inventory.libvirt is defined %}
-<section class="grid two">
-  <div>
-    <h3>VMs</h3>
-    <table><thead><tr><th>Name</th><th>State</th><th>vCPU</th><th>Memory</th><th>UUID</th><th>Actions</th></tr></thead><tbody>
-      {% if inventory.vm_inventory is defined and inventory.vm_inventory.vms is defined %}
-        {% for vm in inventory.vm_inventory.vms %}
-        <tr>
-          <td>{{ vm.name }}</td>
-          <td>{{ vm.state }}</td>
-          <td>{{ vm.vcpu or '-' }}</td>
-          <td>{% if vm.memory %}{{ (vm.memory | int / 1024 / 1024) | round(1) }} GiB{% else %}-{% endif %}</td>
-          <td><code>{{ vm.uuid }}</code></td>
-          <td><a href="/nodes/{{ node.node_id }}/vms/{{ vm.name }}">Remote Detail</a></td>
-        </tr>
-        {% else %}<tr><td colspan="6">No VMs.</td></tr>{% endfor %}
-      {% else %}
-        {% for vm in inventory.libvirt.vms %}<tr><td>{{ vm.name }}</td><td>{{ 'running' if vm.active else 'offline' }}</td><td>-</td><td>-</td><td><code>{{ vm.uuid }}</code></td><td><a href="/nodes/{{ node.node_id }}/vms/{{ vm.name }}">Remote Detail</a></td></tr>{% else %}<tr><td colspan="6">No VMs.</td></tr>{% endfor %}
-      {% endif %}
-    </tbody></table>
+<section class="panel phase12-panel" id="readiness">
+  <div class="section-title">
+    <div>
+      <h2>Phase 12 Readiness</h2>
+      <p class="muted">This node must be boringly reachable before multi-node testing. Excitement belongs in fiction, not orchestration.</p>
+    </div>
+    <a class="button secondary" href="/nodes/{{ node.node_id }}/compatibility">Full Compatibility Report</a>
   </div>
-  <div>
-    <h3>Networks</h3>
-    <table><thead><tr><th>Name</th><th>Active</th></tr></thead><tbody>
-      {% for net in inventory.libvirt.networks %}<tr><td>{{ net.name }}</td><td>{{ net.active }}</td></tr>{% else %}<tr><td colspan="2">No networks.</td></tr>{% endfor %}
-    </tbody></table>
+
+  <div class="phase12-check-grid">
+    <div class="phase12-check {{ 'ok' if online else 'bad' }}">
+      <strong>API Reachability</strong>
+      <span>{{ 'Node inventory endpoint responded.' if online else 'Node inventory endpoint did not respond.' }}</span>
+    </div>
+    <div class="phase12-check {{ 'ok' if compat_ready else 'warn' }}">
+      <strong>Compatibility</strong>
+      <span>{% if compatibility is defined %}{{ summary.warning or 0 }} warning(s), {{ summary.error or 0 }} error(s).{% else %}Compatibility data unavailable.{% endif %}</span>
+    </div>
+    <div class="phase12-check {{ 'ok' if online and inventory.self is defined and inventory.self.version is defined else 'warn' }}">
+      <strong>Version Report</strong>
+      <span>{% if online and inventory.self is defined %}{{ inventory.self.version }}{% else %}Version not reported.{% endif %}</span>
+    </div>
+    <div class="phase12-check warn">
+      <strong>Remote Action Boundary</strong>
+      <span>Remote detail exposes inventory and safe VM power actions. Hardware mutation stays local until explicitly tested.</span>
+    </div>
   </div>
 </section>
 
-<section>
-  <h3>Storage Pools</h3>
-  <table><thead><tr><th>Name</th><th>Active</th><th>Detail</th></tr></thead><tbody>
-    {% for pool in inventory.libvirt.pools %}<tr><td>{{ pool.name }}</td><td>{{ pool.active }}</td><td>{{ pool.error if pool.error is defined else '' }}</td></tr>{% else %}<tr><td colspan="3">No pools.</td></tr>{% endfor %}
-  </tbody></table>
+{% if online and inventory.libvirt is defined %}
+<section class="panel" id="vms">
+  <div class="section-title">
+    <div>
+      <h2>Virtual Machines</h2>
+      <p class="muted">Guests reported by this node.</p>
+    </div>
+    <a class="button secondary" href="/vms?node={{ node.node_id }}">Filtered VM List</a>
+  </div>
+
+  <div class="node-vm-card-grid">
+    {% if inventory.vm_inventory is defined and inventory.vm_inventory.vms is defined %}
+      {% for vm in inventory.vm_inventory.vms %}
+      <article class="node-vm-card">
+        <div class="node-card-header">
+          <div>
+            <h3 class="wrap-text">{{ vm.name }}</h3>
+            <code class="wrap-code">{{ vm.uuid }}</code>
+          </div>
+          <span class="state-pill {{ vm.state|lower if vm.state else '' }}">{{ vm.state or 'unknown' }}</span>
+        </div>
+        <div class="node-meta-grid">
+          <div><span>vCPU</span><strong>{{ vm.vcpu or '-' }}</strong></div>
+          <div><span>Memory</span><strong>{% if vm.memory %}{{ (vm.memory | int / 1024 / 1024) | round(1) }} GiB{% else %}-{% endif %}</strong></div>
+        </div>
+        <div class="node-action-row"><a class="button compact" href="/nodes/{{ node.node_id }}/vms/{{ vm.name }}">Remote Detail</a></div>
+      </article>
+      {% else %}<div class="empty-cell">No VMs.</div>{% endfor %}
+    {% else %}
+      {% for vm in inventory.libvirt.vms %}
+      <article class="node-vm-card">
+        <div class="node-card-header">
+          <div>
+            <h3 class="wrap-text">{{ vm.name }}</h3>
+            <code class="wrap-code">{{ vm.uuid }}</code>
+          </div>
+          <span class="state-pill {{ 'running' if vm.active else 'shutoff' }}">{{ 'running' if vm.active else 'offline' }}</span>
+        </div>
+        <div class="node-action-row"><a class="button compact" href="/nodes/{{ node.node_id }}/vms/{{ vm.name }}">Remote Detail</a></div>
+      </article>
+      {% else %}<div class="empty-cell">No VMs.</div>{% endfor %}
+    {% endif %}
+  </div>
 </section>
+
+<div class="grid two remote-resource-grid">
+  <section class="panel" id="networks">
+    <div class="section-title">
+      <div>
+        <h2>Networks</h2>
+        <p class="muted">Libvirt network inventory reported by the node.</p>
+      </div>
+    </div>
+    <div class="resource-list">
+      {% for net in inventory.libvirt.networks %}
+      <div class="resource-row nic-resource-row node-network-row">
+        <div><span class="resource-label">Name</span><strong class="wrap-text">{{ net.name }}</strong></div>
+        <div><span class="resource-label">State</span>{% if net.active %}<span class="pill running">active</span>{% else %}<span class="pill failed">inactive</span>{% endif %}</div>
+      </div>
+      {% else %}<div class="empty-cell">No networks.</div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="panel" id="storage">
+    <div class="section-title">
+      <div>
+        <h2>Storage Pools</h2>
+        <p class="muted">Pools available from this node.</p>
+      </div>
+    </div>
+    <div class="resource-list">
+      {% for pool in inventory.libvirt.pools %}
+      <div class="resource-row node-storage-row">
+        <div class="remote-resource-header">
+          <strong>{{ pool.name }}</strong>
+          {% if pool.active %}<span class="pill running">active</span>{% else %}<span class="pill failed">inactive</span>{% endif %}
+        </div>
+        {% if pool.error is defined and pool.error %}<code class="wrap-code">{{ pool.error }}</code>{% endif %}
+      </div>
+      {% else %}<div class="empty-cell">No pools.</div>{% endfor %}
+    </div>
+  </section>
+</div>
 {% endif %}
 
 {% endblock %}
