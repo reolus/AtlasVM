@@ -86,3 +86,16 @@ pre { padding: 1rem; overflow: auto; }
   .topbar, .hero-card { align-items: stretch; flex-direction: column; }
   .content { padding: 1rem; }
 }
+/* Phase 11.5.2: contain wide operational tables instead of letting long messages shove the whole app sideways. */
+.main-shell, .content, section, .panel, .card { min-width: 0; }
+.table-scroll, .table-responsive { width: 100%; max-width: 100%; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; }
+.data-table { min-width: 760px; table-layout: fixed; }
+.tasks-table { min-width: 980px; }
+.audit-table { min-width: 860px; }
+th, td { overflow-wrap: anywhere; word-break: normal; }
+.timestamp-cell { width: 9.5rem; white-space: normal; }
+.action-cell { width: 7rem; white-space: nowrap; }
+.message-cell { max-width: 34rem; }
+.task-message { margin: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; overflow: auto; max-height: 9rem; }
+.empty-cell { text-align: center; color: var(--muted); padding: 1.4rem .75rem; }
+@media (max-width: 980px) { .data-table, .tasks-table, .audit-table { min-width: 720px; } .message-cell { max-width: 24rem; } }
