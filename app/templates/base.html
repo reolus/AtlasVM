@@ -68,10 +68,6 @@
       <a class="brand" href="/" aria-label="AtlasVM Community Edition dashboard">
         <img src="/static/atlasvm-logo.png" alt="AtlasVM CE">
       </a>
-      <div class="sidebar-meta">
-        <div class="sidebar-product">AtlasVM<sup>CE</sup></div>
-        <div class="sidebar-tagline">Single-node virtualization management</div>
-      </div>
       <nav class="side-nav" aria-label="Primary navigation">
         <a class="{{ 'active' if current_path == '/' else '' }}" href="/">Dashboard</a>
         <a class="{{ 'active' if current_path.startswith('/vms') or current_path.startswith('/ui/vms') else '' }}" href="/vms">Virtual Machines</a>
