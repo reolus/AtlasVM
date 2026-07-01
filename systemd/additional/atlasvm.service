@@ -1,0 +1,17 @@
+[Unit]
+Description=AtlasVM Phase One Manager
+After=network-online.target libvirtd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/atlasvm
+EnvironmentFile=/opt/atlasvm/.env
+ExecStart=/opt/atlasvm/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8443
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

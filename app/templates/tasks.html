@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <div class="section-title"><h2>Tasks</h2><span class="pill">Background Queue</span></div>
+  {% if message %}<div class="notice success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  <p class="muted">Phase 5 moves heavy work into background tasks so the browser can stop being held hostage by backups, clones, and restores.</p>
+  <div class="table-scroll">
+    <table class="data-table tasks-table">
+      <thead>
+        <tr>
+          <th>Started</th>
+          <th>Finished</th>
+          <th>Actor</th>
+          <th>Action</th>
+          <th>Target</th>
+          <th>Status</th>
+          <th>Message</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in tasks %}
+        <tr>
+          <td class="timestamp-cell">{{ task.created_at }}</td>
+          <td class="timestamp-cell">{{ task.finished_at }}</td>
+          <td>{{ task.actor }}</td>
+          <td><code>{{ task.action }}</code></td>
+          <td>{{ task.target }}</td>
+          <td><span class="pill {{ task.status }}">{{ task.status }}</span></td>
+          <td class="message-cell"><pre class="task-message">{{ task.message }}</pre></td>
+          <td class="action-cell">
+            {% if task.status == 'running' %}
+            <form method="post" action="/tasks/{{ task.id }}/kill" onsubmit="return confirm('Mark this task as failed? This clears a hung AtlasVM task record but does not kill an OS process.');">
+              <button type="submit" class="danger">Kill</button>
+            </form>
+            {% else %}
+            <span class="muted">-</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty-cell">No tasks yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

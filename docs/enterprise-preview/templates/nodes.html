@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set total_nodes = nodes|length %}
+{% set online_nodes = namespace(count=0) %}
+{% set warning_nodes = namespace(count=0) %}
+{% set offline_nodes = namespace(count=0) %}
+{% for node in nodes %}
+  {% set status = node.remote_status or {} %}
+  {% if status.ok %}
+    {% set online_nodes.count = online_nodes.count + 1 %}
+  {% else %}
+    {% set offline_nodes.count = offline_nodes.count + 1 %}
+  {% endif %}
+{% endfor %}
+{% set ready_for_phase12 = total_nodes >= 2 and online_nodes.count >= 2 %}
+
+<section class="hero-card node-hero">
+  <div>
+    <div class="eyebrow">Phase 12 pre-flight</div>
+    <h1>AtlasVM Nodes</h1>
+    <p class="muted">Register hosts, check health, and confirm the control plane is not about to wander into multi-node testing with a blindfold and a clipboard.</p>
+    <div class="vm-hero-meta">
+      {% if ready_for_phase12 %}
+        <span class="pill success">multi-node baseline ready</span>
+      {% else %}
+        <span class="pill failed">multi-node baseline incomplete</span>
+      {% endif %}
+      <span class="pill">{{ total_nodes }} registered</span>
+      <span class="pill running">{{ online_nodes.count }} online</span>
+      {% if offline_nodes.count %}<span class="pill failed">{{ offline_nodes.count }} offline</span>{% endif %}
+    </div>
+  </div>
+  <div class="hero-actions">
+    <form method="post" action="/nodes/register-local" class="inline-form"><button type="submit">Register Local Node</button></form>
+    <a class="button secondary" href="/nodes/compatibility">Compatibility</a>
+    <a class="button" href="/nodes/new">Add Node</a>
+  </div>
+</section>
+
+<div class="cards node-readiness-grid">
+  <div class="stat-card node-readiness-card">
+    <span>Registered Nodes</span>
+    <strong>{{ total_nodes }}</strong>
+    <small>Local plus any remote hosts in the registry.</small>
+  </div>
+  <div class="stat-card node-readiness-card">
+    <span>Online</span>
+    <strong class="text-success">{{ online_nodes.count }}</strong>
+    <small>Reachable through the AtlasVM node API.</small>
+  </div>
+  <div class="stat-card node-readiness-card">
+    <span>Offline / Error</span>
+    <strong class="text-danger">{{ offline_nodes.count }}</strong>
+    <small>Needs token, API URL, service, firewall, or caffeine.</small>
+  </div>
+  <div class="stat-card node-readiness-card">
+    <span>Phase 12 Gate</span>
+    <strong>{% if ready_for_phase12 %}Ready{% else %}Hold{% endif %}</strong>
+    <small>{% if ready_for_phase12 %}At least two online nodes detected.{% else %}Need at least two online nodes before meaningful multi-node testing.{% endif %}</small>
+  </div>
+</div>
+
+<section class="panel phase12-panel">
+  <div class="section-title">
+    <div>
+      <h2>Phase 12 Readiness Checklist</h2>
+      <p class="muted">This is a UI pre-flight view. The compatibility page still performs the deeper pair checks.</p>
+    </div>
+    <a class="button secondary" href="/nodes/compatibility">Run Compatibility View</a>
+  </div>
+  <div class="phase12-check-grid">
+    <div class="phase12-check {{ 'ok' if total_nodes >= 1 else 'bad' }}">
+      <strong>Local registration</strong>
+      <span>{{ 'Registered node inventory exists.' if total_nodes >= 1 else 'Register the local node first.' }}</span>
+    </div>
+    <div class="phase12-check {{ 'ok' if total_nodes >= 2 else 'warn' }}">
+      <strong>Second node</strong>
+      <span>{{ 'At least two nodes are registered.' if total_nodes >= 2 else 'Add a second AtlasVM host for multi-node testing.' }}</span>
+    </div>
+    <div class="phase12-check {{ 'ok' if online_nodes.count >= 2 else 'warn' }}">
+      <strong>Remote API reachability</strong>
+      <span>{{ 'Two or more nodes are reachable.' if online_nodes.count >= 2 else 'Confirm API URL, token, nginx, and atlasvm.service on the remote host.' }}</span>
+    </div>
+    <div class="phase12-check warn">
+      <strong>Compatibility report</strong>
+      <span>Run the compatibility report and resolve version, service, storage, and network differences before Phase 12 testing.</span>
+    </div>
+    <div class="phase12-check warn">
+      <strong>Mutation boundary</strong>
+      <span>Remote UI currently exposes safe power actions only. Storage, NIC, ISO, backup, clone, and delete remain local-only until tested.</span>
+    </div>
+    <div class="phase12-check warn">
+      <strong>Operator hold point</strong>
+      <span>Confirm backups and a rollback path before the first remote action test. Optimism is not a recovery strategy.</span>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Registered Nodes</h2>
+      <p class="muted">Control-plane inventory, remote API health, and quick links.</p>
+    </div>
+  </div>
+
+  <div class="node-card-grid">
+    {% for node in nodes %}
+      {% set status = node.remote_status or {} %}
+      <article class="node-summary-card {{ 'online' if status.ok else 'offline' }}">
+        <div class="node-card-header">
+          <div class="node-title-block">
+            <h3>{{ node.name }}</h3>
+            <code class="wrap-code">{{ node.node_id }}</code>
+          </div>
+          <div>
+            {% if status.ok %}<span class="pill running">online</span>{% else %}<span class="pill failed">offline</span>{% endif %}
+          </div>
+        </div>
+
+        <div class="node-meta-grid">
+          <div><span>Role</span><strong>{{ node.role }}</strong></div>
+          <div><span>Latency</span><strong>{{ status._latency_ms if status._latency_ms is defined else '-' }} ms</strong></div>
+          <div><span>Version</span><strong>{% if status.self is defined %}{{ status.self.version }}{% else %}-{% endif %}</strong></div>
+          <div><span>Enabled</span><strong>{{ 'yes' if node.enabled else 'no' }}</strong></div>
+        </div>
+
+        <div class="resource-row node-api-row">
+          <span class="resource-label">API URL</span>
+          <code class="wrap-code">{{ node.api_url }}</code>
+        </div>
+
+        {% if not status.ok and status.error is defined %}
+          <div class="alert danger node-error-box">{{ status.error }}</div>
+        {% endif %}
+
+        <div class="node-action-row">
+          <a class="button compact" href="/nodes/{{ node.node_id }}">Details</a>
+          <a class="button compact secondary" href="/nodes/{{ node.node_id }}/compatibility">Compatibility</a>
+          <form method="post" action="/nodes/{{ node.node_id }}/delete" class="inline-form" onsubmit="return confirm('Delete node {{ node.name }} from registry?');">
+            <button class="danger compact" type="submit">Delete</button>
+          </form>
+        </div>
+      </article>
+    {% else %}
+      <article class="node-summary-card offline">
+        <h3>No nodes registered yet</h3>
+        <p class="muted">Register the local node first, then add a remote host when the machines are done pretending they are independent kingdoms.</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel node-token-panel">
+  <div class="section-title">
+    <div>
+      <h2>Local Node Token</h2>
+      <p class="muted">Use this token when registering this host from another AtlasVM node.</p>
+    </div>
+  </div>
+  <div class="resource-row">
+    <span class="resource-label">Token</span>
+    <code class="wrap-code secret-code">{{ local_token }}</code>
+  </div>
+  <p class="muted"><small>Stored at <code>/opt/atlasvm/atlasvm_node_token</code>. Treat it like a password, because that is what it is, despite humanity's heroic efforts to name secrets something else.</small></p>
+</section>
+
+{% endblock %}

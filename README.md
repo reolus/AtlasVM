@@ -1,0 +1,188 @@
+<p align="center">
+  <img src="docs/assets/atlasvm-logo.png" alt="AtlasVM Logo" width="420">
+</p>
+
+# AtlasVM Phase 2
+
+AtlasVM is a single-node KVM/libvirt virtualization manager built on FastAPI. Phase 2 turns the original proof of concept into a usable host manager with browser console support, ISO management, VM detail pages, snapshots, storage visibility, network visibility, task history, and audit logging.
+
+This is not a Proxmox replacement yet. It is a product foundation. A small one. With sharp edges. Naturally.
+
+## Phase 2 Features
+
+- Dashboard with host and VM summary
+- VM creation wizard with ISO picker, firmware option, autostart, and start-after-create
+- VM details page
+- VM power actions: start, shutdown, reboot, force stop
+- VM delete with or without disks
+- Browser console launch using noVNC/websockify
+- ISO library with upload and delete
+- Storage pool list/detail/refresh
+- Network list and start/stop/autostart actions
+- Basic libvirt snapshot create/list/revert/delete
+- Task log
+- Audit/event log
+- REST API under `/api/v1`
+- Debian install script and systemd service
+
+## Host Requirements
+
+Recommended host layout:
+
+- Debian 13
+- KVM-capable CPU
+- libvirt/QEMU
+- ZFS or directory-backed storage pool for VM disks
+- ISO directory such as `/atlasvm-vmdata/iso`
+- VM disk directory such as `/atlasvm-vmdata/vm-disks`
+
+## Install
+
+From the repo directory on the AtlasVM host:
+
+```bash
+sudo ./scripts/install_debian.sh
+sudo nano /etc/atlasvm/atlasvm.env
+sudo systemctl start atlasvm
+sudo systemctl status atlasvm --no-pager
+```
+
+Open:
+
+```text
+http://ATLASVM-IP:8443
+```
+
+## Important Debian Python Note
+
+The app expects Debian's packaged libvirt bindings:
+
+```bash
+apt install -y python3-libvirt
+python3 -m venv --system-site-packages .venv
+```
+
+Do not install `libvirt-python` from pip unless you enjoy debugging compiler output instead of your product.
+
+## noVNC Console
+
+Install:
+
+```bash
+apt install -y novnc websockify
+```
+
+AtlasVM starts a noVNC proxy per VM when the Console button is clicked. The VM must have VNC graphics in libvirt XML. AtlasVM-created VMs include this by default.
+
+Console ports default to `6080-6099`. Change these in `/etc/atlasvm/atlasvm.env` if needed.
+
+## Environment
+
+Example:
+
+```env
+ATLASVM_APP_NAME=AtlasVM Community Edition
+ATLASVM_HOST=0.0.0.0
+ATLASVM_PORT=8443
+ATLASVM_USERNAME=admin
+ATLASVM_PASSWORD=change-this-password
+ATLASVM_DATABASE_URL=sqlite:///./atlasvm.db
+ATLASVM_LIBVIRT_URI=qemu:///system
+ATLASVM_DEFAULT_STORAGE_POOL=atlasvm-default
+ATLASVM_ISO_POOL=atlasvm-iso
+ATLASVM_DEFAULT_NETWORK=default
+ATLASVM_VM_DISK_PATH=/atlasvm-vmdata/vm-disks
+ATLASVM_ISO_PATH=/atlasvm-vmdata/iso
+ATLASVM_CONSOLE_PORT_BASE=6080
+ATLASVM_CONSOLE_PORT_MAX=6099
+```
+
+## Smoke Test
+
+```bash
+curl -u admin:'YOUR_PASSWORD' http://127.0.0.1:8443/api/v1/health
+curl -u admin:'YOUR_PASSWORD' http://127.0.0.1:8443/api/v1/host
+curl -u admin:'YOUR_PASSWORD' http://127.0.0.1:8443/api/v1/vms
+```
+
+## Development Notes
+
+Phase 2 still runs privileged as root because it manages libvirt, storage files, and console proxies. Phase 3 should introduce a narrower service user and polkit rules instead of letting root handle everything like a medieval king with a flamethrower.
+
+## Phase 3
+
+Phase 3 adds a host/ZFS health dashboard, VM edit workflows, offline clone, shutdown-first backups, backup listing, definition restore, ZFS visibility/actions, safer delete confirmations, and AtlasVM Doctor.
+
+Important routes:
+
+- `/doctor` - AtlasVM sanity checks
+- `/zfs` - ZFS pools, datasets, snapshots, scrub
+- `/backups` - Backup inventory and definition restore
+- `/vms/{name}` - VM detail, edit, backup, clone, ISO attach/eject, add disk
+
+See `docs/PHASE_THREE_DESIGN.md` and `docs/PHASE_THREE_UPGRADE.md`.
+
+
+## Phase 4 additions
+
+Phase 4 adds AtlasVM branding in the interface, local user management, an admin-only users page, a read-only settings page, and ISO-state visibility on VM detail pages. The first local admin account is seeded from the existing AtlasVM username and password in `.env`.
+
+See `docs/PHASE_FOUR_DESIGN.md` and `docs/PHASE_FOUR_UPGRADE.md`.
+
+
+## Phase 5
+
+Phase 5 adds background tasks, restore-backup-as-new-VM, template cloning, and VM metrics. See `docs/PHASE_FIVE_DESIGN.md` and `docs/PHASE_FIVE_UPGRADE.md`.
+
+
+## Phase 6
+
+Phase 6 adds ZFS-native storage maturity features:
+
+- ZFS pool health warnings.
+- Dataset capacity visibility.
+- ZFS snapshot create/delete.
+- Recursive snapshot option.
+- ZFS send export with optional zstd compression.
+- ZFS export inventory and delete action.
+- Manual backup retention pruning from the Backups page.
+
+See `docs/PHASE_SIX_DESIGN.md` and `docs/PHASE_SIX_UPGRADE.md`.
+
+
+## Phase 7: Network Management
+
+Phase 7 adds create/edit/delete workflows for libvirt networks, including NAT, isolated, routed, and bridge-backed modes. The Networks page now includes detail pages with DHCP leases, attached VMs, bridge information, CIDR, autostart state, and raw network XML.
+
+See:
+
+- `docs/PHASE_SEVEN_DESIGN.md`
+- `docs/PHASE_SEVEN_UPGRADE.md`
+
+
+## Phase 7.5 UI cleanup
+
+Phase 7.5 adds the new wide AtlasVM logo, removes duplicate header title text, introduces a branded login screen with signed browser-session cookies, and keeps HTTP Basic auth fallback for scripts and curl.
+
+
+## Phase 10
+
+Phase 10 adds storage-aware backup, restore-as-new, retention, backup targets, and clone/delete improvements for file-backed and LVM-backed VM disks. See `docs/PHASE_TEN_DESIGN.md` and `docs/PHASE_TEN_UPGRADE.md`.
+
+
+## AtlasVM Community Edition branch
+
+This branch packages the single-node AtlasVM Community Edition product. It manages one local Debian/libvirt/KVM host and does not expose multi-node registration, remote node inventory, remote VM detail, clusters, manager mode, scoped Enterprise RBAC, or license-gated premium modules.
+
+The former Phase 11/12 multi-node documents and templates were moved under `docs/enterprise-preview/` for future Enterprise work. Active standalone UI routes should not link to `/nodes` or `/api/node/*`.
+
+See:
+
+- `docs/STANDALONE_FREE_REMOVAL_AUDIT.md`
+- `docs/STANDALONE_FREE_BRANCH.md`
+- `docs/PRODUCT_EDITIONS.md`
+- `docs/LICENSING_AND_UPDATE_REPOSITORY_ROADMAP.md`
+
+## LVM-thin storage display and creation fix
+
+Logical pools backed by LVM-thin now show thin-pool usable space in the New VM form and create VM disks as raw block thin LVs instead of qcow2 files under `/dev`.

@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if mode == 'single' %}
+  {% set items = [{'node': node, 'compatibility': result}] %}
+{% else %}
+  {% set items = result.nodes if result.nodes is defined else [] %}
+{% endif %}
+
+{% set totals = namespace(nodes=0, ready=0, ok=0, warning=0, error=0, info=0, total_checks=0) %}
+{% for item in items %}
+  {% set compat = item.compatibility if item.compatibility is defined else item %}
+  {% set summary = compat.summary or {} %}
+  {% set totals.nodes = totals.nodes + 1 %}
+  {% if compat.ready %}{% set totals.ready = totals.ready + 1 %}{% endif %}
+  {% set totals.ok = totals.ok + (summary.ok or 0) %}
+  {% set totals.warning = totals.warning + (summary.warning or 0) %}
+  {% set totals.error = totals.error + (summary.error or 0) %}
+  {% set totals.info = totals.info + (summary.info or 0) %}
+  {% set totals.total_checks = totals.total_checks + (summary.total or 0) %}
+{% endfor %}
+{% set phase12_ready = totals.nodes >= 2 and totals.ready >= 2 and totals.error == 0 and totals.warning == 0 %}
+
+<section class="hero-card compat-hero">
+  <div>
+    <div class="eyebrow">Phase 12 pre-flight</div>
+    <h1>{% if mode == 'single' %}Node Compatibility{% else %}Compatibility Report{% endif %}</h1>
+    <p class="muted">Compare registered nodes for reachability, version alignment, services, storage, networks, and migration readiness. Because multi-node testing without boring checks is just a distributed outage rehearsal.</p>
+    <div class="vm-hero-meta">
+      {% if phase12_ready %}
+        <span class="pill success">phase 12 gate clear</span>
+      {% elif totals.error > 0 %}
+        <span class="pill failed">blocking errors</span>
+      {% elif totals.warning > 0 %}
+        <span class="pill warning">warnings present</span>
+      {% else %}
+        <span class="pill warning">needs more nodes</span>
+      {% endif %}
+      <span class="pill">{{ totals.nodes }} node report{{ '' if totals.nodes == 1 else 's' }}</span>
+      <span class="pill success">{{ totals.ready }} ready</span>
+      {% if totals.warning %}<span class="pill warning">{{ totals.warning }} warning{{ '' if totals.warning == 1 else 's' }}</span>{% endif %}
+      {% if totals.error %}<span class="pill failed">{{ totals.error }} error{{ '' if totals.error == 1 else 's' }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="hero-actions">
+    <a class="button secondary" href="/nodes">Back to Nodes</a>
+    {% if mode != 'single' %}<a class="button" href="/nodes/compatibility">Refresh Report</a>{% endif %}
+  </div>
+</section>
+
+<div class="cards compat-kpi-grid">
+  <div class="stat-card compat-kpi-card">
+    <span>Node Reports</span>
+    <strong>{{ totals.nodes }}</strong>
+    <small>Enabled nodes included in this report.</small>
+  </div>
+  <div class="stat-card compat-kpi-card">
+    <span>Ready Nodes</span>
+    <strong class="{{ 'text-success' if totals.ready >= 2 else 'text-danger' }}">{{ totals.ready }}</strong>
+    <small>Ready means no compatibility warnings or errors.</small>
+  </div>
+  <div class="stat-card compat-kpi-card">
+    <span>Warnings</span>
+    <strong class="{{ 'text-success' if totals.warning == 0 else 'text-warning' }}">{{ totals.warning }}</strong>
+    <small>Review before migration or shared operations.</small>
+  </div>
+  <div class="stat-card compat-kpi-card">
+    <span>Errors</span>
+    <strong class="{{ 'text-success' if totals.error == 0 else 'text-danger' }}">{{ totals.error }}</strong>
+    <small>Errors block Phase 12 readiness.</small>
+  </div>
+  <div class="stat-card compat-kpi-card">
+    <span>Total Checks</span>
+    <strong>{{ totals.total_checks }}</strong>
+    <small>Reachability, services, storage, network, and VM storage sanity.</small>
+  </div>
+</div>
+
+<section class="panel phase12-panel compat-preflight-panel">
+  <div class="section-title">
+    <div>
+      <h2>Phase 12 Gate</h2>
+      <p class="muted">This does not start multi-node testing. It tells you whether starting multi-node testing would be brave or merely reckless.</p>
+    </div>
+    {% if phase12_ready %}<span class="pill success">clear</span>{% else %}<span class="pill warning">hold</span>{% endif %}
+  </div>
+  <div class="phase12-check-grid compat-gate-grid">
+    <div class="phase12-check {{ 'ok' if totals.nodes >= 2 else 'bad' }}">
+      <strong>Two-node baseline</strong>
+      <span>{{ 'At least two node reports are present.' if totals.nodes >= 2 else 'Register and enable at least two nodes before Phase 12.' }}</span>
+    </div>
+    <div class="phase12-check {{ 'ok' if totals.ready >= 2 else 'warn' }}">
+      <strong>Ready pair</strong>
+      <span>{{ 'At least two nodes are compatibility-ready.' if totals.ready >= 2 else 'Need two ready nodes with no warnings or errors.' }}</span>
+    </div>
+    <div class="phase12-check {{ 'ok' if totals.error == 0 else 'bad' }}">
+      <strong>Blocking errors</strong>
+      <span>{{ 'No compatibility errors detected.' if totals.error == 0 else 'Resolve errors before any Phase 12 test.' }}</span>
+    </div>
+    <div class="phase12-check {{ 'ok' if totals.warning == 0 else 'warn' }}">
+      <strong>Warnings</strong>
+      <span>{{ 'No warnings detected.' if totals.warning == 0 else 'Warnings should be reviewed and either fixed or accepted before testing.' }}</span>
+    </div>
+    <div class="phase12-check warn">
+      <strong>Mutation boundary</strong>
+      <span>Remote UI remains limited to safe power actions. Disk, NIC, ISO, backup, snapshot, clone, and delete stay local-only until proven safe.</span>
+    </div>
+    <div class="phase12-check warn">
+      <strong>Operator checklist</strong>
+      <span>Before testing, confirm DNS/API URL, node token, nginx proxy, atlasvm.service, libvirt, shared storage visibility, and network naming.</span>
+    </div>
+  </div>
+</section>
+
+{% for item in items %}
+  {% set compat = item.compatibility if item.compatibility is defined else item %}
+  {% set node_obj = item.node if item.node is defined else item %}
+  {% set summary = compat.summary or {} %}
+  {% set checks = compat.checks if compat.checks is defined else [] %}
+  {% set node_name = node_obj.name if node_obj.name is defined else (compat.remote.name if compat.remote is defined and compat.remote.name is defined else 'Node') %}
+  {% set node_id = node_obj.node_id if node_obj.node_id is defined else (compat.remote.node_id if compat.remote is defined and compat.remote.node_id is defined else '') %}
+  {% set api_url = node_obj.api_url if node_obj.api_url is defined else (compat.remote.api_url if compat.remote is defined and compat.remote.api_url is defined else '') %}
+
+  <section class="panel compat-node-panel">
+    <div class="section-title compat-node-header">
+      <div class="node-title-block">
+        <div class="eyebrow">Node compatibility</div>
+        <h2>{{ node_name }}</h2>
+        <div class="vm-hero-meta">
+          {% if compat.ready %}<span class="pill success">ready</span>{% else %}<span class="pill failed">not ready</span>{% endif %}
+          {% if node_id %}<span class="pill"><code class="inline-code">{{ node_id }}</code></span>{% endif %}
+        </div>
+      </div>
+      <div class="compat-node-actions">
+        {% if node_id %}<a class="button compact secondary" href="/nodes/{{ node_id }}">Node Detail</a>{% endif %}
+        {% if node_id %}<a class="button compact secondary" href="/vms?node={{ node_id }}">Node VMs</a>{% endif %}
+      </div>
+    </div>
+
+    {% if api_url %}
+    <div class="resource-row compat-api-row">
+      <span class="resource-label">API URL</span>
+      <code class="wrap-code">{{ api_url }}</code>
+    </div>
+    {% endif %}
+
+    <div class="cards compat-summary-grid">
+      <div class="stat-card compat-mini-card"><span>OK</span><strong class="text-success">{{ summary.ok or 0 }}</strong></div>
+      <div class="stat-card compat-mini-card"><span>Warnings</span><strong class="{{ 'text-success' if (summary.warning or 0) == 0 else 'text-warning' }}">{{ summary.warning or 0 }}</strong></div>
+      <div class="stat-card compat-mini-card"><span>Errors</span><strong class="{{ 'text-success' if (summary.error or 0) == 0 else 'text-danger' }}">{{ summary.error or 0 }}</strong></div>
+      <div class="stat-card compat-mini-card"><span>Info</span><strong>{{ summary.info or 0 }}</strong></div>
+    </div>
+
+    {% if checks %}
+      {% set categories = checks | map(attribute='category') | unique | list %}
+      <div class="compat-category-grid">
+        {% for category in categories %}
+        {% set cat_counts = namespace(ok=0, warning=0, error=0, info=0, total=0) %}
+        {% for check in checks if check.category == category %}
+          {% set severity = check.severity or check.status or ('ok' if check.ok else 'warning') %}
+          {% set cat_counts.total = cat_counts.total + 1 %}
+          {% if severity == 'ok' %}{% set cat_counts.ok = cat_counts.ok + 1 %}
+          {% elif severity == 'error' %}{% set cat_counts.error = cat_counts.error + 1 %}
+          {% elif severity == 'info' %}{% set cat_counts.info = cat_counts.info + 1 %}
+          {% else %}{% set cat_counts.warning = cat_counts.warning + 1 %}{% endif %}
+        {% endfor %}
+        <article class="compat-category-card {{ 'has-error' if cat_counts.error else ('has-warning' if cat_counts.warning else 'is-ok') }}">
+          <div class="compat-category-title">
+            <h3>{{ category }}</h3>
+            {% if cat_counts.error %}<span class="pill failed">{{ cat_counts.error }} error</span>
+            {% elif cat_counts.warning %}<span class="pill warning">{{ cat_counts.warning }} warning</span>
+            {% else %}<span class="pill success">ok</span>{% endif %}
+          </div>
+          <div class="compat-check-list">
+            {% for check in checks if check.category == category %}
+              {% set severity = check.severity or check.status or ('ok' if check.ok else 'warning') %}
+              <div class="compat-check-row {{ severity }}">
+                <div class="compat-check-main">
+                  <strong>{{ check.name }}</strong>
+                  <code class="wrap-code">{{ check.detail or 'no detail supplied' }}</code>
+                </div>
+                <div class="compat-check-status">
+                  {% if severity == 'ok' %}<span class="pill success">ok</span>
+                  {% elif severity == 'info' %}<span class="pill info">info</span>
+                  {% elif severity == 'error' %}<span class="pill failed">error</span>
+                  {% else %}<span class="pill warning">warning</span>{% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="alert danger">No compatibility checks were returned for this node.</div>
+    {% endif %}
+  </section>
+{% else %}
+<section class="panel danger-zone">
+  <h2>No enabled nodes registered</h2>
+  <p class="muted">Register the local node first, then add a second AtlasVM host. Apparently clusters require more than one machine. Outrageous, but true.</p>
+  <a class="button" href="/nodes">Go to Nodes</a>
+</section>
+{% endfor %}
+
+{% endblock %}

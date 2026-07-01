@@ -1,0 +1,14 @@
+{
+  "Phones_36": {
+    "bridge": "brphones36",
+    "cidr": "",
+    "dhcp_end": "",
+    "dhcp_start": "",
+    "domain_name": "",
+    "name": "Phones_36",
+    "parent_interface": "enp4s0f2np2",
+    "type": "vlan_bridge",
+    "vlan_interface": "enp4s0f2np2.36",
+    "vlan_tag": "36"
+  }
+}

@@ -1,0 +1,9 @@
+[Match]
+Name=enp4s0f2np2
+
+[Network]
+Address=10.21.50.34/24
+Gateway=10.21.50.1
+DNS=10.21.250.103 10.21.250.104
+LinkLocalAddressing=no
+IPv6AcceptRA=no

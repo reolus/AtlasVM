@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.backup-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:1rem; margin:1rem 0; }
+.backup-card { border:1px solid var(--border,#333); border-radius:12px; padding:1rem; background:var(--panel,rgba(255,255,255,.03)); }
+.backup-muted { opacity:.72; }
+.backup-good { color:#5cb85c; }
+.backup-warn { color:#f0ad4e; }
+.backup-table code { word-break:break-all; }
+</style>
+
+<section>
+  <div class="section-title"><h2>Backups, Restore, and Retention</h2><span><code>{{ backup_path }}</code></span></div>
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert failed">{{ error }}</div>{% endif %}
+  <p>Phase 10 backups convert VM disks to portable qcow2 backup images, including file-backed qcow2 and block-backed LVM volumes. Yes, storage finally has to behave like an adult.</p>
+</section>
+
+<section class="backup-grid">
+  <div class="backup-card">
+    <h3>Retention Policy</h3>
+    <p>Current policy: keep the most recent <strong>{{ retention.backup_keep_last }}</strong> backup(s) per VM per target.</p>
+    <form method="post" action="/backups/prune">
+      <label>VM Name <input name="vm_name" placeholder="optional VM name"></label>
+      <label>Target
+        <select name="target_name">
+          <option value="">All targets</option>
+          {% for target in targets %}<option value="{{ target.name }}">{{ target.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Keep Last <input name="keep_last" type="number" min="0" value="{{ retention.backup_keep_last }}"></label>
+      <button>Apply Retention Now</button>
+    </form>
+  </div>
+
+  <div class="backup-card">
+    <h3>Add Backup Target</h3>
+    <form method="post" action="/backups/targets">
+      <label>Name <input name="name" placeholder="nas-backups" required></label>
+      <label>Label <input name="label" placeholder="NAS Backups"></label>
+      <label>Kind
+        <select name="kind">
+          <option value="local">local</option>
+          <option value="nfs">nfs</option>
+          <option value="smb">smb</option>
+          <option value="custom" selected>custom</option>
+        </select>
+      </label>
+      <label>Path <input name="path" placeholder="/atlasvm-storage/backups" required></label>
+      <label class="check"><input type="checkbox" name="enabled" value="true" checked> Enabled</label>
+      <button>Save Target</button>
+    </form>
+  </div>
+</section>
+
+<section>
+  <h3>Backup Targets</h3>
+  <table>
+    <thead><tr><th>Name</th><th>Kind</th><th>Path</th><th>State</th><th>Roles</th><th>Action</th></tr></thead>
+    <tbody>
+      {% for target in targets %}
+      <tr>
+        <td><code>{{ target.name }}</code><br><small>{{ target.label }}</small></td>
+        <td>{{ target.kind }}</td>
+        <td><code>{{ target.path }}</code></td>
+        <td>
+          {% if target.enabled and target.exists and target.writable %}<span class="backup-good">ready</span>
+          {% elif not target.enabled %}<span class="backup-muted">disabled</span>
+          {% else %}<span class="backup-warn">not writable / missing</span>{% endif %}
+        </td>
+        <td>{{ target.roles | join(', ') }}</td>
+        <td>
+          {% if not target.managed %}
+          <form method="post" action="/backups/targets/delete"><input type="hidden" name="name" value="{{ target.name }}"><button class="danger">Delete Target</button></form>
+          {% else %}<span class="backup-muted">managed</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="6">No backup targets found, which is a daring little arrangement.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h3>Available Backups</h3>
+  <table class="backup-table">
+    <thead>
+      <tr>
+        <th>VM</th><th>Created</th><th>Target</th><th>State</th><th>Consistency</th><th>Disks</th><th>Size</th><th>Backup Path</th><th>Restore</th><th>Definition</th><th>Delete</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for backup in backups %}
+      <tr>
+        <td>{{ backup.vm_name }}</td>
+        <td>{{ backup.created_at }}</td>
+        <td>{{ backup.target_name }}<br><small>{{ backup.target_kind }}</small></td>
+        <td>{{ backup.state }}</td>
+        <td>{{ backup.consistency }}</td>
+        <td>{{ backup.disk_count }}</td>
+        <td>{{ backup.size_gb }} GiB</td>
+        <td><code>{{ backup.path }}</code>{% if backup.archive %}<br><small>Archive: <code>{{ backup.archive }}</code></small>{% endif %}</td>
+        <td>
+          <form method="post" action="/backups/restore-as-new">
+            <input type="hidden" name="backup_dir" value="{{ backup.path }}">
+            <input name="new_name" placeholder="new-vm-name" required>
+            <select name="storage_pool">
+              <option value="">Default storage</option>
+              {% for pool in pools %}
+              <option value="{{ pool.name }}" {% if pool.supported is defined and not pool.supported %}disabled{% endif %}>{{ pool.name }}{% if pool.mode is defined %} / {{ pool.mode }}{% endif %}</option>
+              {% endfor %}
+            </select>
+            <select name="network_name">
+              <option value="">Keep backed-up network</option>
+              {% for net in networks %}<option value="{{ net.name }}">{{ net.name }}</option>{% endfor %}
+            </select>
+            <label class="check"><input type="checkbox" name="start_after_restore" value="true"> Start after restore</label>
+            <button>Restore VM</button>
+          </form>
+        </td>
+        <td><form method="post" action="/backups/restore-definition"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><input name="new_name" placeholder="optional-new-name"><button>Definition Only</button></form></td>
+        <td><form method="post" action="/backups/delete" onsubmit="return confirm('Delete this backup and archive?');"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><button class="danger">Delete</button></form></td>
+      </tr>
+    {% else %}<tr><td colspan="11">No backups found. Bold strategy.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

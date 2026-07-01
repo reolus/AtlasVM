@@ -1,0 +1,5 @@
+{
+  "atlasvm-test-nat": {
+    "vlan_tag": "12"
+  }
+}

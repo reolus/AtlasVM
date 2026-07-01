@@ -1,0 +1,14 @@
+[
+  {
+    "api_url": "https://10.21.50.34",
+    "created_at": 1782792424,
+    "enabled": true,
+    "local": true,
+    "name": "AtlasVM",
+    "node_id": "node-1b567261da8c",
+    "role": "local",
+    "token": "a00104d899b34ae7b19f12f18a2e9076d195b6260c7347a3ae8c3463b646b58a",
+    "token_fingerprint": "b4d15317be6089b2",
+    "updated_at": 1782852266
+  }
+]

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero-card">
+  <div>
+    <div class="eyebrow">VM Storage</div>
+    <h1>{{ vm_name }} disks</h1>
+    {% if running %}<p class="muted">VM is running. AtlasVM currently requires shutdown for add-disk through this safe config path.</p>{% else %}<p class="muted">VM is not running. Disk changes are saved to persistent config.</p>{% endif %}
+  </div>
+  <a class="button secondary" href="/vms/{{ vm_name }}">Back to VM</a>
+</section>
+
+<section class="grid two">
+  <div class="panel">
+    <div class="section-title"><h2>Add Disk</h2></div>
+    <form method="post" action="/vms/{{ vm_name }}/disks/add" class="stacked-form">
+      <label>Storage Pool
+        <select name="storage_pool">
+          <option value="">Default Pool</option>
+          {% for p in pools %}
+          <option value="{{ p.name }}" {% if p.state is defined and p.state != 'active' %}disabled{% endif %}>{{ p.name }}{% if p.type is defined %} - {{ p.type }}{% endif %}{% if p.state is defined and p.state != 'active' %} (inactive){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Size GB <input type="number" name="size_gb" min="1" value="30" required></label>
+      <button>Add Disk</button>
+      <small class="muted">Disk names and target devices are generated automatically to avoid orphan collisions.</small>
+    </form>
+  </div>
+
+  <div class="panel">
+    <div class="section-title"><h2>Storage Pools</h2></div>
+    <table><thead><tr><th>Pool</th><th>Type</th><th>State</th><th>Available</th></tr></thead><tbody>{% for p in pools %}<tr><td><code>{{ p.name }}</code></td><td>{{ p.type if p.type is defined else '-' }}</td><td>{{ p.state if p.state is defined else '-' }}</td><td>{{ p.available if p.available is defined else p.available_gb if p.available_gb is defined else '-' }}</td></tr>{% else %}<tr><td colspan="4">No pools found.</td></tr>{% endfor %}</tbody></table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Attached Disks</h2></div>
+  <table>
+    <thead><tr><th>Target</th><th>Device</th><th>Type</th><th>Format</th><th>Source</th><th>Remove</th></tr></thead>
+    <tbody>
+      {% for d in disks %}
+      <tr>
+        <td><code>{{ d.target }}</code></td>
+        <td>{{ d.device }}</td>
+        <td>{{ d.type }}</td>
+        <td>{{ d.format or '-' }}</td>
+        <td><code>{{ d.source or '-' }}</code></td>
+        <td>{% if d.device == 'disk' %}<form method="post" action="/vms/{{ vm_name }}/disks/{{ d.target }}/remove" onsubmit="return confirm('Remove disk {{ d.target }} from {{ vm_name }}?');"><label class="check"><input type="checkbox" name="delete_storage" value="yes"> delete storage</label><button class="danger">Remove</button></form>{% else %}-{% endif %}</td>
+      </tr>
+      {% else %}<tr><td colspan="6">No disks found.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

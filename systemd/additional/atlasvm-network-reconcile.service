@@ -1,0 +1,14 @@
+[Unit]
+Description=AtlasVM Network Reconciliation
+Wants=network-online.target libvirtd.service
+After=network-online.target libvirtd.service
+Before=atlasvm.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/atlasvm
+ExecStart=/opt/atlasvm/.venv/bin/python -m app.services.network_reconcile
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

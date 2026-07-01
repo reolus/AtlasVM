@@ -1,0 +1,142 @@
+Declared routes: 132
+
+VM route ordering checkpoints:
+  411 GET  /vms/{name}
+  439 POST /vms/{name}/edit
+  440 POST /ui/vms/{name}/edit
+  457 POST /vms/{name}/iso/attach
+  458 POST /ui/vms/{name}/iso/attach
+  481 POST /vms/{name}/iso/eject
+  482 POST /ui/vms/{name}/iso/eject
+  504 POST /vms/{name}/disks/add
+  505 POST /ui/vms/{name}/disks/add
+  524 POST /ui/vms/{name}/clone
+  534 POST /vms/{name}/backup
+  535 POST /ui/vms/{name}/backup
+  548 POST /ui/vms/{name}/delete-confirm
+  566 POST /ui/vms/{name}/console
+  581 GET  /vms/{name}/console
+  592 POST /vms/{name}/snapshots
+  593 POST /ui/vms/{name}/snapshots
+  609 POST /vms/{name}/snapshots/{snapshot}/{action}
+  610 POST /ui/vms/{name}/snapshots/{snapshot}/{action}
+  633 POST /ui/vms/{name}/{action}
+  712 POST /vms/{name}/template
+  713 POST /ui/vms/{name}/template
+  737 GET  /vms/{name}/metrics
+ 1488 GET  /vms/{vm_name}/disks
+ 1505 POST /vms/{vm_name}/disks/{target_dev}/remove
+ 2170 GET  /vms/{name}/delete-confirm
+ 2191 POST /vms/{name}/delete
+ 2243 GET  /vms/{name}/clone
+ 2265 POST /vms/{name}/clone
+ 2318 GET  /vms/{name}/network
+ 2465 POST /vms/{name}/network
+ 2578 POST /vms/{name}/network/add
+ 2651 POST /vms/{name}/network/remove
+
+Template form actions:
+OK    POST backups.html                 /backups/prune
+OK    POST backups.html                 /backups/targets
+OK    POST backups.html                 /backups/targets/delete
+OK    POST backups.html                 /backups/restore-as-new
+OK    POST backups.html                 /backups/restore-definition
+OK    POST backups.html                 /backups/delete
+OK    POST base.html                    /logout
+OK    POST host_network.html            /host/network
+OK    POST host_network.html            /host/network/apply
+OK    POST host_network.html            /host/network/confirm
+OK    POST host_network.html            /host/network/rollback
+OK    POST iscsi_form.html              /storage/iscsi/discover
+OK    POST iscsi_form.html              /storage/iscsi/new
+OK    POST iscsi_lvm_form.html          /storage/iscsi/{{ name }}/lvm-thin
+OK    POST isos.html                    /isos/upload
+OK    POST isos.html                    /isos/{{ iso.name }}/delete
+OK    POST login.html                   /login
+OK    GET  network_detail.html          /networks/{{ network.name }}/edit
+OK    POST network_detail.html          /networks/{{ network.name }}/stop
+OK    POST network_detail.html          /networks/{{ network.name }}/start
+OK    POST network_detail.html          /networks/{{ network.name }}/autostart-disable
+OK    POST network_detail.html          /networks/{{ network.name }}/autostart-enable
+OK    POST network_detail.html          /networks/{{ network.name }}/delete
+OK    GET  network_edit.html            /networks/{{ network.name }}
+OK    POST network_edit.html            /networks/{{ network.name }}/edit
+OK    GET  network_form.html            {% if network %}/networks/{{ network.name }}{% else %}/networks{% endif %}
+OK    POST network_form.html            {{ action }}
+OK    POST network_new.html             /networks/new
+OK    POST networks.html                /networks/reconcile
+OK    GET  networks.html                /networks/new
+OK    POST new_vm.html                  /vms/new
+OK    POST nfs_form.html                /storage/nfs/new
+OK    POST node_form.html               /nodes
+OK    POST nodes.html                   /nodes/register-local
+OK    POST nodes.html                   /nodes/{{ node.node_id }}/delete
+OK    POST remote_vm_detail.html        /nodes/{{ node.node_id }}/vms/{{ vm.name }}/shutdown
+OK    POST remote_vm_detail.html        /nodes/{{ node.node_id }}/vms/{{ vm.name }}/reboot
+OK    POST remote_vm_detail.html        /nodes/{{ node.node_id }}/vms/{{ vm.name }}/poweroff
+OK    POST remote_vm_detail.html        /nodes/{{ node.node_id }}/vms/{{ vm.name }}/start
+OK    POST settings.html                /settings
+OK    POST smb_form.html                /storage/smb/new
+OK    GET  storage.html                 /storage/iscsi/new
+OK    GET  storage.html                 /storage/smb/new
+OK    GET  storage.html                 /storage/nfs/new
+OK    GET  storage.html                 /storage/networks/new
+OK    POST storage.html                 /storage/networks/reconcile
+OK    POST storage.html                 /storage/iscsi/{{ name }}/test
+OK    POST storage.html                 /storage/iscsi/{{ name }}/login
+OK    GET  storage.html                 /storage/iscsi/{{ name }}/lvm-thin
+OK    POST storage.html                 /storage/iscsi/{{ name }}/logout
+OK    POST storage.html                 /storage/iscsi/{{ name }}/delete
+OK    POST storage.html                 /storage/smb/{{ name }}/test
+OK    POST storage.html                 /storage/smb/{{ name }}/apply
+OK    POST storage.html                 /storage/smb/{{ name }}/unmount
+OK    POST storage.html                 /storage/smb/{{ name }}/delete
+OK    POST storage.html                 /storage/nfs/{{ name }}/test
+OK    POST storage.html                 /storage/nfs/{{ name }}/apply
+OK    POST storage.html                 /storage/nfs/{{ name }}/unmount
+OK    POST storage.html                 /storage/nfs/{{ name }}/delete
+OK    POST storage.html                 /storage/networks/{{ name }}/apply
+OK    POST storage.html                 /storage/networks/{{ name }}/delete
+OK    POST storage_detail.html          /storage/{{ pool.name }}/refresh
+OK    POST storage_network_form.html    /storage/networks/new
+OK    POST tasks.html                   /tasks/{{ task.id }}/kill
+OK    POST templates.html               /templates/{{ item.name }}/clone
+OK    POST users.html                   /users/create
+OK    POST users.html                   /users/{{ account.id }}/role
+OK    POST users.html                   /users/{{ account.id }}/password
+OK    POST users.html                   /users/{{ account.id }}/toggle
+OK    POST users.html                   /users/{{ account.id }}/delete
+OK    POST vm_clone.html                /vms/{{ name }}/clone
+OK    POST vm_delete_confirm.html       /vms/{{ name }}/delete
+OK    POST vm_detail.html               /ui/vms/{{ vm.name }}/start
+OK    POST vm_detail.html               /ui/vms/{{ vm.name }}/shutdown
+OK    POST vm_detail.html               /ui/vms/{{ vm.name }}/reboot
+OK    POST vm_detail.html               /ui/vms/{{ vm.name }}/force-stop
+OK    POST vm_detail.html               /ui/vms/{{ vm.name }}/autostart-off
+OK    POST vm_detail.html               /ui/vms/{{ vm.name }}/autostart-on
+OK    POST vm_detail.html               /ui/vms/{{ vm.name }}/console
+OK    POST vm_detail.html               /vms/{{ vm.name }}/edit
+OK    POST vm_detail.html               /vms/{{ vm.name }}/template
+OK    POST vm_detail.html               /vms/{{ vm.name }}/template
+OK    POST vm_detail.html               /vms/{{ vm.name }}/iso/attach
+OK    POST vm_detail.html               /vms/{{ vm.name }}/iso/eject
+OK    POST vm_detail.html               /vms/{{ vm.name }}/backup
+OK    POST vm_detail.html               /vms/{{ vm.name }}/snapshots
+OK    POST vm_detail.html               /vms/{{ vm.name }}/snapshots/{{ snap.name }}/revert
+OK    POST vm_detail.html               /vms/{{ vm.name }}/snapshots/{{ snap.name }}/delete
+OK    POST vm_disks.html                /vms/{{ vm_name }}/disks/add
+OK    POST vm_disks.html                /vms/{{ vm_name }}/disks/{{ d.target }}/remove
+OK    GET  vm_network.html              /vms/{{ name }}
+OK    POST vm_network.html              /vms/{{ name }}/network
+OK    POST vm_network.html              /vms/{{ name }}/network/add
+OK    POST vm_network.html              /vms/{{ name }}/network/remove
+OK    GET  vms.html                     /vms
+OK    POST vms.html                     /ui/vms/{{ vm.name }}/shutdown
+OK    POST vms.html                     /ui/vms/{{ vm.name }}/start
+OK    POST vms.html                     /nodes/{{ vm.node_id }}/vms/{{ vm.name }}/shutdown
+OK    POST vms.html                     /nodes/{{ vm.node_id }}/vms/{{ vm.name }}/start
+OK    POST zfs.html                     /zfs/pools/{{ pool.name }}/scrub
+OK    POST zfs.html                     /zfs/snapshots
+OK    POST zfs.html                     /zfs/snapshots/send
+OK    POST zfs.html                     /zfs/snapshots/delete
+OK    POST zfs.html                     /zfs/exports/delete

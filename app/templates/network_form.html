@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <div>
+      <h2>{% if mode == 'edit' %}Edit Network{% else %}Create Network{% endif %}</h2>
+      <p>NAT and isolated networks stay inside the virtual environment. Bridge and VLAN bridge networks connect VMs to the physical network.</p>
+    </div>
+    <form method="get" action="{% if network %}/networks/{{ network.name }}{% else %}/networks{% endif %}" style="margin:0;">
+      <button type="submit">Cancel</button>
+    </form>
+  </div>
+
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+
+  <form method="post" action="{{ action }}">
+    <label>
+      Name
+      {% if mode == 'edit' %}
+      <input disabled value="{{ network.name }}">
+      {% else %}
+      <input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}" placeholder="corp-vlan12">
+      {% endif %}
+    </label>
+
+    <label>
+      Network Type
+      <select name="network_type" {% if mode == 'edit' %}disabled{% endif %}>
+        {% set current_type = network.type if network else 'nat' %}
+        <option value="nat" {% if current_type == 'nat' %}selected{% endif %}>NAT private network with outbound access</option>
+        <option value="isolated" {% if current_type == 'isolated' %}selected{% endif %}>Isolated private network</option>
+        <option value="bridge" {% if current_type == 'bridge' %}selected{% endif %}>Bridge to physical network, untagged/native VLAN</option>
+        <option value="vlan_bridge" {% if current_type == 'vlan_bridge' %}selected{% endif %}>Bridge to physical network, tagged VLAN</option>
+      </select>
+    </label>
+
+    <label>
+      Parent Interface
+      <select name="parent_interface">
+        <option value="">None</option>
+        {% for link in host_links %}
+        <option value="{{ link.name }}" {% if network and network.parent_interface == link.name %}selected{% endif %}>
+          {{ link.name }} {% if link.master %}(master: {{ link.master }}){% endif %} {% if link.addresses %}- {{ link.addresses|join(', ') }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      <small>Required for bridge and VLAN bridge networks. Use the trunked physical NIC.</small>
+    </label>
+
+    <label>
+      Bridge Name
+      <input name="bridge_name" value="{{ network.bridge if network and network.bridge else '' }}" placeholder="auto if blank">
+      <small>AtlasVM creates this bridge for bridge-backed networks. Keep names under 15 characters if you enter one manually.</small>
+    </label>
+
+    <label>
+      VLAN Tag
+      <input name="vlan_tag" type="number" min="1" max="4094" value="{{ network.vlan_tag if network and network.vlan_tag else '' }}" placeholder="blank for untagged">
+      <small>The VLAN tag belongs to the network. VM NICs attached to this network inherit it.</small>
+    </label>
+
+    <label>
+      CIDR
+      <input name="cidr" value="{{ network.cidr if network and network.cidr else '' }}" placeholder="192.168.120.0/24">
+      <small>Required for NAT. Optional for isolated. Not used for bridge-backed corporate networks.</small>
+    </label>
+
+    <div class="grid two">
+      <label>
+        DHCP Start
+        <input name="dhcp_start" value="{{ network.dhcp_start if network and network.dhcp_start else '' }}" placeholder="192.168.120.100">
+      </label>
+      <label>
+        DHCP End
+        <input name="dhcp_end" value="{{ network.dhcp_end if network and network.dhcp_end else '' }}" placeholder="192.168.120.200">
+      </label>
+    </div>
+
+    <label>
+      Domain Name
+      <input name="domain_name" value="{{ network.domain_name if network and network.domain_name else '' }}" placeholder="lab.local">
+    </label>
+
+    {% if mode != 'edit' %}
+    <label class="check">
+      <input name="start_network" type="checkbox" value="true" checked>
+      Start now
+    </label>
+    {% endif %}
+
+    <label class="check">
+      <input name="autostart" type="checkbox" value="true" {% if network and network.autostart %}checked{% endif %}>
+      Autostart
+    </label>
+
+    {% if mode == 'edit' %}
+    <p><small>Editing updates AtlasVM metadata. It does not redefine an active libvirt network because breaking live networking is a premium-tier bad idea.</small></p>
+    {% endif %}
+
+    <button type="submit">{% if mode == 'edit' %}Save Network Settings{% else %}Create Network{% endif %}</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,9 @@
+[Unit]
+Description=AtlasVM Management Network Rollback Timer
+
+[Timer]
+OnActiveSec=180
+Unit=atlasvm-network-rollback.service
+
+[Install]
+WantedBy=timers.target

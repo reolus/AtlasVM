@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set state_text = vm.state if vm else 'unavailable' %}
+{% set remote_console_url = node.api_url.rstrip('/') ~ '/vms/' ~ vm.name ~ '/console' if vm and node.api_url else '' %}
+
+<section class="hero-card vm-detail-hero remote-detail-hero">
+  <div class="vm-detail-title">
+    <div class="eyebrow">Remote VM Detail</div>
+    <h1>{{ vm_name }}</h1>
+    <div class="vm-hero-meta">
+      <span class="pill remote">remote</span>
+      <span class="pill">owner: {{ node.name or node.node_id }}</span>
+      {% if vm %}
+        {% if vm.running %}<span class="state-pill running">{{ state_text }}</span>{% else %}<span class="state-pill shutoff">{{ state_text }}</span>{% endif %}
+        {% if vm.autostart %}<span class="pill running">autostart</span>{% else %}<span class="pill">autostart off</span>{% endif %}
+      {% else %}
+        <span class="state-pill shutoff">unavailable</span>
+      {% endif %}
+    </div>
+    <p class="muted vm-description">This VM is owned by a remote AtlasVM node. Phase 12-safe actions are intentionally limited to remote-safe power operations through the token-protected node API.</p>
+  </div>
+  <div class="vm-hero-actions">
+    <a class="button secondary" href="/vms">VM List</a>
+    <a class="button secondary" href="/vms?node={{ node.node_id }}">Node VMs</a>
+    <a class="button secondary" href="/nodes/{{ node.node_id }}">Node Detail</a>
+    {% if remote_console_url %}<a class="button" href="{{ remote_console_url }}" target="_blank" rel="noopener">Remote Console</a>{% endif %}
+  </div>
+</section>
+
+{% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+{% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+
+{% if vm %}
+<section class="stat-grid vm-kpi-grid remote-kpi-grid">
+  <div class="stat-card vm-kpi-card">
+    <span>Power State</span>
+    <strong class="{% if vm.running %}text-success{% else %}text-danger{% endif %}">{{ state_text }}</strong>
+    <small>reported by owning node</small>
+  </div>
+  <div class="stat-card vm-kpi-card">
+    <span>vCPU</span>
+    <strong>{{ vm.vcpu or vm.vcpus or '-' }}</strong>
+    <small>remote inventory value</small>
+  </div>
+  <div class="stat-card vm-kpi-card">
+    <span>Memory</span>
+    <strong>{% if vm.memory %}{{ (vm.memory | int / 1024 / 1024) | round(1) }} GiB{% else %}-{% endif %}</strong>
+    <small>configured allocation</small>
+  </div>
+  <div class="stat-card vm-kpi-card">
+    <span>Disks</span>
+    <strong>{{ vm.disks | length }}</strong>
+    <small>reported device(s)</small>
+  </div>
+  <div class="stat-card vm-kpi-card">
+    <span>NICs</span>
+    <strong>{{ vm.interfaces | length }}</strong>
+    <small>reported interface(s)</small>
+  </div>
+  <div class="stat-card vm-kpi-card">
+    <span>Node</span>
+    <strong>{{ node.name or node.node_id }}</strong>
+    <small>{{ node.api_url or 'no API URL' }}</small>
+  </div>
+</section>
+
+<nav class="vm-detail-tabs remote-detail-tabs" aria-label="Remote VM sections">
+  <a href="#remote-actions">Remote Actions</a>
+  <a href="#remote-node">Node</a>
+  <a href="#remote-storage">Storage</a>
+  <a href="#remote-network">Network</a>
+  <a href="#remote-console">Console</a>
+  <a href="#remote-limits">Limits</a>
+</nav>
+
+<section id="remote-actions" class="panel vm-operation-panel">
+  <div class="section-title">
+    <div>
+      <h2>Remote-Safe Power Actions</h2>
+      <p class="muted">These actions are proxied to the owning node through its node API. Full hardware edits stay local to the owning node for now, because distributed mutation is where confidence goes to die.</p>
+    </div>
+  </div>
+  <div class="vm-action-grid remote-action-grid">
+    {% if vm.running %}
+    <div class="action-card">
+      <strong>Graceful Shutdown</strong>
+      <span>Ask the guest to shut down cleanly through the owning node.</span>
+      <form method="post" action="/nodes/{{ node.node_id }}/vms/{{ vm.name }}/shutdown" onsubmit="return confirm('Gracefully shut down {{ vm.name }} on {{ node.name }}?');">
+        <button class="secondary" type="submit">Shutdown</button>
+      </form>
+    </div>
+    <div class="action-card">
+      <strong>Reboot</strong>
+      <span>Send a reboot request through the owning node API.</span>
+      <form method="post" action="/nodes/{{ node.node_id }}/vms/{{ vm.name }}/reboot" onsubmit="return confirm('Reboot {{ vm.name }} on {{ node.name }}?');">
+        <button class="secondary" type="submit">Reboot</button>
+      </form>
+    </div>
+    <div class="action-card danger-card">
+      <strong>Force Power Off</strong>
+      <span>Immediate power cut. Not graceful. Use only when the guest is already being a tiny disaster.</span>
+      <form method="post" action="/nodes/{{ node.node_id }}/vms/{{ vm.name }}/poweroff" onsubmit="return confirm('FORCE power off {{ vm.name }} on {{ node.name }}? This is not graceful.');">
+        <button class="danger" type="submit">Force Off</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="action-card">
+      <strong>Start</strong>
+      <span>Start the VM on its owning node through the remote API.</span>
+      <form method="post" action="/nodes/{{ node.node_id }}/vms/{{ vm.name }}/start" onsubmit="return confirm('Start {{ vm.name }} on {{ node.name }}?');">
+        <button type="submit">Start VM</button>
+      </form>
+    </div>
+    <div class="action-card disabled-card">
+      <strong>Shutdown</strong>
+      <span>Unavailable because the VM is not currently running.</span>
+      <button class="secondary" type="button" disabled>Unavailable</button>
+    </div>
+    <div class="action-card disabled-card">
+      <strong>Reboot</strong>
+      <span>Unavailable because the VM is not currently running.</span>
+      <button class="secondary" type="button" disabled>Unavailable</button>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section id="remote-node" class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Owning Node</h2>
+      <p class="muted">Remote inventory source and action target.</p>
+    </div>
+    <a class="button secondary" href="/nodes/{{ node.node_id }}">Open Node Detail</a>
+  </div>
+  <div class="resource-list remote-resource-list">
+    <div class="resource-row nic-resource-row remote-node-row">
+      <div><span class="resource-label">Node Name</span><strong>{{ node.name or '-' }}</strong></div>
+      <div><span class="resource-label">Node ID</span><code class="wrap-code">{{ node.node_id or '-' }}</code></div>
+      <div><span class="resource-label">Status</span>{% if node.enabled is defined and not node.enabled %}<span class="pill shutoff">disabled</span>{% else %}<span class="pill running">enabled</span>{% endif %}</div>
+    </div>
+    <div class="resource-row">
+      <span class="resource-label">API URL</span>
+      <code class="wrap-code">{{ node.api_url or '-' }}</code>
+    </div>
+    {% if vm.uuid %}
+    <div class="resource-row">
+      <span class="resource-label">VM UUID</span>
+      <code class="wrap-code">{{ vm.uuid }}</code>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="grid two remote-resource-grid">
+  <div id="remote-storage" class="panel vm-detail-card">
+    <div class="section-title">
+      <div>
+        <h2>Storage</h2>
+        <p class="muted">Read-only remote disk inventory. Disk edits happen on the owning node.</p>
+      </div>
+    </div>
+    <div class="resource-list">
+      {% for d in vm.disks %}
+      <div class="resource-row remote-disk-row">
+        <div class="remote-resource-header">
+          <strong>{{ d.target or d.device or 'disk' }}</strong>
+          <span class="pill">{{ d.format or 'format unknown' }}</span>
+          <span class="pill">{{ d.device or d.type or 'device' }}</span>
+        </div>
+        <span class="resource-label">Source</span>
+        <code class="wrap-code">{{ d.source or '-' }}</code>
+      </div>
+      {% else %}
+      <div class="resource-row"><span class="muted">No disks reported by the owning node.</span></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div id="remote-network" class="panel vm-detail-card">
+    <div class="section-title">
+      <div>
+        <h2>Network</h2>
+        <p class="muted">Read-only remote NIC inventory. VLANs should stay on host/libvirt bridge layers.</p>
+      </div>
+    </div>
+    <div class="resource-list">
+      {% for nic in vm.interfaces %}
+      <div class="resource-row nic-resource-row">
+        <div>
+          <span class="resource-label">MAC</span>
+          <code class="wrap-code">{{ nic.mac or '-' }}</code>
+        </div>
+        <div>
+          <span class="resource-label">Network / Bridge</span>
+          <strong>{{ nic.source or '-' }}</strong>
+        </div>
+        <div>
+          <span class="resource-label">Model</span>
+          <strong>{{ nic.model or '-' }}</strong>
+        </div>
+      </div>
+      {% else %}
+      <div class="resource-row"><span class="muted">No NICs reported by the owning node.</span></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section id="remote-console" class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Console</h2>
+      <p class="muted">Remote console proxying through the manager is not enabled yet. This opens the owning node directly.</p>
+    </div>
+    {% if remote_console_url %}<a class="button" href="{{ remote_console_url }}" target="_blank" rel="noopener">Open Remote Console</a>{% endif %}
+  </div>
+  <div class="notice remote-notice">
+    <strong>Phase 12 note:</strong> Direct-node console access depends on the remote node URL and browser reachability. Manager-side proxying should be a later explicit feature, not a surprise magic trick.
+  </div>
+</section>
+
+<section id="remote-limits" class="panel danger-zone remote-limits-panel">
+  <div class="section-title">
+    <div>
+      <h2>Remote Action Boundaries</h2>
+      <p class="muted">The manager intentionally does not expose full VM mutation for remote guests yet.</p>
+    </div>
+  </div>
+  <div class="remote-limit-grid">
+    <div class="resource-row"><span class="resource-label">Allowed from manager</span><strong>start, graceful shutdown, reboot, force power off</strong></div>
+    <div class="resource-row"><span class="resource-label">View-only here</span><strong>storage, NICs, UUID, node ownership, state</strong></div>
+    <div class="resource-row"><span class="resource-label">Not exposed remotely yet</span><strong>disk add/remove, NIC changes, ISO changes, snapshots, backups, delete, clone</strong></div>
+  </div>
+</section>
+{% else %}
+<section class="panel danger-zone">
+  <h2>Remote VM unavailable</h2>
+  <p class="muted">AtlasVM could not retrieve this VM from the owning node. Check node health, token configuration, and whether the VM still exists on that host.</p>
+  <div class="hero-actions">
+    <a class="button secondary" href="/nodes/{{ node.node_id }}">Node Detail</a>
+    <a class="button secondary" href="/vms?node={{ node.node_id }}">Node VM List</a>
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}
