@@ -1,249 +1,299 @@
 {% extends "base.html" %}
 {% block content %}
 
-<style>
-.vm-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 1rem;
-  margin: 1rem 0;
-}
-.vm-card {
-  border: 1px solid var(--border, #333);
-  border-radius: 12px;
-  padding: 1rem;
-  background: var(--panel, rgba(255,255,255,0.03));
-}
-.vm-big-number {
-  font-size: 2.25rem;
-  font-weight: 800;
-  line-height: 1;
-}
-.vm-good { color: var(--success, #5cb85c); }
-.vm-bad { color: var(--danger, #d9534f); }
-.vm-small { font-size: 0.9rem; }
-.vm-pill {
-  display: inline-block;
-  border: 1px solid var(--border, #444);
-  border-radius: 999px;
-  padding: 0.15rem 0.55rem;
-  font-size: 0.85rem;
-}
-.vm-pill.running { color: var(--success, #5cb85c); }
-.vm-pill.offline { color: var(--danger, #d9534f); }
-.vm-pill.remote { color: #7ab7ff; }
-.vm-pill.local { color: var(--success, #5cb85c); }
-.vm-table code { word-break: break-all; }
-.vm-muted { opacity: 0.75; }
-.vm-node-filter {
-  display: flex;
-  gap: .75rem;
-  flex-wrap: wrap;
-  align-items: end;
-  margin-top: 1rem;
-}
-.vm-node-filter label { min-width: 260px; }
-.vm-node-status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1rem;
-  margin: 1rem 0;
-}
-</style>
+<section class="hero-card vm-list-hero">
+  <div>
+    <div class="eyebrow">Virtual Machine Inventory</div>
+    <h1>Virtual Machines</h1>
+    <p class="muted">Node-aware VM inventory across this AtlasVM host and registered nodes. Local VMs expose full controls. Remote VMs show safe, node-aware actions for Phase 12 testing.</p>
+  </div>
+  <div class="hero-actions">
+    <a class="button" href="/vms/new">Create VM</a>
+    <a class="button secondary" href="/nodes">Manage Nodes</a>
+  </div>
+</section>
 
-<section>
-  <h2>Virtual Machines</h2>
-  <p>Node-aware VM inventory across this AtlasVM host and registered nodes. Remote VMs are visible here, but destructive remote actions are still parked outside like they deserve.</p>
+{% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+{% if message %}<div class="alert success">{{ message }}</div>{% endif %}
 
-  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
-  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+<section class="stat-grid vm-kpi-grid">
+  <div class="stat-card vm-kpi-card">
+    <span>Total VMs</span>
+    <strong>{{ inventory.total }}</strong>
+    <small>across selected nodes</small>
+  </div>
+  <div class="stat-card vm-kpi-card">
+    <span>Running</span>
+    <strong class="text-success">{{ inventory.running }}</strong>
+    <small>currently online</small>
+  </div>
+  <div class="stat-card vm-kpi-card">
+    <span>Offline</span>
+    <strong class="text-danger">{{ inventory.offline }}</strong>
+    <small>shut off or unavailable</small>
+  </div>
+  <div class="stat-card vm-kpi-card">
+    <span>Nodes in Scope</span>
+    <strong>{{ inventory.node_statuses | length }}</strong>
+    <small>{{ inventory.selected_node_id }}</small>
+  </div>
+</section>
 
-  <form class="vm-node-filter" method="get" action="/vms">
+<section class="panel vm-console-panel">
+  <div class="section-title vm-section-title">
+    <div>
+      <h2>Operating Console</h2>
+      <p class="muted">Filter, inspect, and jump into VM operations without turning the list into a spreadsheet hostage situation.</p>
+    </div>
+    <form class="vm-node-select" method="get" action="/vms">
+      <label>
+        Node
+        <select name="node" onchange="this.form.submit()">
+          <option value="all" {% if inventory.selected_node_id == 'all' %}selected{% endif %}>All registered nodes</option>
+          {% for n in inventory.nodes %}
+          <option value="{{ n.node_id }}" {% if inventory.selected_node_id == n.node_id %}selected{% endif %}>
+            {{ n.name or n.api_url }}{% if n.local %} (local){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <noscript><button type="submit">Filter</button></noscript>
+    </form>
+  </div>
+
+  <div class="vm-toolbar">
+    <label class="vm-search-label">
+      Search
+      <input id="vmSearch" type="search" placeholder="Search name, node, IP, disk, network..." autocomplete="off">
+    </label>
     <label>
-      Node
-      <select name="node">
-        <option value="all" {% if inventory.selected_node_id == 'all' %}selected{% endif %}>All registered nodes</option>
-        {% for n in inventory.nodes %}
-        <option value="{{ n.node_id }}" {% if inventory.selected_node_id == n.node_id %}selected{% endif %}>
-          {{ n.name or n.api_url }}{% if n.local %} (local){% endif %}
-        </option>
-        {% endfor %}
+      State
+      <select id="vmStateFilter">
+        <option value="all">All states</option>
+        <option value="running">Running</option>
+        <option value="offline">Offline</option>
       </select>
     </label>
-    <button type="submit">Filter</button>
-    <a href="/nodes">Manage Nodes</a>
-  </form>
-</section>
-
-<section class="vm-summary-grid">
-  <div class="vm-card">
-    <h3>Total VMs</h3>
-    <div class="vm-big-number">{{ inventory.total }}</div>
+    <label>
+      Location
+      <select id="vmLocationFilter">
+        <option value="all">Local and remote</option>
+        <option value="local">Local only</option>
+        <option value="remote">Remote only</option>
+      </select>
+    </label>
+    <button class="button secondary" type="button" id="vmClearFilters">Clear</button>
   </div>
 
-  <div class="vm-card">
-    <h3>Running</h3>
-    <div class="vm-big-number vm-good">{{ inventory.running }}</div>
-    <div class="vm-good vm-small">currently online</div>
-  </div>
+  <div class="table-scroll vm-table-wrap">
+    <table class="data-table vm-inventory-table" id="vmInventoryTable">
+      <thead>
+        <tr>
+          <th class="vm-name-col">VM</th>
+          <th>State</th>
+          <th>Node</th>
+          <th>Resources</th>
+          <th>Network</th>
+          <th>Storage</th>
+          <th class="vm-actions-col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vm in inventory.vms %}
+        {% set state_text = vm.state or 'unknown' %}
+        {% set location_text = 'local' if vm.node_local else 'remote' %}
+        <tr class="vm-row" data-state="{{ 'running' if vm.running else 'offline' }}" data-location="{{ location_text }}" data-search="{{ vm.name }} {{ vm.node_name }} {{ vm.node_source }} {{ vm.uuid }} {% for ip in vm.ips %}{{ ip }} {% endfor %}{% for d in vm.disks %}{{ d.source }} {{ d.target }} {{ d.format }} {% endfor %}{% for nic in vm.interfaces %}{{ nic.source }} {{ nic.mac }} {{ nic.model }} {% endfor %}">
+          <td class="vm-identity-cell">
+            <div class="vm-name-line">
+              <a class="vm-name-link" href="{% if vm.node_local %}/vms/{{ vm.name }}{% else %}/nodes/{{ vm.node_id }}/vms/{{ vm.name }}{% endif %}">{{ vm.name }}</a>
+              {% if vm.template or vm.is_template %}<span class="pill template">template</span>{% endif %}
+            </div>
+            {% if vm.uuid %}<small class="muted vm-uuid">{{ vm.uuid }}</small>{% endif %}
+            <div class="vm-mini-links">
+              {% if vm.node_local %}
+              <a href="/vms/{{ vm.name }}">Overview</a>
+              <a href="/vms/{{ vm.name }}/console">Console</a>
+              <a href="/vms/{{ vm.name }}/disks">Disks</a>
+              <a href="/vms/{{ vm.name }}/network">Network</a>
+              {% else %}
+              <a href="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}">Remote detail</a>
+              {% if vm.node_api_url %}<a href="{{ vm.node_api_url }}/vms/{{ vm.name }}/console" target="_blank" rel="noopener">Remote console</a>{% endif %}
+              {% endif %}
+            </div>
+          </td>
 
-  <div class="vm-card">
-    <h3>Offline</h3>
-    <div class="vm-big-number vm-bad">{{ inventory.offline }}</div>
-    <div class="vm-bad vm-small">shut off or not running</div>
-  </div>
+          <td>
+            {% if vm.running %}
+            <span class="state-pill running">{{ state_text }}</span>
+            {% else %}
+            <span class="state-pill shutoff">{{ state_text }}</span>
+            {% endif %}
+            <div class="vm-autostart muted">Autostart: {{ "yes" if vm.autostart else "no" }}</div>
+          </td>
 
-  <div class="vm-card">
-    <h3>Actions</h3>
-    <p><a href="/vms/new">Create VM</a></p>
-    <p><a href="/nodes">Nodes</a></p>
-  </div>
-</section>
+          <td>
+            <div class="node-name">{{ vm.node_name or '-' }}</div>
+            <div class="node-badges">
+              <span class="pill {{ location_text }}">{{ location_text }}</span>
+              {% if vm.node_enabled is defined and not vm.node_enabled %}<span class="pill danger-pill">disabled</span>{% endif %}
+            </div>
+            {% if vm.node_source %}<small class="muted">{{ vm.node_source }}</small>{% endif %}
+          </td>
 
-<section>
-  <h3>Node Status</h3>
-  <div class="vm-node-status-grid">
-    {% for node in inventory.node_statuses %}
-    <div class="vm-card">
-      <h4>{{ node.name or node.api_url }}</h4>
-      <p>
-        {% if node.ok %}
-        <span class="vm-pill running">online</span>
+          <td>
+            <div class="resource-stack">
+              <span><strong>{{ vm.vcpu or '-' }}</strong> vCPU</span>
+              <span>
+                <strong>
+                  {% if vm.memory %}{{ (vm.memory | int / 1024 / 1024) | round(1) }}{% else %}-{% endif %}
+                </strong> GiB RAM
+              </span>
+            </div>
+          </td>
+
+          <td class="vm-network-cell">
+            {% if vm.ips %}
+              {% for ip in vm.ips %}<code>{{ ip }}</code>{% endfor %}
+            {% else %}
+              <span class="muted">No guest IP</span>
+            {% endif %}
+            {% if vm.interfaces %}
+              <details class="vm-details-foldout">
+                <summary>{{ vm.interfaces | length }} interface(s)</summary>
+                {% for nic in vm.interfaces %}
+                <div class="foldout-line">
+                  <code>{{ nic.source or '-' }}</code>
+                  {% if nic.model %}<small>{{ nic.model }}</small>{% endif %}
+                  {% if nic.mac %}<small>{{ nic.mac }}</small>{% endif %}
+                </div>
+                {% endfor %}
+              </details>
+            {% endif %}
+          </td>
+
+          <td class="vm-storage-cell">
+            {% if vm.disks %}
+              <strong>{{ vm.disks | length }}</strong> device(s)
+              <details class="vm-details-foldout">
+                <summary>Show disks</summary>
+                {% for d in vm.disks %}
+                <div class="foldout-line">
+                  <span><strong>{{ d.target or d.device or 'disk' }}</strong> {{ d.format or '' }}</span>
+                  {% if d.source %}<code>{{ d.source }}</code>{% endif %}
+                </div>
+                {% endfor %}
+              </details>
+            {% else %}
+              <span class="muted">No disks reported</span>
+            {% endif %}
+          </td>
+
+          <td class="vm-action-cell">
+            {% if vm.node_local %}
+              <div class="action-cluster">
+                <a class="button compact" href="/vms/{{ vm.name }}">Open</a>
+                {% if vm.running %}
+                <a class="button compact secondary" href="/vms/{{ vm.name }}/console">Console</a>
+                <form method="post" action="/ui/vms/{{ vm.name }}/shutdown" onsubmit="return confirm('Gracefully shut down {{ vm.name }}?');"><button class="compact secondary" type="submit">Shutdown</button></form>
+                {% else %}
+                <form method="post" action="/ui/vms/{{ vm.name }}/start" onsubmit="return confirm('Start {{ vm.name }}?');"><button class="compact" type="submit">Start</button></form>
+                {% endif %}
+                <a class="button compact secondary" href="/vms/{{ vm.name }}/clone">Clone</a>
+              </div>
+            {% else %}
+              <div class="action-cluster">
+                <a class="button compact" href="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}">Open</a>
+                {% if vm.node_api_url %}<a class="button compact secondary" href="{{ vm.node_api_url }}/vms/{{ vm.name }}/console" target="_blank" rel="noopener">Console</a>{% endif %}
+                {% if vm.running %}
+                <form method="post" action="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}/shutdown" onsubmit="return confirm('Gracefully shut down {{ vm.name }} on {{ vm.node_name }}?');"><button class="compact secondary" type="submit">Shutdown</button></form>
+                {% else %}
+                <form method="post" action="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}/start" onsubmit="return confirm('Start {{ vm.name }} on {{ vm.node_name }}?');"><button class="compact" type="submit">Start</button></form>
+                {% endif %}
+              </div>
+            {% endif %}
+          </td>
+        </tr>
         {% else %}
-        <span class="vm-pill offline">offline</span>
-        {% endif %}
-        {% if node.local %}<span class="vm-pill local">local</span>{% else %}<span class="vm-pill remote">remote</span>{% endif %}
-      </p>
-      <p><strong>{{ node.vm_count }}</strong> VM(s)</p>
-      {% if node.latency_ms is defined and node.latency_ms is not none %}<p><small>{{ node.latency_ms }} ms</small></p>{% endif %}
-      {% if node.error %}<p class="vm-bad"><small>{{ node.error }}</small></p>{% endif %}
-      <p><a href="/nodes/{{ node.node_id }}">Node Detail</a></p>
+        <tr><td class="empty-cell" colspan="7">No VMs found for the selected node scope.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="vm-table-footer muted"><span id="vmVisibleCount">{{ inventory.vms | length }}</span> visible of {{ inventory.vms | length }} VM(s)</div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Node Status</h2>
+      <p class="muted">Quick health view for the inventory sources feeding this page.</p>
+    </div>
+  </div>
+  <div class="vm-node-status-grid polished-node-grid">
+    {% for node in inventory.node_statuses %}
+    <div class="vm-node-card">
+      <div class="node-card-header">
+        <h3>{{ node.name or node.api_url }}</h3>
+        {% if node.ok %}<span class="pill running">online</span>{% else %}<span class="pill shutoff">offline</span>{% endif %}
+      </div>
+      <div class="node-badges">
+        {% if node.local %}<span class="pill local">local</span>{% else %}<span class="pill remote">remote</span>{% endif %}
+        <span class="pill">{{ node.vm_count }} VM(s)</span>
+        {% if node.latency_ms is defined and node.latency_ms is not none %}<span class="pill">{{ node.latency_ms }} ms</span>{% endif %}
+      </div>
+      {% if node.error %}<p class="text-danger"><small>{{ node.error }}</small></p>{% endif %}
+      <a href="/nodes/{{ node.node_id }}">Node Detail</a>
     </div>
     {% else %}
-    <div class="vm-card">No node status records.</div>
+    <div class="vm-node-card">No node status records.</div>
     {% endfor %}
   </div>
 </section>
 
-<section>
-  <h3>VM Inventory</h3>
+<script>
+(function () {
+  const search = document.getElementById('vmSearch');
+  const stateFilter = document.getElementById('vmStateFilter');
+  const locationFilter = document.getElementById('vmLocationFilter');
+  const clear = document.getElementById('vmClearFilters');
+  const rows = Array.from(document.querySelectorAll('#vmInventoryTable tbody tr.vm-row'));
+  const count = document.getElementById('vmVisibleCount');
 
-  <table class="vm-table">
-    <thead>
-      <tr>
-        <th>Node</th>
-        <th>Name</th>
-        <th>State</th>
-        <th>vCPU</th>
-        <th>Memory</th>
-        <th>Autostart</th>
-        <th>IP Address</th>
-        <th>Disks</th>
-        <th>Networks</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for vm in inventory.vms %}
-      <tr>
-        <td>
-          <strong>{{ vm.node_name }}</strong>
-          <br>
-          {% if vm.node_local %}<span class="vm-pill local">local</span>{% else %}<span class="vm-pill remote">remote</span>{% endif %}
-          {% if vm.node_source %}<br><small class="vm-muted">{{ vm.node_source }}</small>{% endif %}
-        </td>
+  function applyFilters() {
+    const q = (search && search.value || '').trim().toLowerCase();
+    const state = stateFilter ? stateFilter.value : 'all';
+    const location = locationFilter ? locationFilter.value : 'all';
+    let visible = 0;
 
-        <td>
-          <strong>{{ vm.name }}</strong>
-          {% if vm.uuid %}
-          <br><small class="vm-muted">{{ vm.uuid }}</small>
-          {% endif %}
-        </td>
+    rows.forEach(function (row) {
+      const text = (row.dataset.search || '').toLowerCase();
+      const rowState = row.dataset.state || '';
+      const rowLocation = row.dataset.location || '';
+      const matchText = !q || text.indexOf(q) !== -1;
+      const matchState = state === 'all' || rowState === state;
+      const matchLocation = location === 'all' || rowLocation === location;
+      const show = matchText && matchState && matchLocation;
+      row.hidden = !show;
+      if (show) visible += 1;
+    });
 
-        <td>
-          {% if vm.running %}
-          <span class="vm-pill running">{{ vm.state }}</span>
-          {% else %}
-          <span class="vm-pill offline">{{ vm.state }}</span>
-          {% endif %}
-        </td>
+    if (count) count.textContent = String(visible);
+  }
 
-        <td>{{ vm.vcpu or '-' }}</td>
+  [search, stateFilter, locationFilter].forEach(function (el) {
+    if (el) el.addEventListener('input', applyFilters);
+    if (el) el.addEventListener('change', applyFilters);
+  });
 
-        <td>
-          {% if vm.memory %}
-          {{ (vm.memory | int / 1024 / 1024) | round(1) }} GiB
-          {% else %}
-          -
-          {% endif %}
-        </td>
-
-        <td>{{ "yes" if vm.autostart else "no" }}</td>
-
-        <td>
-          {% if vm.ips %}
-            {% for ip in vm.ips %}
-            <div><code>{{ ip }}</code></div>
-            {% endfor %}
-          {% else %}
-            -
-          {% endif %}
-        </td>
-
-        <td>
-          {% if vm.disks %}
-            {% for d in vm.disks %}
-            <div>
-              <strong>{{ d.device }}</strong>
-              {% if d.target %}<code>{{ d.target }}</code>{% endif %}
-              {% if d.format %}<small>{{ d.format }}</small>{% endif %}
-              {% if d.source %}
-              <br><small><code>{{ d.source }}</code></small>
-              {% endif %}
-            </div>
-            {% endfor %}
-          {% else %}
-          -
-          {% endif %}
-        </td>
-
-        <td>
-          {% if vm.interfaces %}
-            {% for nic in vm.interfaces %}
-            <div>
-              <code>{{ nic.source or '-' }}</code>
-              {% if nic.model %}<small>{{ nic.model }}</small>{% endif %}
-              {% if nic.mac %}<br><small>{{ nic.mac }}</small>{% endif %}
-            </div>
-            {% endfor %}
-          {% else %}
-          -
-          {% endif %}
-        </td>
-
-        <td>
-          <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
-            {% if vm.node_local %}
-            <a href="/vms/{{ vm.name }}">Details</a>
-            <a href="/vms/{{ vm.name }}/console">Console</a>
-            <a href="/vms/{{ vm.name }}/disks">Disks</a>
-            {% else %}
-            <a href="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}">Remote Detail</a>
-            <a href="{{ vm.node_api_url }}/vms/{{ vm.name }}/console" target="_blank">Console</a>
-            {% if vm.running %}
-            <form method="post" action="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}/shutdown" style="display:inline;" onsubmit="return confirm('Gracefully shut down {{ vm.name }} on {{ vm.node_name }}?');"><button type="submit">Shutdown</button></form>
-            {% else %}
-            <form method="post" action="/nodes/{{ vm.node_id }}/vms/{{ vm.name }}/start" style="display:inline;" onsubmit="return confirm('Start {{ vm.name }} on {{ vm.node_name }}?');"><button type="submit">Start</button></form>
-            {% endif %}
-            {% endif %}
-          </div>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="10">No VMs found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+  if (clear) {
+    clear.addEventListener('click', function () {
+      if (search) search.value = '';
+      if (stateFilter) stateFilter.value = 'all';
+      if (locationFilter) locationFilter.value = 'all';
+      applyFilters();
+    });
+  }
+})();
+</script>
 
 {% endblock %}

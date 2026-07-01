@@ -99,3 +99,56 @@ th, td { overflow-wrap: anywhere; word-break: normal; }
 .task-message { margin: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; overflow: auto; max-height: 9rem; }
 .empty-cell { text-align: center; color: var(--muted); padding: 1.4rem .75rem; }
 @media (max-width: 980px) { .data-table, .tasks-table, .audit-table { min-width: 720px; } .message-cell { max-width: 24rem; } }
+
+/* Phase 11.5.4: VM list operating console polish. */
+.text-success { color: var(--success) !important; }
+.text-danger { color: var(--danger) !important; }
+.vm-list-hero { align-items: flex-start; }
+.vm-list-hero p { max-width: 58rem; }
+.vm-kpi-grid { margin-bottom: 1rem; }
+.vm-kpi-card small { display: block; margin-top: .25rem; color: var(--muted); }
+.vm-console-panel { overflow: hidden; }
+.vm-section-title { align-items: flex-start; }
+.vm-node-select { min-width: min(100%, 18rem); }
+.vm-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(150px, 190px) minmax(160px, 210px) auto; gap: .75rem; align-items: end; margin: 1rem 0; }
+.vm-search-label { min-width: 0; }
+.vm-table-wrap { border: 1px solid var(--border); border-radius: .95rem; background: rgba(5,11,20,.22); }
+.vm-inventory-table { min-width: 1180px; table-layout: fixed; }
+.vm-inventory-table th, .vm-inventory-table td { padding: .82rem .75rem; }
+.vm-name-col { width: 19rem; }
+.vm-actions-col { width: 15.5rem; }
+.vm-identity-cell { min-width: 0; }
+.vm-name-line { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; }
+.vm-name-link { font-weight: 800; color: #fff; font-size: 1.02rem; }
+.vm-uuid { display: block; margin-top: .22rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vm-mini-links { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .5rem; font-size: .82rem; }
+.vm-mini-links a { color: var(--accent-2); }
+.vm-autostart { margin-top: .45rem; font-size: .82rem; }
+.node-name { font-weight: 750; color: #fff; }
+.node-badges { display: flex; flex-wrap: wrap; gap: .35rem; margin: .45rem 0; }
+.pill.local { border-color: rgba(87,214,141,.45); color: var(--success); }
+.pill.remote { border-color: rgba(124,218,255,.45); color: var(--accent-2); }
+.pill.shutoff, .danger-pill { border-color: rgba(255,107,107,.45); color: var(--danger); }
+.resource-stack { display: grid; gap: .35rem; }
+.resource-stack strong { color: #fff; font-size: 1.05rem; }
+.vm-network-cell code, .vm-storage-cell code { display: inline-block; max-width: 100%; margin: .12rem .2rem .12rem 0; vertical-align: top; }
+.vm-details-foldout { margin-top: .5rem; }
+.vm-details-foldout summary { cursor: pointer; color: var(--accent-2); font-size: .84rem; }
+.foldout-line { display: grid; gap: .24rem; padding: .45rem 0; border-top: 1px solid rgba(148,163,184,.13); }
+.vm-action-cell form { display: inline-flex; }
+.action-cluster { display: flex; flex-wrap: wrap; gap: .38rem; align-items: center; }
+button.compact, .button.compact { min-height: 1.95rem; padding: .34rem .55rem; border-radius: .55rem; font-size: .8rem; }
+.vm-table-footer { display: flex; justify-content: flex-end; padding-top: .65rem; font-size: .86rem; }
+.polished-node-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.vm-node-card { border: 1px solid var(--border); border-radius: .95rem; background: rgba(5,11,20,.22); padding: 1rem; }
+.node-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+.node-card-header h3 { margin-bottom: .35rem; }
+@media (max-width: 1120px) {
+  .vm-toolbar { grid-template-columns: 1fr 1fr; }
+  .vm-toolbar .button { width: fit-content; }
+}
+@media (max-width: 720px) {
+  .vm-toolbar { grid-template-columns: 1fr; }
+  .vm-section-title { flex-direction: column; }
+  .vm-node-select { width: 100%; }
+}
