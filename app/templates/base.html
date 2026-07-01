@@ -8,28 +8,77 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  {% set current_path = request.url.path if request is defined else '' %}
+  {% set page_title = 'Dashboard' %}
+  {% set page_hint = 'Host overview and virtualization health' %}
+  {% if current_path.startswith('/vms') or current_path.startswith('/ui/vms') %}
+    {% set page_title = 'Virtual Machines' %}
+    {% set page_hint = 'Manage guests, power state, hardware, snapshots, and backups' %}
+  {% elif current_path.startswith('/nodes') %}
+    {% set page_title = 'Nodes' %}
+    {% set page_hint = 'AtlasVM node inventory and readiness' %}
+  {% elif current_path.startswith('/storage') %}
+    {% set page_title = 'Storage' %}
+    {% set page_hint = 'Pools, volumes, capacity, and backend health' %}
+  {% elif current_path.startswith('/networks') %}
+    {% set page_title = 'Networks' %}
+    {% set page_hint = 'Libvirt networks, bridges, and VM connectivity' %}
+  {% elif current_path.startswith('/templates') %}
+    {% set page_title = 'Templates' %}
+    {% set page_hint = 'Reusable VM images and clone sources' %}
+  {% elif current_path.startswith('/isos') %}
+    {% set page_title = 'ISO Library' %}
+    {% set page_hint = 'Install media available to guests' %}
+  {% elif current_path.startswith('/backups') %}
+    {% set page_title = 'Backups' %}
+    {% set page_hint = 'Backup jobs, restore points, and retention' %}
+  {% elif current_path.startswith('/tasks') %}
+    {% set page_title = 'Tasks' %}
+    {% set page_hint = 'Background jobs and operational activity' %}
+  {% elif current_path.startswith('/host/network') %}
+    {% set page_title = 'Host Network' %}
+    {% set page_hint = 'Host interfaces, bridges, VLANs, and reconciliation' %}
+  {% elif current_path.startswith('/zfs') %}
+    {% set page_title = 'ZFS' %}
+    {% set page_hint = 'Pool status, datasets, and storage health' %}
+  {% elif current_path.startswith('/doctor') %}
+    {% set page_title = 'Doctor' %}
+    {% set page_hint = 'Validation checks and repair guidance' %}
+  {% elif current_path.startswith('/audit') %}
+    {% set page_title = 'Audit' %}
+    {% set page_hint = 'Security and operational event history' %}
+  {% elif current_path.startswith('/settings') %}
+    {% set page_title = 'Settings' %}
+    {% set page_hint = 'System configuration and platform behavior' %}
+  {% elif current_path.startswith('/users') %}
+    {% set page_title = 'Users' %}
+    {% set page_hint = 'Accounts, roles, and access control' %}
+  {% elif current_path.startswith('/login') %}
+    {% set page_title = 'Login' %}
+    {% set page_hint = 'Sign in to AtlasVM' %}
+  {% endif %}
+
   <div class="app-shell">
     <aside class="sidebar">
-      <a class="brand" href="/">
+      <a class="brand" href="/" aria-label="AtlasVM dashboard">
         <img src="/static/atlasvm-logo.png" alt="AtlasVM">
-        <span>AtlasVM</span>
       </a>
-      <nav class="side-nav">
-        <a href="/">Dashboard</a>
-        <a href="/vms">Virtual Machines</a>
-        <a href="/nodes">Nodes</a>
-        <a href="/storage">Storage</a>
-        <a href="/networks">Networks</a>
-        <a href="/templates">Templates</a>
-        <a href="/isos">ISOs</a>
-        <a href="/backups">Backups</a>
-        <a href="/tasks">Tasks</a>
-        <a href="/host/network">Host Network</a>
-        <a href="/zfs">ZFS</a>
-        <a href="/doctor">Doctor</a>
-        <a href="/audit">Audit</a>
-        <a href="/settings">Settings</a>
-        <a href="/users">Users</a>
+      <nav class="side-nav" aria-label="Primary navigation">
+        <a class="{{ 'active' if current_path == '/' else '' }}" href="/">Dashboard</a>
+        <a class="{{ 'active' if current_path.startswith('/vms') or current_path.startswith('/ui/vms') else '' }}" href="/vms">Virtual Machines</a>
+        <a class="{{ 'active' if current_path.startswith('/nodes') else '' }}" href="/nodes">Nodes</a>
+        <a class="{{ 'active' if current_path.startswith('/storage') else '' }}" href="/storage">Storage</a>
+        <a class="{{ 'active' if current_path.startswith('/networks') else '' }}" href="/networks">Networks</a>
+        <a class="{{ 'active' if current_path.startswith('/templates') else '' }}" href="/templates">Templates</a>
+        <a class="{{ 'active' if current_path.startswith('/isos') else '' }}" href="/isos">ISOs</a>
+        <a class="{{ 'active' if current_path.startswith('/backups') else '' }}" href="/backups">Backups</a>
+        <a class="{{ 'active' if current_path.startswith('/tasks') else '' }}" href="/tasks">Tasks</a>
+        <a class="{{ 'active' if current_path.startswith('/host/network') else '' }}" href="/host/network">Host Network</a>
+        <a class="{{ 'active' if current_path.startswith('/zfs') else '' }}" href="/zfs">ZFS</a>
+        <a class="{{ 'active' if current_path.startswith('/doctor') else '' }}" href="/doctor">Doctor</a>
+        <a class="{{ 'active' if current_path.startswith('/audit') else '' }}" href="/audit">Audit</a>
+        <a class="{{ 'active' if current_path.startswith('/settings') else '' }}" href="/settings">Settings</a>
+        <a class="{{ 'active' if current_path.startswith('/users') else '' }}" href="/users">Users</a>
       </nav>
     </aside>
 
@@ -37,7 +86,8 @@
       <header class="topbar">
         <div>
           <div class="eyebrow">AtlasVM Control Plane</div>
-          <div class="page-path">{{ request.url.path if request is defined else '' }}</div>
+          <div class="page-title">{{ page_title }}</div>
+          <div class="page-path">{{ page_hint }}</div>
         </div>
         <div class="userbar">
           {% if request.url.path != '/login' %}
