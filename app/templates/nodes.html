@@ -83,8 +83,16 @@
       <span>{{ 'Two or more nodes are reachable.' if online_nodes.count >= 2 else 'Confirm API URL, token, nginx, and atlasvm.service on the remote host.' }}</span>
     </div>
     <div class="phase12-check warn">
+      <strong>Compatibility report</strong>
+      <span>Run the compatibility report and resolve version, service, storage, and network differences before Phase 12 testing.</span>
+    </div>
+    <div class="phase12-check warn">
       <strong>Mutation boundary</strong>
       <span>Remote UI currently exposes safe power actions only. Storage, NIC, ISO, backup, clone, and delete remain local-only until tested.</span>
+    </div>
+    <div class="phase12-check warn">
+      <strong>Operator hold point</strong>
+      <span>Confirm backups and a rollback path before the first remote action test. Optimism is not a recovery strategy.</span>
     </div>
   </div>
 </section>
