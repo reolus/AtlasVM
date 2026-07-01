@@ -2,7 +2,7 @@ from pathlib import Path
 from shutil import copyfileobj
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.templating import Jinja2Templates
@@ -100,6 +100,12 @@ app.add_middleware(
 )
 app.include_router(router)
 app.mount('/static', StaticFiles(directory='app/static'), name='static')
+
+
+@app.get('/favicon.ico', include_in_schema=False)
+def favicon():
+    return FileResponse('app/static/favicon.ico')
+
 templates = Jinja2Templates(directory='app/templates')
 
 
