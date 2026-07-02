@@ -170,58 +170,128 @@
 
 <section class="grid two">
   <div id="media" class="panel vm-detail-card">
-    <div class="section-title vm-section-title">
-      <div>
-        <h2><i class="fa-solid fa-compact-disc"></i>Installer media</h2>
-        <p class="muted">Attach or eject ISO media using the snapshot-safe device update path.</p>
-      </div>
+  <div class="section-title vm-section-title">
+    <div>
+      <h2><i class="fa-solid fa-compact-disc"></i> Installer Media</h2>
+      <p class="muted">Attach or eject ISO media using the snapshot-safe device update path.</p>
     </div>
-    <div class="current-media-card">
-      <span class="muted">Currently loaded</span>
-      <strong>{% if current_iso %}<code>{{ current_iso }}</code>{% else %}No ISO attached{% endif %}</strong>
-    </div>
-    <form class="stacked-form" method="post" action="/vms/{{ vm.name }}/iso/attach">
-      <label>ISO image
-        <select name="iso_path" required>
-          <option value="" {% if current_iso is not defined or not current_iso %}selected{% endif %}>Choose ISO...</option>
-          {% for iso in isos %}<option value="{{ iso.path }}" {% if current_iso is defined and current_iso and (current_iso == iso.path or current_iso.endswith('/' ~ iso.name)) %}selected{% endif %}>{{ iso.name }}</option>{% endfor %}
-        </select>
-      </label>
-      <label class="check"><input name="live" type="checkbox" value="true"> Apply while VM is running</label>
-      <div class="action-row"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-compact-disc"></i>Attach ISO</button></div>
-    </form>
-    <form class="inline-form vm-inline-safe" method="post" action="/vms/{{ vm.name }}/iso/eject">
-      <label class="check"><input name="live" type="checkbox" value="true"> Apply live</label><button type="submit" class="btn btn-outline-light">Eject ISO</button>
-    </form>
   </div>
 
-  <div id="backup" class="panel vm-detail-card">
-    <div class="section-title vm-section-title">
-      <div>
-        <h2><i class="fa-solid fa-box-archive"></i>Backup</h2>
-        <p class="muted">Queue a backup job and review recent archives.</p>
-      </div>
-      <a class="btn btn-outline-light" href="/backups"><i class="fa-solid fa-box-archive"></i>Backup Console</a>
-    </div>
-    <form class="stacked-form" method="post" action="/vms/{{ vm.name }}/backup">
-      <label>Target
-        <select name="target_name">
-          {% for target in backup_targets %}<option value="{{ target.name }}" {% if not target.enabled or not target.writable %}disabled{% endif %}>{{ target.name }} - {{ target.kind }}{% if not target.writable %} (not writable){% endif %}</option>{% endfor %}
-        </select>
-      </label>
-      <div class="grid two">
-        <label class="check"><input name="require_shutdown" type="checkbox" value="true" checked> Require shutdown</label>
-        <label class="check"><input name="compress" type="checkbox" value="true" checked> Compress</label>
-      </div>
-      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-box-archive"></i>Queue Backup</button>
-    </form>
-    <div class="table-scroll compact-table-wrap">
-      <table class="data-table vm-detail-table compact-table">
-        <thead><tr><th>Created</th><th>Archive</th></tr></thead>
-        <tbody>{% for backup in backups[:5] %}<tr><td>{{ backup.created_at }}</td><td><code>{{ backup.archive or backup.path }}</code></td></tr>{% else %}<tr><td colspan="2" class="empty-cell">No backups for this VM.</td></tr>{% endfor %}</tbody>
-      </table>
-    </div>
+  <div class="current-media-card">
+    <span class="muted">Currently loaded</span>
+    <strong>
+      {% if current_iso %}
+        <code>{{ current_iso }}</code>
+      {% else %}
+        No ISO attached
+      {% endif %}
+    </strong>
   </div>
+
+  <form class="stacked-form vm-media-form" method="post" action="/vms/{{ vm.name }}/iso/attach">
+    <label>
+      ISO image
+      <select name="iso_path" required>
+        <option value="" {% if current_iso is not defined or not current_iso %}selected{% endif %}>Choose ISO...</option>
+        {% for iso in isos %}
+          <option value="{{ iso.path }}" {% if current_iso is defined and current_iso and (current_iso == iso.path or current_iso.endswith('/' ~ iso.name)) %}selected{% endif %}>
+            {{ iso.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="form-check-row">
+      <input name="live" type="checkbox" value="true">
+      <span>Apply while VM is running</span>
+    </label>
+
+    <div class="action-row">
+      <button class="btn btn-primary" type="submit">
+        <i class="fa-solid fa-compact-disc"></i>
+        Attach ISO
+      </button>
+    </div>
+  </form>
+
+  <form class="vm-eject-form" method="post" action="/vms/{{ vm.name }}/iso/eject">
+    <label class="form-check-row">
+      <input name="live" type="checkbox" value="true">
+      <span>Apply live</span>
+    </label>
+
+    <button type="submit" class="btn btn-outline-light">
+      Eject ISO
+    </button>
+  </form>
+</div>
+
+<div id="backup" class="panel vm-detail-card">
+  <div class="section-title vm-section-title">
+    <div>
+      <h2><i class="fa-solid fa-box-archive"></i> Backup</h2>
+      <p class="muted">Queue a backup job and review recent archives.</p>
+    </div>
+
+    <a class="btn btn-outline-light" href="/backups">
+      <i class="fa-solid fa-box-archive"></i>
+      Backup Console
+    </a>
+  </div>
+
+  <form class="stacked-form vm-backup-form" method="post" action="/vms/{{ vm.name }}/backup">
+    <label>
+      Target
+      <select name="target_name">
+        {% for target in backup_targets %}
+          <option value="{{ target.name }}" {% if not target.enabled or not target.writable %}disabled{% endif %}>
+            {{ target.name }} - {{ target.kind }}{% if not target.writable %} (not writable){% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <div class="form-check-grid">
+      <label class="form-check-row">
+        <input name="require_shutdown" type="checkbox" value="true" checked>
+        <span>Require shutdown</span>
+      </label>
+
+      <label class="form-check-row">
+        <input name="compress" type="checkbox" value="true" checked>
+        <span>Compress</span>
+      </label>
+    </div>
+
+    <button class="btn btn-primary w-100" type="submit">
+      <i class="fa-solid fa-box-archive"></i>
+      Queue Backup
+    </button>
+  </form>
+
+  <div class="table-scroll compact-table-wrap">
+    <table class="data-table vm-detail-table compact-table">
+      <thead>
+        <tr>
+          <th>Created</th>
+          <th>Archive</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for backup in backups[:5] %}
+          <tr>
+            <td>{{ backup.created_at }}</td>
+            <td><code>{{ backup.archive or backup.path }}</code></td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="2" class="empty-cell">No backups for this VM.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 </section>
 
 <section id="snapshots" class="panel vm-snapshot-panel">

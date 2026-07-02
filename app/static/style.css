@@ -83,15 +83,65 @@ form { margin: 0; }
   align-items: center;
   gap: 0.55rem;
   width: fit-content;
+  max-width: 100%;
   margin: 0.35rem 0 0.75rem;
   color: var(--avm-text, #e8eefc);
   font-weight: 500;
+  line-height: 1.25;
 }
+
 .form-check-row input[type="checkbox"] {
+  flex: 0 0 auto;
   width: 1rem;
   height: 1rem;
   margin: 0;
   accent-color: var(--avm-accent, #ffd43b);
+}
+
+.form-check-row span {
+  display: inline-block;
+}
+
+.form-check-grid {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin: 0.35rem 0 0.85rem;
+}
+
+.form-check-grid .form-check-row {
+  margin: 0;
+}
+
+.vm-media-form,
+.vm-backup-form {
+  margin-top: 1rem;
+}
+
+.vm-eject-form {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.vm-eject-form .form-check-row {
+  margin: 0;
+}
+
+.vm-detail-card .action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.w-100 {
+  width: 100%;
 }
 .stacked-form .form-check-row {
   justify-content: flex-start;
