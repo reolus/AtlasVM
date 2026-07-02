@@ -111,3 +111,24 @@ The console redirect now uses a helper that encodes the entire noVNC URL as the 
   - `/storage/{pool_name}` template styling where used
   - `/zfs`
 - No libvirt undefine/redefine behavior was added. Console handling still only starts noVNC/websockify against an existing VNC display.
+
+## Admin section theme follow-up
+
+The Admin section pages were normalized to the same local Bootstrap-compatible / Font Awesome-compatible AtlasVM theme used by the dashboard, VM, network, and storage sections.
+
+Updated pages include:
+
+- `/admin`
+- `/backups`
+- `/doctor`
+- `/tasks`
+- `/audit`
+- `/events`
+- `/users`
+- `/settings`
+- `/zfs`
+- `/host/network`
+
+Changes include themed hero headers, Admin return actions, KPI/stat cards where useful, `atlas-panel` cards, `atlas-table-wrap` responsive tables, consistent form/button styling, and Admin active-section context for pages that previously rendered without the shared sidebar context.
+
+No VM XML mutation logic was changed. This UI pass does not use libvirt undefine/redefine.

@@ -1,59 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <div class="section-title"><h2>Users</h2><span class="pill">Phase 4</span></div>
-  <p>Local AtlasVM users, roles, and account status. Yes, we finally gave the platform a bouncer instead of a sticky note on the door.</p>
-</section>
-<section class="grid two">
+<section class="atlas-hero admin-page-hero">
   <div>
-    <h2>Create User</h2>
-    <form method="post" action="/users/create">
+    <div class="atlas-kicker"><i class="fa-solid fa-users"></i> Administration</div>
+    <h2>Users</h2>
+    <p class="muted mb-0">Local AtlasVM users, roles, and account status.</p>
+  </div>
+  <div class="hero-actions"><a class="btn btn-outline-light" href="/admin"><i class="fa-solid fa-arrow-left"></i>Admin</a></div>
+</section>
+{% if message %}<div class="alert success"><i class="fa-solid fa-circle-check"></i> {{ message }}</div>{% endif %}
+{% if error %}<div class="alert danger"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+<section class="atlas-stat-grid admin-kpi-grid">
+  <div class="atlas-stat-card"><span class="atlas-stat-icon purple"><i class="fa-solid fa-user-group"></i></span><div><span>Local Users</span><strong>{{ users|length }}</strong><small>accounts</small></div></div>
+</section>
+<section class="grid two admin-management-grid">
+  <div class="panel atlas-panel admin-form-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-user-plus"></i>Create User</h2></div>
+    <form class="stacked-form" method="post" action="/users/create">
       <label>Username <input name="username" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" required></label>
       <label>Password <input name="password" type="password" minlength="10" required></label>
-      <label>Role
-        <select name="role"><option value="operator">Operator</option><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
-      </label>
-      <button>Create User</button>
+      <label>Role <select name="role"><option value="operator">Operator</option><option value="viewer">Viewer</option><option value="admin">Admin</option></select></label>
+      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-user-plus"></i>Create User</button>
     </form>
   </div>
-  <div>
-    <h2>Role Notes</h2>
-    <table><tbody>
-      <tr><th>Admin</th><td>Users, settings, delete operations, and everything below.</td></tr>
-      <tr><th>Operator</th><td>VM operations, backups, snapshots, ISO uploads, storage refreshes, and ZFS actions.</td></tr>
-      <tr><th>Viewer</th><td>Dashboard and read-only visibility.</td></tr>
-    </tbody></table>
+  <div class="panel atlas-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-id-badge"></i>Role Notes</h2></div>
+    <div class="atlas-table-wrap"><table class="atlas-data-table admin-compact-table"><tbody><tr><th>Admin</th><td>Users, settings, delete operations, and everything below.</td></tr><tr><th>Operator</th><td>VM operations, backups, snapshots, ISO uploads, storage refreshes, and ZFS actions.</td></tr><tr><th>Viewer</th><td>Dashboard and read-only visibility.</td></tr></tbody></table></div>
   </div>
 </section>
-<section>
-  <h2>Existing Users</h2>
-  <table>
+<section class="panel atlas-panel">
+  <div class="section-title"><h2><i class="fa-solid fa-address-book"></i>Existing Users</h2></div>
+  <div class="atlas-table-wrap"><table class="atlas-data-table admin-table users-table">
     <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Change Role</th><th>Reset Password</th><th>Actions</th></tr></thead>
-    <tbody>
-      {% for account in users %}
-      <tr>
-        <td><strong>{{ account.username }}</strong><br><small>Local AtlasVM account</small></td>
-        <td><span class="pill {{ account.role }}">{{ account.role }}</span></td>
-        <td><span class="pill {{ 'success' if account.is_active else 'failed' }}">{{ 'active' if account.is_active else 'disabled' }}</span></td>
-        <td>
-          <form method="post" action="/users/{{ account.id }}/role" class="inline-form compact">
-            <select name="role"><option value="admin" {% if account.role == 'admin' %}selected{% endif %}>Admin</option><option value="operator" {% if account.role == 'operator' %}selected{% endif %}>Operator</option><option value="viewer" {% if account.role == 'viewer' %}selected{% endif %}>Viewer</option></select>
-            <button>Save</button>
-          </form>
-        </td>
-        <td>
-          <form method="post" action="/users/{{ account.id }}/password" class="inline-form compact">
-            <input name="password" type="password" minlength="10" placeholder="new password" required>
-            <button>Reset</button>
-          </form>
-        </td>
-        <td class="actions">
-          <form method="post" action="/users/{{ account.id }}/toggle"><button>{{ 'Disable' if account.is_active else 'Enable' }}</button></form>
-          <form method="post" action="/users/{{ account.id }}/delete"><button class="danger">Delete</button></form>
-        </td>
-      </tr>
-      {% else %}<tr><td colspan="6">No users found. That would be ominous.</td></tr>{% endfor %}
-    </tbody>
-  </table>
+    <tbody>{% for account in users %}<tr><td><strong>{{ account.username }}</strong><br><small>Local AtlasVM account</small></td><td><span class="pill {{ account.role }}">{{ account.role }}</span></td><td><span class="pill {{ 'success' if account.is_active else 'failed' }}">{{ 'active' if account.is_active else 'disabled' }}</span></td><td><form method="post" action="/users/{{ account.id }}/role" class="inline-form compact"><select name="role"><option value="admin" {% if account.role == 'admin' %}selected{% endif %}>Admin</option><option value="operator" {% if account.role == 'operator' %}selected{% endif %}>Operator</option><option value="viewer" {% if account.role == 'viewer' %}selected{% endif %}>Viewer</option></select><button class="btn btn-sm btn-primary" type="submit">Save</button></form></td><td><form method="post" action="/users/{{ account.id }}/password" class="inline-form compact"><input name="password" type="password" minlength="10" placeholder="new password" required><button class="btn btn-sm btn-secondary" type="submit">Reset</button></form></td><td class="actions"><form method="post" action="/users/{{ account.id }}/toggle"><button class="btn btn-sm btn-secondary" type="submit">{{ 'Disable' if account.is_active else 'Enable' }}</button></form><form method="post" action="/users/{{ account.id }}/delete" onsubmit="return confirm('Delete user {{ account.username }}?');"><button class="btn btn-sm btn-danger danger" type="submit">Delete</button></form></td></tr>{% else %}<tr><td class="empty-cell" colspan="6">No users found.</td></tr>{% endfor %}</tbody>
+  </table></div>
 </section>
 {% endblock %}

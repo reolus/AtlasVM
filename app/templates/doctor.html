@@ -1,10 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <h2>AtlasVM Doctor</h2>
-  <p>Configuration sanity checks, because apparently software needs a wellness visit.</p>
-  <table><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead><tbody>
-    {% for check in checks %}<tr><td>{{ check.name }}</td><td><span class="pill {{ 'success' if check.ok else 'failed' }}">{{ check.status }}</span></td><td><code>{{ check.detail }}</code></td></tr>{% endfor %}
-  </tbody></table>
+<section class="atlas-hero admin-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-stethoscope"></i> Administration</div>
+    <h2>AtlasVM Doctor</h2>
+    <p class="muted mb-0">Configuration sanity checks and service health diagnostics.</p>
+  </div>
+  <div class="hero-actions"><a class="btn btn-outline-light" href="/admin"><i class="fa-solid fa-arrow-left"></i>Admin</a></div>
+</section>
+
+<section class="atlas-stat-grid admin-kpi-grid">
+  {% set ok_count = checks|selectattr('ok')|list|length %}
+  {% set fail_count = checks|length - ok_count %}
+  <div class="atlas-stat-card"><span class="atlas-stat-icon info"><i class="fa-solid fa-list-check"></i></span><div><span>Total Checks</span><strong>{{ checks|length }}</strong><small>doctor items</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon success"><i class="fa-solid fa-circle-check"></i></span><div><span>Passing</span><strong>{{ ok_count }}</strong><small>healthy</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon warn"><i class="fa-solid fa-triangle-exclamation"></i></span><div><span>Attention</span><strong>{{ fail_count }}</strong><small>review needed</small></div></div>
+</section>
+
+<section class="panel atlas-panel">
+  <div class="section-title"><h2><i class="fa-solid fa-clipboard-check"></i>Diagnostic Results</h2></div>
+  <div class="atlas-table-wrap"><table class="atlas-data-table admin-table doctor-table">
+    <thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead>
+    <tbody>{% for check in checks %}<tr><td><strong>{{ check.name }}</strong></td><td><span class="pill {{ 'success' if check.ok else 'failed' }}">{{ check.status }}</span></td><td><code>{{ check.detail }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="3">No doctor checks returned.</td></tr>{% endfor %}</tbody>
+  </table></div>
 </section>
 {% endblock %}

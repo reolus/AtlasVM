@@ -1,49 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <div class="section-title"><h2>Tasks</h2><span class="pill">Background Queue</span></div>
-  {% if message %}<div class="notice success">{{ message }}</div>{% endif %}
-  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
-  <p class="muted">Phase 5 moves heavy work into background tasks so the browser can stop being held hostage by backups, clones, and restores.</p>
-  <div class="table-scroll">
-    <table class="data-table tasks-table">
-      <thead>
-        <tr>
-          <th>Started</th>
-          <th>Finished</th>
-          <th>Actor</th>
-          <th>Action</th>
-          <th>Target</th>
-          <th>Status</th>
-          <th>Message</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for task in tasks %}
-        <tr>
-          <td class="timestamp-cell">{{ task.created_at }}</td>
-          <td class="timestamp-cell">{{ task.finished_at }}</td>
-          <td>{{ task.actor }}</td>
-          <td><code>{{ task.action }}</code></td>
-          <td>{{ task.target }}</td>
-          <td><span class="pill {{ task.status }}">{{ task.status }}</span></td>
-          <td class="message-cell"><pre class="task-message">{{ task.message }}</pre></td>
-          <td class="action-cell">
-            {% if task.status == 'running' %}
-            <form method="post" action="/tasks/{{ task.id }}/kill" onsubmit="return confirm('Mark this task as failed? This clears a hung AtlasVM task record but does not kill an OS process.');">
-              <button type="submit" class="danger">Kill</button>
-            </form>
-            {% else %}
-            <span class="muted">-</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="8" class="empty-cell">No tasks yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<section class="atlas-hero admin-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-list-check"></i> Administration</div>
+    <h2>Tasks</h2>
+    <p class="muted mb-0">Background queue visibility for backups, clones, restores, ZFS exports, and other long-running operations.</p>
   </div>
+  <div class="hero-actions"><a class="btn btn-outline-light" href="/admin"><i class="fa-solid fa-arrow-left"></i>Admin</a></div>
+</section>
+{% if message %}<div class="alert success"><i class="fa-solid fa-circle-check"></i> {{ message }}</div>{% endif %}
+{% if error %}<div class="alert danger"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+
+<section class="atlas-stat-grid admin-kpi-grid">
+  <div class="atlas-stat-card"><span class="atlas-stat-icon info"><i class="fa-solid fa-list"></i></span><div><span>Total Shown</span><strong>{{ tasks|length }}</strong><small>latest tasks</small></div></div>
+</section>
+
+<section class="panel atlas-panel">
+  <div class="section-title"><h2><i class="fa-solid fa-bars-progress"></i>Background Queue</h2><span class="pill">Latest 250</span></div>
+  <div class="atlas-table-wrap"><table class="atlas-data-table admin-table tasks-table">
+    <thead><tr><th>Started</th><th>Finished</th><th>Actor</th><th>Action</th><th>Target</th><th>Status</th><th>Message</th><th>Actions</th></tr></thead>
+    <tbody>{% for task in tasks %}<tr>
+      <td class="timestamp-cell">{{ task.created_at }}</td><td class="timestamp-cell">{{ task.finished_at }}</td><td>{{ task.actor }}</td><td><code>{{ task.action }}</code></td><td>{{ task.target }}</td><td><span class="pill {{ task.status }}">{{ task.status }}</span></td><td class="message-cell"><pre class="task-message">{{ task.message }}</pre></td>
+      <td class="action-cell">{% if task.status == 'running' %}<form method="post" action="/tasks/{{ task.id }}/kill" onsubmit="return confirm('Mark this task as failed? This clears a hung AtlasVM task record but does not kill an OS process.');"><button type="submit" class="btn btn-sm btn-danger danger"><i class="fa-solid fa-skull-crossbones"></i>Kill</button></form>{% else %}<span class="muted">-</span>{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="8" class="empty-cell">No tasks yet.</td></tr>{% endfor %}</tbody>
+  </table></div>
 </section>
 {% endblock %}

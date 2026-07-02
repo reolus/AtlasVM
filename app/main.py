@@ -1577,17 +1577,17 @@ def vm_disk_remove(
 @app.get('/events', response_class=HTMLResponse)
 def events_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(250).all()
-    return templates.TemplateResponse('events.html', {'request': request, 'app_name': settings.app_name, 'events': events,
-            'user': user,
-        })
+    context = _view_context(request, user)
+    context.update({'events': events})
+    return templates.TemplateResponse('events.html', context)
 
 
 @app.get('/tasks', response_class=HTMLResponse)
 def tasks_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(250).all()
-    return templates.TemplateResponse('tasks.html', {'request': request, 'app_name': settings.app_name, 'tasks': tasks,
-            'user': user,
-        })
+    context = _view_context(request, user)
+    context.update({'tasks': tasks})
+    return templates.TemplateResponse('tasks.html', context)
 
 
 @app.get('/backups', response_class=HTMLResponse)
@@ -1774,9 +1774,9 @@ def backups_prune(vm_name: str = Form(''), keep_last: int | None = Form(None), t
 @app.get('/doctor', response_class=HTMLResponse)
 def doctor_page(request: Request, user: str = Depends(require_user)):
     checks = run_doctor()
-    return templates.TemplateResponse('doctor.html', {'request': request, 'app_name': settings.app_name, 'checks': checks,
-            'user': user,
-        })
+    context = _view_context(request, user)
+    context.update({'checks': checks})
+    return templates.TemplateResponse('doctor.html', context)
 
 
 
@@ -2024,17 +2024,13 @@ def audit_page(
     except Exception as exc:
         error = str(exc)
 
-    return templates.TemplateResponse(
-        'audit.html',
-        {
-            'request': request,
-            'app_name': settings.app_name,
-            'events': events,
-            'user': user,
-            'error': error,
-            'message': request.query_params.get('message'),
-        },
-    )
+    context = _view_context(request, user)
+    context.update({
+        'events': events,
+        'error': error,
+        'message': request.query_params.get('message'),
+    })
+    return templates.TemplateResponse('audit.html', context)
 
 @app.get('/vms/{name}/delete-confirm')
 def vm_delete_confirm(

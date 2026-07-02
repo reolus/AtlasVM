@@ -1,29 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <div class="section-title"><h2>Platform Settings</h2><span class="pill">Editable</span></div>
-  <p>Editable values are written to <code>.env</code>. Restart AtlasVM after saving, because live config reloads are where good intentions go to molt.</p>
-  {% if restart_required %}<div class="notice success">Restart required for all changed settings to apply.</div>{% endif %}
-</section>
-<section class="grid two">
+<section class="atlas-hero admin-page-hero">
   <div>
-    <h2>Editable Settings</h2>
-    <form method="post" action="/settings">
+    <div class="atlas-kicker"><i class="fa-solid fa-gear"></i> Administration</div>
+    <h2>Platform Settings</h2>
+    <p class="muted mb-0">Editable values are written to <code>.env</code>. Restart AtlasVM after saving for all changes to apply.</p>
+  </div>
+  <div class="hero-actions"><a class="btn btn-outline-light" href="/admin"><i class="fa-solid fa-arrow-left"></i>Admin</a></div>
+</section>
+{% if message %}<div class="alert success"><i class="fa-solid fa-circle-check"></i> {{ message }}</div>{% endif %}
+{% if error %}<div class="alert danger"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+{% if restart_required %}<div class="alert warning"><i class="fa-solid fa-rotate"></i> Restart required for all changed settings to apply.</div>{% endif %}
+<section class="grid two admin-management-grid">
+  <div class="panel atlas-panel admin-form-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-sliders"></i>Editable Settings</h2></div>
+    <form class="stacked-form" method="post" action="/settings">
       {% for key, value in settings_items %}
-        {% if key == 'backup_require_shutdown' %}
-          <label>{{ key }}
-            <select name="{{ key }}"><option value="true" {% if value in ['true','True',True] %}selected{% endif %}>true</option><option value="false" {% if value in ['false','False',False] %}selected{% endif %}>false</option></select>
-          </label>
-        {% else %}
-          <label>{{ key }} <input name="{{ key }}" value="{{ value }}" required></label>
-        {% endif %}
+        {% if key == 'backup_require_shutdown' %}<label>{{ key }}<select name="{{ key }}"><option value="true" {% if value in ['true','True',True] %}selected{% endif %}>true</option><option value="false" {% if value in ['false','False',False] %}selected{% endif %}>false</option></select></label>{% else %}<label>{{ key }} <input name="{{ key }}" value="{{ value }}" required></label>{% endif %}
       {% endfor %}
-      <button>Save Settings</button>
+      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i>Save Settings</button>
     </form>
   </div>
-  <div>
-    <h2>Read-only Settings</h2>
-    <table><tbody>{% for key, value in readonly_items %}<tr><th>{{ key }}</th><td><code>{{ value }}</code></td></tr>{% endfor %}</tbody></table>
+  <div class="panel atlas-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-lock"></i>Read-only Settings</h2></div>
+    <div class="atlas-table-wrap"><table class="atlas-data-table admin-compact-table"><tbody>{% for key, value in readonly_items %}<tr><th>{{ key }}</th><td><code>{{ value }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="2">No read-only settings returned.</td></tr>{% endfor %}</tbody></table></div>
   </div>
 </section>
 {% endblock %}

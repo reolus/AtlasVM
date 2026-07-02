@@ -1,9 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <h2>Audit Events</h2>
-  <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Message</th></tr></thead><tbody>
-    {% for event in events %}<tr><td>{{ event.created_at }}</td><td>{{ event.actor }}</td><td>{{ event.action }}</td><td>{{ event.target }}</td><td>{{ event.message }}</td></tr>{% endfor %}
-  </tbody></table>
+<section class="atlas-hero admin-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-file-shield"></i> Administration</div>
+    <h2>Audit Events</h2>
+    <p class="muted mb-0">Raw event log entries captured by AtlasVM.</p>
+  </div>
+  <div class="hero-actions"><a class="btn btn-outline-light" href="/admin"><i class="fa-solid fa-arrow-left"></i>Admin</a></div>
+</section>
+<section class="panel atlas-panel">
+  <div class="section-title"><h2><i class="fa-solid fa-timeline"></i>Events</h2><span class="pill">{{ events|length }} entries</span></div>
+  <div class="atlas-table-wrap"><table class="atlas-data-table admin-table audit-table">
+    <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Message</th></tr></thead>
+    <tbody>{% for event in events %}<tr><td class="timestamp-cell">{{ event.created_at }}</td><td>{{ event.actor }}</td><td><code>{{ event.action }}</code></td><td>{{ event.target }}</td><td class="message-cell">{{ event.message }}</td></tr>{% else %}<tr><td class="empty-cell" colspan="5">No events found.</td></tr>{% endfor %}</tbody>
+  </table></div>
 </section>
 {% endblock %}
