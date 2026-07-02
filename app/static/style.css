@@ -78,6 +78,27 @@ button.danger, .button.danger, .danger button { border-color: rgba(255,107,107,.
 button.secondary, .button.secondary, .muted.button { background: rgba(255,255,255,.06); border-color: var(--border); color: var(--text); }
 form { margin: 0; }
 .stacked-form { display: grid; gap: .75rem; }
+.form-check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  margin: 0.35rem 0 0.75rem;
+  color: var(--avm-text, #e8eefc);
+  font-weight: 500;
+}
+.form-check-row input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--avm-accent, #ffd43b);
+}
+.stacked-form .form-check-row {
+  justify-content: flex-start;
+}
+.stacked-form .btn.w-100 {
+  width: 100%;
+}
 label { display: grid; gap: .35rem; color: var(--muted); font-size: .92rem; }
 label.check { display: flex; align-items: center; gap: .45rem; }
 input, select, textarea { width: 100%; background: rgba(5,11,20,.8); color: var(--text); border: 1px solid var(--border); border-radius: .7rem; padding: .55rem .65rem; }
