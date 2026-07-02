@@ -58,9 +58,16 @@
     </div>
 
     <div class="vm-option-row">
-      <label class="check"><input class="form-check-input" name="start_after_create" type="checkbox" value="true"> Start VM after creation</label>
-      <label class="check"><input class="form-check-input" name="autostart" type="checkbox" value="true"> Start VM automatically with host</label>
-    </div>
+  <label class="form-check atlas-check">
+    <input class="form-check-input" name="start_after_create" type="checkbox" value="true">
+    <span class="form-check-label">Start VM after creation</span>
+  </label>
+
+  <label class="form-check atlas-check">
+    <input class="form-check-input" name="autostart" type="checkbox" value="true">
+    <span class="form-check-label">Start VM automatically with host</span>
+  </label>
+</div>
 
     <div class="action-row">
       <button class="btn btn-primary" type="submit"><i class="fa-solid fa-play"></i>Create VM</button>
