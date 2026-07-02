@@ -21,7 +21,13 @@
   <div class="section-title"><h2><i class="fa-solid fa-clipboard-check"></i>Diagnostic Results</h2></div>
   <div class="atlas-table-wrap"><table class="atlas-data-table admin-table doctor-table">
     <thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead>
-    <tbody>{% for check in checks %}<tr><td><strong>{{ check.name }}</strong></td><td><span class="pill {{ 'success' if check.ok else 'failed' }}">{{ check.status }}</span></td><td><code>{{ check.detail }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="3">No doctor checks returned.</td></tr>{% endfor %}</tbody>
+    <tbody>{% for check in checks %}
+	  <tr>
+	    <td width="20%"><strong>{{ check.name }}</strong></td>
+		<td width="10%"><span class="pill {{ 'success' if check.ok else 'failed' }}">{{ check.status }}</span></td>
+		<td><code>{{ check.detail }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="3">No doctor checks returned.</td>
+      </tr>{% endfor %}
+	</tbody>
   </table></div>
 </section>
 {% endblock %}
