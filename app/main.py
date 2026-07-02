@@ -1525,7 +1525,7 @@ def iscsi_lvm_thin_apply(
 @app.get('/vms', response_class=HTMLResponse)
 def vms_page(
     request: Request,
-    user: str = Depends(require_admin),
+    user: str = Depends(require_operator),
 ):
     return templates.TemplateResponse(
         'vms.html',
