@@ -32,7 +32,7 @@
     <div class="table-responsive">
 	  <table class="table table-hover atlas-dashboard-audit-table">
 	    <thead>
-		  <tr><th>Action</th><th>Target</th><th>Time</th></tr>
+		  <tr><th width="20%">Target</th><th width="*">Action</th><th width="25%">Time</th></tr>
 		</thead>
 		<tbody>{% for event in events %}
 		  <tr>
@@ -41,10 +41,11 @@
 			<td>{{ event.created_at }}</td>
 		  </tr>
 		  <tr>
-			<td col="3">{{ event.message }}</td>
+		    <td>MESSAGE</td>
+			<td colspan="2">{{ event.message }}</td>
 		  </tr>
 		  {% else %}
-		  <tr><td colspan="4">No audit events yet.</td>
+		  <tr><td colspan="3">No audit events yet.</td>
 		  </tr>{% endfor %}
 		</tbody>
 	  </table>
