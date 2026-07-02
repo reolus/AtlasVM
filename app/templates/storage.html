@@ -1,607 +1,100 @@
 {% extends "base.html" %}
 {% block content %}
-
-<style>
-.storage-chart-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
-.storage-chart-card {
-  border: 1px solid var(--border, #333);
-  border-radius: 12px;
-  padding: 1rem;
-  background: var(--panel, rgba(255,255,255,0.03));
-  --donut-hole-bg: var(--panel, rgba(255,255,255,0.03));
-}
-.storage-donut {
-  width: 132px;
-  height: 132px;
-  border-radius: 50%;
-  margin: 0.5rem auto 0.75rem auto;
-  display: grid;
-  place-items: center;
-  position: relative;
-}
-.storage-donut::after {
-  content: "";
-  width: 78px;
-  height: 78px;
-  border-radius: 50%;
-  background: var(--donut-hole-bg, rgba(255,255,255,0.03));
-  position: absolute;
-}
-.storage-donut-label {
-  position: relative;
-  z-index: 1;
-  font-weight: 700;
-}
-.storage-chart-meta {
-  display: grid;
-  gap: 0.25rem;
-  font-size: 0.95rem;
-}
-.storage-pill-row {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-top: 0.5rem;
-}
-.storage-pill {
-  border: 1px solid var(--border, #444);
-  border-radius: 999px;
-  padding: 0.15rem 0.55rem;
-  font-size: 0.85rem;
-}
-</style>
-
-
-<section>
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem;">
-    <div>
-      <h2>Storage</h2>
-      <p>Local storage, ZFS, libvirt pools, filesystems, VM disks, and storage network profiles.</p>
-    </div>
-    <div style="display:flex; gap:0.5rem;">
-      <form method="get" action="/storage/iscsi/new">
-        <button type="submit">New iSCSI Target</button>
-      </form>
-      <form method="get" action="/storage/smb/new">
-        <button type="submit">New SMB/CIFS Target</button>
-      </form>
-      <form method="get" action="/storage/nfs/new">
-        <button type="submit">New NFS Target</button>
-      </form>
-      <form method="get" action="/storage/networks/new">
-        <button type="submit">New Storage Network</button>
-      </form>
-      <form method="post" action="/storage/networks/reconcile">
-        <button type="submit">Reconcile Storage Networks</button>
-      </form>
-    </div>
+<section class="atlas-hero storage-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-database"></i> Storage</div>
+    <h2>Storage Overview</h2>
+    <p class="muted mb-0">Local/libvirt pools, ZFS, NFS, SMB/CIFS, iSCSI, LVM, host filesystems, and storage network profiles.</p>
   </div>
-
-  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
-  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="/storage/iscsi/new"><i class="fa-solid fa-plus"></i>iSCSI</a>
+    <a class="btn btn-outline-light" href="/storage/smb/new">SMB</a>
+    <a class="btn btn-outline-light" href="/storage/nfs/new">NFS</a>
+    <a class="btn btn-outline-info" href="/storage/networks/new">Storage Network</a>
+    <form method="post" action="/storage/networks/reconcile"><button class="btn btn-outline-warning" type="submit"><i class="fa-solid fa-arrows-rotate"></i>Reconcile</button></form>
+  </div>
 </section>
 
+{% if error %}<div class="alert danger"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+{% if message %}<div class="alert success"><i class="fa-solid fa-circle-check"></i> {{ message }}</div>{% endif %}
 
-<section>
-  <h3>Storage Usage Overview</h3>
-  <p>Quick used/free view per pool. Red is used, green is available, because apparently even storage needs traffic lights.</p>
+<section class="atlas-stat-grid storage-kpi-grid">
+  <div class="atlas-stat-card"><span class="atlas-stat-icon info"><i class="fa-solid fa-layer-group"></i></span><div><span>Libvirt Pools</span><strong>{{ overview.libvirt_pools|length }}</strong><small>defined pools</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon success"><i class="fa-solid fa-hard-drive"></i></span><div><span>ZFS Pools</span><strong>{{ overview.zfs_pools|length }}</strong><small>visible pools</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon warn"><i class="fa-solid fa-network-wired"></i></span><div><span>Storage Networks</span><strong>{{ overview.storage_networks|length }}</strong><small>profiles</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon purple"><i class="fa-solid fa-circle-nodes"></i></span><div><span>iSCSI Targets</span><strong>{{ overview.iscsi_targets|length }}</strong><small>{{ overview.iscsi_sessions|length }} sessions</small></div></div>
+</section>
 
-  <h4>ZFS Pools</h4>
+<section class="panel atlas-panel">
+  <div class="section-title"><div><h2><i class="fa-solid fa-chart-pie"></i> Storage Usage</h2><p class="muted">Quick used/free view per pool. Storage loves being complicated, so this page also calls out block and LVM-thin cases.</p></div></div>
+  <h3>ZFS Pools</h3>
   <div class="storage-chart-grid">
     {% for p in overview.zfs_pools %}
-    <div class="storage-chart-card">
+    <div class="storage-chart-card atlas-storage-card">
       <h4><code>{{ p.name }}</code></h4>
-      <div class="storage-donut" style="background: {{ p.chart_gradient }};">
-        <div class="storage-donut-label">
-          {% if p.usage_mode == 'lvm-thin' %}
-            {{ p.used_percent if p.used_percent is not none else 0 }}%
-          {% elif p.used_percent is none %}
-            Block
-          {% else %}
-            {{ p.used_percent }}%
-          {% endif %}
-        </div>
-      </div>
-      <div class="storage-chart-meta">
-        <div><strong>Used:</strong> {{ p.alloc }}</div>
-        <div><strong>Available:</strong> {{ p.free }}</div>
-        <div><strong>Total:</strong> {{ p.size }}</div>
-        <div><strong>Health:</strong> {{ p.health }}</div>
-      </div>
-      <div class="storage-pill-row">
-        <span class="storage-pill">Used {{ p.used_percent }}%</span>
-        <span class="storage-pill">Free {{ p.free_percent }}%</span>
-      </div>
+      <div class="storage-donut" style="background: {{ p.chart_gradient }};"><div class="storage-donut-label">{{ p.used_percent if p.used_percent is not none else 0 }}%</div></div>
+      <div class="storage-chart-meta"><div><strong>Used:</strong> {{ p.alloc }}</div><div><strong>Available:</strong> {{ p.free }}</div><div><strong>Total:</strong> {{ p.size }}</div><div><strong>Health:</strong> {{ p.health }}</div></div>
+      <div class="storage-pill-row"><span class="storage-pill">Used {{ p.used_percent }}%</span><span class="storage-pill">Free {{ p.free_percent }}%</span></div>
     </div>
-    {% else %}
-    <p>No ZFS pools found.</p>
-    {% endfor %}
+    {% else %}<div class="empty-cell">No ZFS pools found.</div>{% endfor %}
   </div>
-
-  <h4>Libvirt Storage Pools</h4>
+  <h3 class="mt-3">Libvirt Storage Pools</h3>
   <div class="storage-chart-grid">
-    {% for p in overview.libvirt_pools %}
-    {% if p.name and p.name != 'Name' %}
-    <div class="storage-chart-card">
+    {% for p in overview.libvirt_pools %}{% if p.name and p.name != 'Name' %}
+    <div class="storage-chart-card atlas-storage-card">
       <h4><code>{{ p.name }}</code></h4>
-      <div class="storage-donut" style="background: {{ p.chart_gradient }};">
-        <div class="storage-donut-label">
-          {% if p.usage_mode == 'lvm-thin' %}
-            {{ p.used_percent if p.used_percent is not none else 0 }}%
-          {% elif p.used_percent is none %}
-            Block
-          {% else %}
-            {{ p.used_percent }}%
-          {% endif %}
-        </div>
-      </div>
+      <div class="storage-donut" style="background: {{ p.chart_gradient }};"><div class="storage-donut-label">{% if p.usage_mode == 'lvm-thin' %}{{ p.used_percent if p.used_percent is not none else 0 }}%{% elif p.used_percent is none %}Block{% else %}{{ p.used_percent }}%{% endif %}</div></div>
       <div class="storage-chart-meta">
-        {% if p.usage_mode == 'lvm-thin' and p.lvm_thin %}
-        <div><strong>Data Used:</strong> {{ p.lvm_thin.data_percent or 0 }}%</div>
-        <div><strong>Data Free:</strong> {{ p.lvm_thin.free_percent if p.lvm_thin.free_percent is not none else 100 }}%</div>
-        <div><strong>Thin Pool:</strong> {{ p.lvm_thin.thinpool_size or p.capacity }}</div>
-        <div><strong>Metadata Used:</strong> {{ p.lvm_thin.metadata_percent or 0 }}%</div>
-        <div><strong>VG Path:</strong> <code>{{ p.path }}</code></div>
-        {% elif p.usage_mode == 'block-presented' %}
-        <div><strong>Presented:</strong> {{ p.capacity }}</div>
-        <div><strong>Allocation:</strong> Not filesystem-aware</div>
-        <div><strong>Available:</strong> Not reported by block LUN</div>
-        <div><strong>Path:</strong> <code>{{ p.path }}</code></div>
-        {% else %}
-        <div><strong>Used:</strong> {{ p.allocation }}</div>
-        <div><strong>Available:</strong> {{ p.available }}</div>
-        <div><strong>Total:</strong> {{ p.capacity }}</div>
-        <div><strong>Path:</strong> <code>{{ p.path }}</code></div>
-        {% endif %}
+        {% if p.usage_mode == 'lvm-thin' and p.lvm_thin %}<div><strong>Data Used:</strong> {{ p.lvm_thin.data_percent or 0 }}%</div><div><strong>Thin Pool:</strong> {{ p.lvm_thin.thinpool_size or p.capacity }}</div><div><strong>Metadata:</strong> {{ p.lvm_thin.metadata_percent or 0 }}%</div>
+        {% elif p.usage_mode == 'block-presented' %}<div><strong>Presented:</strong> {{ p.capacity }}</div><div><strong>Allocation:</strong> Not filesystem-aware</div><div><strong>Path:</strong> <code>{{ p.path }}</code></div>
+        {% else %}<div><strong>Used:</strong> {{ p.allocation }}</div><div><strong>Available:</strong> {{ p.available }}</div><div><strong>Total:</strong> {{ p.capacity }}</div><div><strong>Path:</strong> <code>{{ p.path }}</code></div>{% endif %}
       </div>
-      <div class="storage-pill-row">
-        <span class="storage-pill">{{ p.state }}</span>
-        <span class="storage-pill">Autostart {{ p.autostart }}</span>
-        {% if p.usage_mode == 'block-presented' %}
-        <span class="storage-pill">Block-backed</span>
-        {% endif %}
-        {% if p.usage_mode == 'lvm-thin' %}
-        <span class="storage-pill">LVM-thin</span>
-        {% if p.lvm_thin and p.lvm_thin.metadata_percent is not none %}
-        <span class="storage-pill">Metadata {{ p.lvm_thin.metadata_percent }}%</span>
-        {% endif %}
-        {% endif %}
-      </div>
-      {% if p.chart_note %}
-      <p><small>{{ p.chart_note }}</small></p>
-      {% endif %}
+      <div class="storage-pill-row"><span class="storage-pill">{{ p.type }}</span><span class="storage-pill">{{ p.state }}</span><span class="storage-pill">Autostart {{ p.autostart }}</span>{% if p.usage_mode %}<span class="storage-pill">{{ p.usage_mode }}</span>{% endif %}</div>
+      {% if p.chart_note %}<p><small>{{ p.chart_note }}</small></p>{% endif %}
     </div>
-    {% endif %}
-    {% else %}
-    <p>No libvirt storage pools found.</p>
-    {% endfor %}
+    {% endif %}{% else %}<div class="empty-cell">No libvirt storage pools found.</div>{% endfor %}
   </div>
 </section>
 
-<section>
-  <h3>ZFS Pools</h3>
-  <table>
-    <thead>
-      <tr><th>Name</th><th>Size</th><th>Allocated</th><th>Free</th><th>Cap</th><th>Health</th></tr>
-    </thead>
-    <tbody>
-      {% for p in overview.zfs_pools %}
-      <tr>
-        <td><code>{{ p.name }}</code></td>
-        <td>{{ p.size }}</td>
-        <td>{{ p.alloc }}</td>
-        <td>{{ p.free }}</td>
-        <td>{{ p.cap }}</td>
-        <td>{{ p.health }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6">No ZFS pools found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<section class="panel atlas-panel">
+  <div class="section-title"><h2><i class="fa-solid fa-layer-group"></i> Libvirt Storage Pools</h2></div>
+  <div class="atlas-table-wrap"><table class="atlas-data-table storage-table"><thead><tr><th>Name</th><th>Type</th><th>State</th><th>Autostart</th><th>Capacity</th><th>Allocated</th><th>Available</th><th>Path</th><th>Actions</th></tr></thead><tbody>
+  {% for p in overview.libvirt_pools %}{% if p.name and p.name != 'Name' %}<tr><td><code>{{ p.name }}</code></td><td>{{ p.type }}</td><td><span class="state-pill {{ 'running' if p.state == 'active' else 'shutoff' }}">{{ p.state }}</span></td><td>{{ p.autostart }}</td><td>{{ p.capacity }}</td><td>{{ p.allocation }}</td><td>{{ p.available }}</td><td><code>{{ p.path }}</code></td><td><form method="post" action="/storage/{{ p.name }}/refresh"><button class="btn btn-sm btn-outline-info" type="submit">Refresh</button></form></td></tr>{% endif %}{% else %}<tr><td class="empty-cell" colspan="9">No libvirt storage pools found.</td></tr>{% endfor %}
+  </tbody></table></div>
 </section>
 
-<section>
-  <h3>ZFS Datasets</h3>
-  <table>
-    <thead>
-      <tr><th>Name</th><th>Type</th><th>Used</th><th>Available</th><th>Referenced</th><th>Mountpoint</th></tr>
-    </thead>
-    <tbody>
-      {% for d in overview.zfs_datasets %}
-      <tr>
-        <td><code>{{ d.name }}</code></td>
-        <td>{{ d.type }}</td>
-        <td>{{ d.used }}</td>
-        <td>{{ d.avail }}</td>
-        <td>{{ d.refer }}</td>
-        <td><code>{{ d.mountpoint }}</code></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6">No ZFS datasets found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<section class="grid two storage-management-grid">
+  <div class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-hard-drive"></i> ZFS Pools</h2><a class="btn btn-outline-light" href="/zfs">ZFS Console</a></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-compact-table"><thead><tr><th>Name</th><th>Size</th><th>Allocated</th><th>Free</th><th>Cap</th><th>Health</th></tr></thead><tbody>{% for p in overview.zfs_pools %}<tr><td><code>{{ p.name }}</code></td><td>{{ p.size }}</td><td>{{ p.alloc }}</td><td>{{ p.free }}</td><td>{{ p.cap }}</td><td>{{ p.health }}</td></tr>{% else %}<tr><td class="empty-cell" colspan="6">No ZFS pools found.</td></tr>{% endfor %}</tbody></table></div></div>
+  <div class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-folder-tree"></i> ZFS Datasets</h2></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-compact-table"><thead><tr><th>Name</th><th>Type</th><th>Used</th><th>Available</th><th>Referenced</th><th>Mountpoint</th></tr></thead><tbody>{% for d in overview.zfs_datasets %}<tr><td><code>{{ d.name }}</code></td><td>{{ d.type }}</td><td>{{ d.used }}</td><td>{{ d.avail }}</td><td>{{ d.refer }}</td><td><code>{{ d.mountpoint }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="6">No ZFS datasets found.</td></tr>{% endfor %}</tbody></table></div></div>
 </section>
 
-<section>
-  <h3>Libvirt Storage Pools</h3>
-  <table>
-    <thead>
-      <tr><th>Name</th><th>Type</th><th>State</th><th>Autostart</th><th>Capacity</th><th>Allocated</th><th>Available</th><th>Path</th></tr>
-    </thead>
-    <tbody>
-      {% for p in overview.libvirt_pools %}
-      {% if p.name and p.name != 'Name' %}
-      <tr>
-        <td><code>{{ p.name }}</code></td>
-        <td>{{ p.type }}</td>
-        <td>{{ p.state }}</td>
-        <td>{{ p.autostart }}</td>
-        <td>{{ p.capacity }}</td>
-        <td>{{ p.allocation }}</td>
-        <td>{{ p.available }}</td>
-        <td><code>{{ p.path }}</code></td>
-      </tr>
-      {% endif %}
-      {% else %}
-      <tr><td colspan="8">No libvirt storage pools found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<section class="panel atlas-panel">
+  <div class="section-title"><h2><i class="fa-solid fa-circle-nodes"></i> iSCSI Storage</h2><a class="btn btn-primary" href="/storage/iscsi/new">New iSCSI Target</a></div>
+  <div class="atlas-table-wrap"><table class="atlas-data-table storage-table"><thead><tr><th>Name</th><th>Portal</th><th>Target IQN</th><th>Roles</th><th>Logged In</th><th>Libvirt Pool</th><th>Actions</th></tr></thead><tbody>{% if overview.iscsi_targets %}{% for name in overview.iscsi_targets %}{% set n = overview.iscsi_targets[name] %}<tr><td><code>{{ name }}</code></td><td><code>{{ n.get('portal', '-') }}</code></td><td><code>{{ n.get('target_iqn', '-') }}</code></td><td>{{ n.get('roles', []) | join(', ') }}</td><td><span class="state-pill {{ 'running' if n.get('logged_in', false) else 'shutoff' }}">{{ n.get('logged_in', false) }}</span></td><td>{{ n.get('libvirt_pool_name') or '-' }}</td><td><div class="action-cluster"><form method="post" action="/storage/iscsi/{{ name }}/test"><button class="btn btn-sm btn-outline-info" type="submit">Test</button></form><form method="post" action="/storage/iscsi/{{ name }}/login"><button class="btn btn-sm btn-primary" type="submit">Login</button></form><a class="btn btn-sm btn-outline-light" href="/storage/iscsi/{{ name }}/lvm-thin">LVM-thin</a><form method="post" action="/storage/iscsi/{{ name }}/logout"><button class="btn btn-sm btn-outline-warning" type="submit">Logout</button></form><form method="post" action="/storage/iscsi/{{ name }}/delete" onsubmit="return confirm('Delete this iSCSI target? This also removes stored CHAP secrets.');"><button class="btn btn-sm btn-danger danger" type="submit">Delete</button></form></div></td></tr>{% endfor %}{% else %}<tr><td class="empty-cell" colspan="7">No iSCSI targets defined.</td></tr>{% endif %}</tbody></table></div>
 </section>
 
-
-
-
-<section>
-  <h3>iSCSI Storage Targets</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th><th>Portal</th><th>Target IQN</th><th>Roles</th><th>Logged In</th><th>Libvirt Pool</th><th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if overview.iscsi_targets %}
-      {% for name in overview.iscsi_targets %}
-      {% set n = overview.iscsi_targets[name] %}
-      <tr>
-        <td><code>{{ name }}</code></td>
-        <td><code>{{ n.get('portal', '-') }}</code></td>
-        <td><code>{{ n.get('target_iqn', '-') }}</code></td>
-        <td>{{ n.get('roles', []) | join(', ') }}</td>
-        <td>{{ n.get('logged_in', false) }}</td>
-        <td>{{ n.get('libvirt_pool_name') or '-' }}</td>
-        <td>
-          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-            <form method="post" action="/storage/iscsi/{{ name }}/test"><button type="submit">Test</button></form>
-            <form method="post" action="/storage/iscsi/{{ name }}/login"><button type="submit">Login</button></form>
-            <form method="get" action="/storage/iscsi/{{ name }}/lvm-thin"><button type="submit">LVM-thin</button></form>
-            <form method="post" action="/storage/iscsi/{{ name }}/logout"><button type="submit">Logout</button></form>
-            <form method="post" action="/storage/iscsi/{{ name }}/delete" onsubmit="return confirm('Delete this iSCSI target? This also removes stored CHAP secrets.');">
-              <button type="submit" class="danger">Delete</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% endfor %}
-      {% else %}
-      <tr><td colspan="7">No iSCSI targets defined.</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
+<section class="grid two storage-management-grid">
+  <div class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-plug"></i> Active iSCSI Sessions</h2></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-compact-table"><thead><tr><th>Transport</th><th>SID</th><th>Portal</th><th>Target IQN</th></tr></thead><tbody>{% for s in overview.iscsi_sessions %}<tr><td>{{ s.get('transport', '-') }}</td><td>{{ s.get('sid', '-') }}</td><td><code>{{ s.get('portal', '-') }}</code></td><td><code>{{ s.get('target_iqn', s.get('raw', '-')) }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="4">No active iSCSI sessions.</td></tr>{% endfor %}</tbody></table></div></div>
+  <div class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-hard-drive"></i> iSCSI Block Devices</h2></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-compact-table"><thead><tr><th>Name</th><th>Path</th><th>Size</th><th>Type</th><th>Model</th><th>Serial</th><th>Mountpoints</th></tr></thead><tbody>{% for d in overview.iscsi_block_devices %}<tr><td><code>{{ d.get('name', '-') }}</code></td><td><code>{{ d.get('path', '-') }}</code></td><td>{{ d.get('size', '-') }}</td><td>{{ d.get('type', '-') }}</td><td>{{ d.get('model', '-') }}</td><td>{{ d.get('serial', '-') }}</td><td>{{ d.get('mountpoints', '-') }}</td></tr>{% else %}<tr><td class="empty-cell" colspan="7">No iSCSI block devices detected.</td></tr>{% endfor %}</tbody></table></div></div>
 </section>
 
-<section>
-  <h3>Active iSCSI Sessions</h3>
-  <table>
-    <thead><tr><th>Transport</th><th>SID</th><th>Portal</th><th>Target IQN</th></tr></thead>
-    <tbody>
-      {% for s in overview.iscsi_sessions %}
-      <tr>
-        <td>{{ s.get('transport', '-') }}</td>
-        <td>{{ s.get('sid', '-') }}</td>
-        <td><code>{{ s.get('portal', '-') }}</code></td>
-        <td><code>{{ s.get('target_iqn', s.get('raw', '-')) }}</code></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4">No active iSCSI sessions.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<section class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-magnifying-glass-chart"></i> iSCSI LUN Details</h2></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-table"><thead><tr><th>By-path</th><th>Device</th><th>Size</th><th>Filesystem</th><th>Mount</th><th>LVM</th><th>VM Usage</th></tr></thead><tbody>{% for d in overview.iscsi_device_details %}<tr><td><code>{{ d.by_path_name }}</code></td><td><code>{{ d.resolved_path }}</code></td><td>{{ d.size }}</td><td>{{ d.fstype or '-' }}</td><td>{% if d.mountpoints %}<code>{{ d.mountpoints }}</code>{% if d.filesystem_usage %}<br><small>{{ d.filesystem_usage.used }} used / {{ d.filesystem_usage.avail }} free ({{ d.filesystem_usage.pcent }})</small>{% endif %}{% else %}-{% endif %}</td><td>{% if d.lvm %}VG <code>{{ d.lvm.vg_name }}</code><br><small>{{ d.lvm.pv_free }} free of {{ d.lvm.pv_size }}</small>{% else %}-{% endif %}</td><td>{% if d.used_by_vms %}{% for u in d.used_by_vms %}<div>{{ u.vm }}: <code>{{ u.target }}</code></div>{% endfor %}{% else %}-{% endif %}</td></tr>{% else %}<tr><td class="empty-cell" colspan="7">No iSCSI LUN details found.</td></tr>{% endfor %}</tbody></table></div></section>
+
+<section class="grid two storage-management-grid">
+  <div class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-layer-group"></i> LVM Volume Groups</h2></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-compact-table"><thead><tr><th>VG</th><th>Size</th><th>Free</th><th>PVs</th><th>LVs</th></tr></thead><tbody>{% for vg in overview.lvm_summary.vgs %}<tr><td><code>{{ vg.vg_name }}</code></td><td>{{ vg.vg_size }}</td><td>{{ vg.vg_free }}</td><td>{{ vg.pv_count }}</td><td>{{ vg.lv_count }}</td></tr>{% else %}<tr><td class="empty-cell" colspan="5">No LVM volume groups found.</td></tr>{% endfor %}</tbody></table></div></div>
+  <div class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-boxes-stacked"></i> LVM Logical Volumes</h2></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-compact-table"><thead><tr><th>LV</th><th>VG</th><th>Size</th><th>Pool</th><th>Data %</th><th>Metadata %</th><th>Devices</th></tr></thead><tbody>{% for lv in overview.lvm_summary.lvs %}<tr><td><code>{{ lv.lv_name }}</code></td><td><code>{{ lv.vg_name }}</code></td><td>{{ lv.lv_size }}</td><td>{{ lv.pool_lv or '-' }}</td><td>{{ lv.data_percent or '-' }}</td><td>{{ lv.metadata_percent or '-' }}</td><td><code>{{ lv.devices or '-' }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="7">No LVM logical volumes found.</td></tr>{% endfor %}</tbody></table></div></div>
 </section>
 
-<section>
-  <h3>iSCSI Block Devices</h3>
-  <table>
-    <thead><tr><th>Name</th><th>Path</th><th>Size</th><th>Type</th><th>Model</th><th>Serial</th><th>Mountpoints</th></tr></thead>
-    <tbody>
-      {% for d in overview.iscsi_block_devices %}
-      <tr>
-        <td><code>{{ d.get('name', '-') }}</code></td>
-        <td><code>{{ d.get('path', '-') }}</code></td>
-        <td>{{ d.get('size', '-') }}</td>
-        <td>{{ d.get('type', '-') }}</td>
-        <td>{{ d.get('model', '-') }}</td>
-        <td>{{ d.get('serial', '-') }}</td>
-        <td>{{ d.get('mountpoints', '-') }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="7">No iSCSI block devices detected.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<section class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-folder-open"></i> SMB/CIFS Targets</h2><a class="btn btn-outline-light" href="/storage/smb/new">New SMB</a></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-table"><thead><tr><th>Name</th><th>Server</th><th>Share</th><th>Mount</th><th>Version</th><th>Roles</th><th>Mounted</th><th>Libvirt Pool</th><th>Actions</th></tr></thead><tbody>{% if overview.smb_targets %}{% for name in overview.smb_targets %}{% set n = overview.smb_targets[name] %}<tr><td><code>{{ name }}</code></td><td>{{ n.get('server', '-') }}</td><td><code>//{{ n.get('server', '-') }}/{{ n.get('share_name', '-') }}</code></td><td><code>{{ n.get('mount_path', '-') }}</code></td><td>{{ n.get('smb_version', '-') }}</td><td>{{ n.get('roles', []) | join(', ') }}</td><td>{{ n.get('mounted', false) }}</td><td>{{ n.get('libvirt_pool_name') or '-' }}</td><td><div class="action-cluster"><form method="post" action="/storage/smb/{{ name }}/test"><button class="btn btn-sm btn-outline-info" type="submit">Test</button></form><form method="post" action="/storage/smb/{{ name }}/apply"><button class="btn btn-sm btn-primary" type="submit">Mount</button></form><form method="post" action="/storage/smb/{{ name }}/unmount"><button class="btn btn-sm btn-outline-warning" type="submit">Unmount</button></form><form method="post" action="/storage/smb/{{ name }}/delete" onsubmit="return confirm('Delete this SMB/CIFS target? This also removes stored credentials.');"><button class="btn btn-sm btn-danger danger" type="submit">Delete</button></form></div></td></tr>{% endfor %}{% else %}<tr><td class="empty-cell" colspan="9">No SMB/CIFS targets defined.</td></tr>{% endif %}</tbody></table></div></section>
+
+<section class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-server"></i> NFS Targets</h2><a class="btn btn-outline-light" href="/storage/nfs/new">New NFS</a></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-table"><thead><tr><th>Name</th><th>Server</th><th>Export</th><th>Mount</th><th>Version</th><th>Roles</th><th>Mounted</th><th>Libvirt Pool</th><th>Actions</th></tr></thead><tbody>{% if overview.nfs_targets %}{% for name in overview.nfs_targets %}{% set n = overview.nfs_targets[name] %}<tr><td><code>{{ name }}</code></td><td>{{ n.get('server', '-') }}</td><td><code>{{ n.get('export_path', '-') }}</code></td><td><code>{{ n.get('mount_path', '-') }}</code></td><td>{{ n.get('nfs_version', '-') }}</td><td>{{ n.get('roles', []) | join(', ') }}</td><td>{{ n.get('mounted', false) }}</td><td>{{ n.get('libvirt_pool_name') or '-' }}</td><td><div class="action-cluster"><form method="post" action="/storage/nfs/{{ name }}/test"><button class="btn btn-sm btn-outline-info" type="submit">Test</button></form><form method="post" action="/storage/nfs/{{ name }}/apply"><button class="btn btn-sm btn-primary" type="submit">Mount</button></form><form method="post" action="/storage/nfs/{{ name }}/unmount"><button class="btn btn-sm btn-outline-warning" type="submit">Unmount</button></form><form method="post" action="/storage/nfs/{{ name }}/delete" onsubmit="return confirm('Delete this NFS target?');"><button class="btn btn-sm btn-danger danger" type="submit">Delete</button></form></div></td></tr>{% endfor %}{% else %}<tr><td class="empty-cell" colspan="9">No NFS targets defined.</td></tr>{% endif %}</tbody></table></div></section>
+
+<section class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-ethernet"></i> Storage Network Profiles</h2><a class="btn btn-outline-info" href="/storage/networks/new">New Storage Network</a></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-table"><thead><tr><th>Name</th><th>Mode</th><th>Interface</th><th>Parent</th><th>VLAN</th><th>IP/CIDR</th><th>Purpose</th><th>Actions</th></tr></thead><tbody>{% for name, n in overview.storage_networks.items() %}<tr><td><code>{{ name }}</code></td><td>{{ n.mode }}</td><td><code>{{ n.interface_name }}</code></td><td><code>{{ n.parent_interface }}</code></td><td>{{ n.vlan_tag or '-' }}</td><td>{{ n.ip_cidr or '-' }}</td><td>{{ n.purpose or '-' }}</td><td><div class="action-cluster"><form method="post" action="/storage/networks/{{ name }}/apply"><button class="btn btn-sm btn-primary" type="submit">Apply</button></form><form method="post" action="/storage/networks/{{ name }}/delete" onsubmit="return confirm('Delete this storage network profile?');"><button class="btn btn-sm btn-danger danger" type="submit">Delete</button></form></div></td></tr>{% else %}<tr><td class="empty-cell" colspan="8">No storage network profiles defined.</td></tr>{% endfor %}</tbody></table></div></section>
+
+<section class="grid two storage-management-grid">
+  <div class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-desktop"></i> VM Disk Mapping</h2></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-compact-table"><thead><tr><th>VM</th><th>Type</th><th>Device</th><th>Target</th><th>Source</th></tr></thead><tbody>{% for d in overview.vm_disks %}<tr><td>{{ d.vm }}</td><td>{{ d.type }}</td><td>{{ d.device }}</td><td>{{ d.target }}</td><td><code>{{ d.source }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="5">No VM disks found.</td></tr>{% endfor %}</tbody></table></div></div>
+  <div class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-folder-tree"></i> Host Filesystems</h2></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-compact-table"><thead><tr><th>Target</th><th>Source</th><th>Type</th><th>Size</th><th>Used</th><th>Avail</th><th>Use</th></tr></thead><tbody>{% for f in overview.filesystems %}<tr><td><code>{{ f.target }}</code></td><td><code>{{ f.source }}</code></td><td>{{ f.fstype }}</td><td>{{ f.size }}</td><td>{{ f.used }}</td><td>{{ f.avail }}</td><td>{{ f.use_percent }}</td></tr>{% else %}<tr><td class="empty-cell" colspan="7">No filesystems found.</td></tr>{% endfor %}</tbody></table></div></div>
 </section>
 
-
-<section>
-  <h3>iSCSI LUN Details</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>By-path</th>
-        <th>Device</th>
-        <th>Size</th>
-        <th>Filesystem</th>
-        <th>Mount</th>
-        <th>LVM</th>
-        <th>VM Usage</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for d in overview.iscsi_device_details %}
-      <tr>
-        <td><code>{{ d.by_path_name }}</code></td>
-        <td><code>{{ d.resolved_path }}</code></td>
-        <td>{{ d.size }}</td>
-        <td>{{ d.fstype or '-' }}</td>
-        <td>
-          {% if d.mountpoints %}
-            <code>{{ d.mountpoints }}</code>
-            {% if d.filesystem_usage %}
-              <br><small>{{ d.filesystem_usage.used }} used / {{ d.filesystem_usage.avail }} free ({{ d.filesystem_usage.pcent }})</small>
-            {% endif %}
-          {% else %}
-            -
-          {% endif %}
-        </td>
-        <td>
-          {% if d.lvm %}
-            VG <code>{{ d.lvm.vg_name }}</code><br>
-            <small>{{ d.lvm.pv_free }} free of {{ d.lvm.pv_size }}</small>
-          {% else %}
-            -
-          {% endif %}
-        </td>
-        <td>
-          {% if d.used_by_vms %}
-            {% for u in d.used_by_vms %}
-              <div>{{ u.vm }}: <code>{{ u.target }}</code></div>
-            {% endfor %}
-          {% else %}
-            -
-          {% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="7">No iSCSI LUN details found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-
-<section>
-  <h3>LVM Storage Summary</h3>
-
-  <h4>Volume Groups</h4>
-  <table>
-    <thead><tr><th>VG</th><th>Size</th><th>Free</th><th>PVs</th><th>LVs</th></tr></thead>
-    <tbody>
-      {% for vg in overview.lvm_summary.vgs %}
-      <tr>
-        <td><code>{{ vg.vg_name }}</code></td>
-        <td>{{ vg.vg_size }}</td>
-        <td>{{ vg.vg_free }}</td>
-        <td>{{ vg.pv_count }}</td>
-        <td>{{ vg.lv_count }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="5">No LVM volume groups found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <h4>Logical Volumes</h4>
-  <table>
-    <thead><tr><th>LV</th><th>VG</th><th>Size</th><th>Pool</th><th>Data %</th><th>Metadata %</th><th>Devices</th></tr></thead>
-    <tbody>
-      {% for lv in overview.lvm_summary.lvs %}
-      <tr>
-        <td><code>{{ lv.lv_name }}</code></td>
-        <td><code>{{ lv.vg_name }}</code></td>
-        <td>{{ lv.lv_size }}</td>
-        <td>{{ lv.pool_lv or '-' }}</td>
-        <td>{{ lv.data_percent or '-' }}</td>
-        <td>{{ lv.metadata_percent or '-' }}</td>
-        <td><code>{{ lv.devices or '-' }}</code></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="7">No LVM logical volumes found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-
-
-<section>
-  <h3>SMB/CIFS Storage Targets</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th><th>Server</th><th>Share</th><th>Mount</th><th>Version</th><th>Roles</th><th>Mounted</th><th>Libvirt Pool</th><th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if overview.smb_targets %}
-      {% for name in overview.smb_targets %}
-      {% set n = overview.smb_targets[name] %}
-      <tr>
-        <td><code>{{ name }}</code></td>
-        <td>{{ n.get('server', '-') }}</td>
-        <td><code>//{{ n.get('server', '-') }}/{{ n.get('share_name', '-') }}</code></td>
-        <td><code>{{ n.get('mount_path', '-') }}</code></td>
-        <td>{{ n.get('smb_version', '-') }}</td>
-        <td>{{ n.get('roles', []) | join(', ') }}</td>
-        <td>{{ n.get('mounted', false) }}</td>
-        <td>{{ n.get('libvirt_pool_name') or '-' }}</td>
-        <td>
-          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-            <form method="post" action="/storage/smb/{{ name }}/test"><button type="submit">Test</button></form>
-            <form method="post" action="/storage/smb/{{ name }}/apply"><button type="submit">Apply/Mount</button></form>
-            <form method="post" action="/storage/smb/{{ name }}/unmount"><button type="submit">Unmount</button></form>
-            <form method="post" action="/storage/smb/{{ name }}/delete" onsubmit="return confirm('Delete this SMB/CIFS target? This also removes stored credentials.');">
-              <button type="submit" class="danger">Delete</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% endfor %}
-      {% else %}
-      <tr><td colspan="9">No SMB/CIFS targets defined.</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
-</section>
-
-<section>
-  <h3>NFS Storage Targets</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th><th>Server</th><th>Export</th><th>Mount</th><th>Version</th><th>Roles</th><th>Mounted</th><th>Libvirt Pool</th><th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if overview.nfs_targets %}
-      {% for name in overview.nfs_targets %}
-      {% set n = overview.nfs_targets[name] %}
-      <tr>
-        <td><code>{{ name }}</code></td>
-        <td>{{ n.get('server', '-') }}</td>
-        <td><code>{{ n.get('export_path', '-') }}</code></td>
-        <td><code>{{ n.get('mount_path', '-') }}</code></td>
-        <td>{{ n.get('nfs_version', '-') }}</td>
-        <td>{{ n.get('roles', []) | join(', ') }}</td>
-        <td>{{ n.get('mounted', false) }}</td>
-        <td>{{ n.get('libvirt_pool_name') or '-' }}</td>
-        <td>
-          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-            <form method="post" action="/storage/nfs/{{ name }}/test"><button type="submit">Test</button></form>
-            <form method="post" action="/storage/nfs/{{ name }}/apply"><button type="submit">Apply/Mount</button></form>
-            <form method="post" action="/storage/nfs/{{ name }}/unmount"><button type="submit">Unmount</button></form>
-            <form method="post" action="/storage/nfs/{{ name }}/delete" onsubmit="return confirm('Delete this NFS target?');">
-              <button type="submit" class="danger">Delete</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% endfor %}
-      {% else %}
-      <tr><td colspan="9">No NFS targets defined.</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
-</section>
-
-<section>
-  <h3>Storage Network Profiles</h3>
-  <table>
-    <thead>
-      <tr><th>Name</th><th>Mode</th><th>Interface</th><th>Parent</th><th>VLAN</th><th>IP/CIDR</th><th>Purpose</th><th>Actions</th></tr>
-    </thead>
-    <tbody>
-      {% for name, n in overview.storage_networks.items() %}
-      <tr>
-        <td><code>{{ name }}</code></td>
-        <td>{{ n.mode }}</td>
-        <td><code>{{ n.interface_name }}</code></td>
-        <td><code>{{ n.parent_interface }}</code></td>
-        <td>{{ n.vlan_tag or '-' }}</td>
-        <td>{{ n.ip_cidr or '-' }}</td>
-        <td>{{ n.purpose or '-' }}</td>
-        <td>
-          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-            <form method="post" action="/storage/networks/{{ name }}/apply">
-              <button type="submit">Apply</button>
-            </form>
-            <form method="post" action="/storage/networks/{{ name }}/delete" onsubmit="return confirm('Delete this storage network profile?');">
-              <button type="submit" class="danger">Delete</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="8">No storage network profiles defined.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-
-<section>
-  <h3>VM Disk Mapping</h3>
-  <table>
-    <thead>
-      <tr><th>VM</th><th>Type</th><th>Device</th><th>Target</th><th>Source</th></tr>
-    </thead>
-    <tbody>
-      {% for d in overview.vm_disks %}
-      <tr>
-        <td>{{ d.vm }}</td>
-        <td>{{ d.type }}</td>
-        <td>{{ d.device }}</td>
-        <td>{{ d.target }}</td>
-        <td><code>{{ d.source }}</code></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="5">No VM disks found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-
-<section>
-  <h3>Host Filesystems</h3>
-  <table>
-    <thead>
-      <tr><th>Target</th><th>Source</th><th>Type</th><th>Size</th><th>Used</th><th>Avail</th><th>Use</th></tr>
-    </thead>
-    <tbody>
-      {% for f in overview.filesystems %}
-      <tr>
-        <td><code>{{ f.target }}</code></td>
-        <td><code>{{ f.source }}</code></td>
-        <td>{{ f.fstype }}</td>
-        <td>{{ f.size }}</td>
-        <td>{{ f.used }}</td>
-        <td>{{ f.avail }}</td>
-        <td>{{ f.use_percent }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="7">No filesystems found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-
-<section>
-  <h3>ZFS Status</h3>
-  <pre>{{ overview.zfs_status }}</pre>
-</section>
-
+<section class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-terminal"></i> ZFS Status</h2></div><pre>{{ overview.zfs_status }}</pre></section>
 {% endblock %}

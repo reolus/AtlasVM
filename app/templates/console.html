@@ -4,12 +4,12 @@
   <div>
     <div class="atlas-kicker"><i class="fa-solid fa-terminal"></i> Console</div>
     <h2>{{ name }}</h2>
-    <p class="muted mb-0">Browser console access for the guest.</p>
+    <p class="muted mb-0">Standalone browser console launcher for the guest.</p>
   </div>
   <div class="hero-actions">
     <a class="btn btn-outline-light" href="/vms/{{ name }}"><i class="fa-solid fa-arrow-right"></i>Back to VM</a>
-    <form method="post" action="/ui/vms/{{ name }}/console">
-      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-terminal"></i>Start Console</button>
+    <form method="post" action="/ui/vms/{{ name }}/console" target="_blank">
+      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-terminal"></i>Open Standalone Console</button>
     </form>
   </div>
 </section>
@@ -23,9 +23,12 @@
 
 <section class="panel atlas-panel vm-console-page-panel">
   {% if console_url %}
-    <div class="section-title"><h2><i class="fa-solid fa-terminal"></i> Console Session</h2><a class="btn btn-primary" target="_blank" href="{{ console_url }}"><i class="fa-solid fa-arrow-up-right-from-square"></i>Open in New Tab</a></div>
-    <p class="muted">If the embedded console is blank, open it directly. Browser security, the ancient enemy of convenience, may be involved.</p>
-    <iframe class="console-frame atlas-console-frame" src="{{ console_url }}"></iframe>
+    <div class="console-empty-state">
+      <div class="empty-icon"><i class="fa-solid fa-terminal"></i></div>
+      <h3>Console session ready</h3>
+      <p class="muted">AtlasVM now opens noVNC as a standalone tab instead of embedding it, because browsers treat iframes like suspicious luggage.</p>
+      <a class="btn btn-primary" target="_blank" rel="noopener" href="{{ console_url }}"><i class="fa-solid fa-arrow-up-right-from-square"></i>Open Standalone Console</a>
+    </div>
   {% else %}
     <div class="console-empty-state">
       <div class="empty-icon"><i class="fa-solid fa-terminal"></i></div>
@@ -35,7 +38,7 @@
         <form method="post" action="/ui/vms/{{ name }}/start"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-play"></i>Start VM</button></form>
       {% else %}
         <p class="muted">Start a console session from this page. If AtlasVM reports that no VNC display exists, the guest needs a VNC graphics device. This patch intentionally does not redefine the VM, because snapshots dislike that kind of reckless optimism.</p>
-        <form method="post" action="/ui/vms/{{ name }}/console"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-terminal"></i>Start Console</button></form>
+        <form method="post" action="/ui/vms/{{ name }}/console" target="_blank"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-terminal"></i>Open Standalone Console</button></form>
       {% endif %}
     </div>
   {% endif %}

@@ -89,3 +89,25 @@ instead of:
 ```
 
 The console redirect now uses a helper that encodes the entire noVNC URL as the value of the outer `url` parameter. This preserves the noVNC port and connection options.
+
+## Follow-up: standalone console and network/storage theme pass
+
+- Changed console launch behavior so successful console starts redirect directly to the standalone noVNC URL. VM detail console buttons already open in a new tab, so browser iframe/security issues no longer block the primary console workflow.
+- Left the themed `/vms/{name}/console` page available for error handling and manual launch guidance.
+- Updated VM inventory console actions to open in a new tab as well.
+- Overhauled network pages to the Bootstrap-style local theme:
+  - `/networks`
+  - `/networks/new`
+  - `/networks/{name}`
+  - `/networks/{name}/edit`
+  - `/host/network`
+- Overhauled storage pages/forms to the newer theme:
+  - `/storage`
+  - `/storage/networks/new`
+  - `/storage/nfs/new`
+  - `/storage/smb/new`
+  - `/storage/iscsi/new`
+  - `/storage/iscsi/{name}/lvm-thin`
+  - `/storage/{pool_name}` template styling where used
+  - `/zfs`
+- No libvirt undefine/redefine behavior was added. Console handling still only starts noVNC/websockify against an existing VNC display.

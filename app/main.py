@@ -607,8 +607,8 @@ def vm_console_start(name: str, request: Request, db: Session = Depends(get_db),
             return RedirectResponse(url=_console_page_url(name, error=message), status_code=303)
         host = request.url.hostname
         session = ConsoleService().start_novnc(name, display, request_host=host)
-        log_event(db, user, 'start_console', name, session.url)
-        return RedirectResponse(url=_console_page_url(name, console_url=session.url), status_code=303)
+        log_event(db, user, 'start_console_standalone', name, session.url)
+        return RedirectResponse(url=session.url, status_code=303)
     except Exception as exc:
         message = f'Unable to start console for {name}: {exc}'
         log_event(db, user, 'start_console_failed', name, str(exc))
@@ -718,9 +718,9 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
                 return RedirectResponse(url=_console_page_url(name, error=message), status_code=303)
             host = request.headers.get('host', '').split(':')[0]
             session = ConsoleService().start_novnc(name, display, request_host=host)
-            finish_task(db, task, 'success', f'Console opened: {session.url}')
-            log_event(db, user, 'open_console', name, session.url)
-            return RedirectResponse(url=_console_page_url(name, console_url=session.url), status_code=303)
+            finish_task(db, task, 'success', f'Console opened standalone: {session.url}')
+            log_event(db, user, 'open_console_standalone', name, session.url)
+            return RedirectResponse(url=session.url, status_code=303)
         elif action == 'delete-confirm':
             return RedirectResponse(url=f'/vms/{name}/delete-confirm', status_code=303)
 
@@ -1696,8 +1696,7 @@ def restore_backup_as_new(
 @app.get('/zfs', response_class=HTMLResponse)
 def zfs_page(request: Request, user: str = Depends(require_user)):
     return templates.TemplateResponse('zfs.html', {
-            'request': request,
-            'app_name': settings.app_name,
+            **_view_context(request, user),
             'zfs': zfs_service.pool_status(),
             'datasets': zfs_service.datasets(),
             'snapshots': zfs_service.snapshots(),

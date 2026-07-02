@@ -1,121 +1,46 @@
 {% extends "base.html" %}
 {% block content %}
-
-<section>
-  <h2>Host Management Network</h2>
-  <p>Set the AtlasVM management interface to a persistent static configuration. Apply uses a rollback timer so the host can recover if the new IP is unreachable.</p>
-
-  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
-  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
-
-  <table>
-    <tbody>
-      <tr><th>systemd-networkd active</th><td>{{ stack.systemd_networkd_active }}</td></tr>
-      <tr><th>NetworkManager active</th><td>{{ stack.networkmanager_active }}</td></tr>
-      <tr><th>ifupdown networking active</th><td>{{ stack.networking_active }}</td></tr>
-    </tbody>
-  </table>
+<section class="atlas-hero network-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-ethernet"></i> Admin Network</div>
+    <h2>Host Management Network</h2>
+    <p class="muted mb-0">Persistent management interface configuration with rollback protection.</p>
+  </div>
+  <div class="hero-actions"><a class="btn btn-outline-light" href="/admin"><i class="fa-solid fa-arrow-left"></i>Admin</a></div>
 </section>
 
-<section>
-  <h3>Management Interface Plan</h3>
+{% if error %}<div class="alert danger"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+{% if message %}<div class="alert success"><i class="fa-solid fa-circle-check"></i> {{ message }}</div>{% endif %}
 
-  <form method="post" action="/host/network">
-    <label>
-      Management Interface
-      <select name="management_interface" required>
-        <option value="">Select interface</option>
-        {% for link in host_links %}
-        <option value="{{ link.name }}" {% if host_meta.management_interface == link.name %}selected{% endif %}>
-          {{ link.name }} {% if link.addresses %}- {{ link.addresses|join(', ') }}{% endif %}
-        </option>
-        {% endfor %}
-      </select>
-    </label>
-
-    <label>
-      VLAN Tag
-      <input name="vlan_tag" type="number" min="1" max="4094" value="{{ host_meta.vlan_tag or '' }}" placeholder="blank for untagged/native">
-      <small>Leave blank for the native/untagged management VLAN. Enter a tag only if management should move to a tagged VLAN.</small>
-    </label>
-
-    <div class="grid two">
-      <label>
-        Static IP
-        <input name="static_ip" value="{{ host_meta.static_ip or '' }}" placeholder="10.21.50.34" required>
-      </label>
-      <label>
-        Subnet/CIDR
-        <input name="subnet" value="{{ host_meta.subnet or '' }}" placeholder="24 or 255.255.255.0" required>
-      </label>
-    </div>
-
-    <label>
-      Gateway
-      <input name="gateway" value="{{ host_meta.gateway or '' }}" placeholder="10.21.50.1" required>
-    </label>
-
-    <label>
-      DNS Servers
-      <input name="dns_servers" value="{{ host_meta.dns_servers or '' }}" placeholder="10.21.1.10,10.21.1.11">
-    </label>
-
-    <button type="submit">Save Plan</button>
-  </form>
+<section class="atlas-stat-grid network-kpi-grid">
+  <div class="atlas-stat-card"><span class="atlas-stat-icon info"><i class="fa-solid fa-network-wired"></i></span><div><span>systemd-networkd</span><strong>{{ 'Active' if stack.systemd_networkd_active else 'Inactive' }}</strong><small>network stack</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon purple"><i class="fa-solid fa-desktop"></i></span><div><span>NetworkManager</span><strong>{{ 'Active' if stack.networkmanager_active else 'Inactive' }}</strong><small>detected service</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon slate"><i class="fa-solid fa-server"></i></span><div><span>ifupdown</span><strong>{{ 'Active' if stack.networking_active else 'Inactive' }}</strong><small>legacy networking</small></div></div>
 </section>
 
-<section>
-  <h3>Apply Persistent Management Config</h3>
-  <p><strong>Warning:</strong> Applying this may change the IP address you are using to access AtlasVM. After applying, open the new address and click Confirm before the rollback timer expires. Yes, this is dramatic, but less dramatic than walking to the rack.</p>
-
-  <form method="post" action="/host/network/apply">
-    <label>
-      Rollback Timeout Seconds
-      <input name="timeout_seconds" type="number" min="60" max="600" value="120">
-    </label>
-    <button class="danger" type="submit">Apply with Rollback Timer</button>
-  </form>
-
-  <div class="actions">
-    <form method="post" action="/host/network/confirm">
-      <button type="submit">Confirm New Management Network</button>
+<section class="grid two network-form-grid">
+  <div class="panel atlas-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-list-check"></i> Management Interface Plan</h2></div>
+    <form class="stacked-form" method="post" action="/host/network">
+      <label>Management Interface<select name="management_interface" required><option value="">Select interface</option>{% for link in host_links %}<option value="{{ link.name }}" {% if host_meta.management_interface == link.name %}selected{% endif %}>{{ link.name }} {% if link.addresses %}- {{ link.addresses|join(', ') }}{% endif %}</option>{% endfor %}</select></label>
+      <div class="grid two"><label>VLAN Tag<input name="vlan_tag" type="number" min="1" max="4094" value="{{ host_meta.vlan_tag or '' }}" placeholder="blank for native"></label><label>Static IP<input name="static_ip" value="{{ host_meta.static_ip or '' }}" placeholder="10.21.50.34" required></label></div>
+      <div class="grid two"><label>Subnet/CIDR<input name="subnet" value="{{ host_meta.subnet or '' }}" placeholder="24 or 255.255.255.0" required></label><label>Gateway<input name="gateway" value="{{ host_meta.gateway or '' }}" placeholder="10.21.50.1" required></label></div>
+      <label>DNS Servers<input name="dns_servers" value="{{ host_meta.dns_servers or '' }}" placeholder="10.21.1.10,10.21.1.11"></label>
+      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i>Save Plan</button>
     </form>
-
-    <form method="post" action="/host/network/rollback">
-      <button type="submit">Rollback Now</button>
-    </form>
+  </div>
+  <div class="panel atlas-panel danger-zone">
+    <div class="section-title"><h2><i class="fa-solid fa-triangle-exclamation"></i> Apply with Rollback</h2></div>
+    <p class="muted">Applying this may change the IP address you are using to reach AtlasVM. Confirm after applying or rollback will save you from a little walk of shame to the rack.</p>
+    <form class="stacked-form" method="post" action="/host/network/apply"><label>Rollback Timeout Seconds<input name="timeout_seconds" type="number" min="60" max="600" value="120"></label><button class="btn btn-danger danger" type="submit"><i class="fa-solid fa-bolt"></i>Apply with Rollback Timer</button></form>
+    <div class="action-cluster mt-2"><form method="post" action="/host/network/confirm"><button class="btn btn-primary" type="submit">Confirm New Network</button></form><form method="post" action="/host/network/rollback"><button class="btn btn-outline-warning" type="submit">Rollback Now</button></form></div>
   </div>
 </section>
 
-<section>
-  <h3>Current Host Links</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>State</th>
-        <th>MAC</th>
-        <th>Addresses</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for link in host_links %}
-      <tr>
-        <td><code>{{ link.name }}</code></td>
-        <td>{{ link.state }}</td>
-        <td>{{ link.mac }}</td>
-        <td>{% if link.addresses %}{{ link.addresses|join(', ') }}{% else %}-{% endif %}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4">No host links found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<section class="panel atlas-panel">
+  <div class="section-title"><h2><i class="fa-solid fa-ethernet"></i> Current Host Links</h2></div>
+  <div class="atlas-table-wrap"><table class="atlas-data-table network-table"><thead><tr><th>Name</th><th>State</th><th>MAC</th><th>Addresses</th></tr></thead><tbody>{% for link in host_links %}<tr><td><code>{{ link.name }}</code></td><td>{{ link.state }}</td><td><code>{{ link.mac }}</code></td><td>{% if link.addresses %}{{ link.addresses|join(', ') }}{% else %}-{% endif %}</td></tr>{% else %}<tr><td class="empty-cell" colspan="4">No host links found.</td></tr>{% endfor %}</tbody></table></div>
 </section>
 
-<section>
-  <h3>Current Routes</h3>
-  <pre>{{ routes | tojson(indent=2) }}</pre>
-</section>
-
+<section class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-route"></i> Current Routes</h2></div><pre>{{ routes | tojson(indent=2) }}</pre></section>
 {% endblock %}

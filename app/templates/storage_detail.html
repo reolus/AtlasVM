@@ -1,20 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 {% if pool %}
-<section>
-  <div class="section-title"><h2>Storage Pool: {{ pool.name }}</h2><form method="post" action="/storage/{{ pool.name }}/refresh"><button>Refresh</button></form></div>
-  <div class="grid cards">
-    <div class="card"><strong>Active</strong><span>{{ pool.active }}</span></div>
-    <div class="card"><strong>Capacity</strong><span>{{ pool.capacity_gb }} GB</span></div>
-    <div class="card"><strong>Available</strong><span>{{ pool.available_gb }} GB</span></div>
-    <div class="card"><strong>Path</strong><small>{{ pool.path }}</small></div>
-  </div>
-</section>
-<section>
-  <h2>Volumes</h2>
-  <table><thead><tr><th>Name</th><th>Capacity</th><th>Allocated</th><th>Path</th></tr></thead><tbody>
-    {% for vol in pool.volumes %}<tr><td>{{ vol.name }}</td><td>{{ vol.capacity_gb }} GB</td><td>{{ vol.allocation_gb }} GB</td><td><code>{{ vol.path }}</code></td></tr>{% else %}<tr><td colspan="4">No volumes found.</td></tr>{% endfor %}
-  </tbody></table>
-</section>
+<section class="atlas-hero storage-page-hero"><div><div class="atlas-kicker"><i class="fa-solid fa-database"></i> Storage Pool</div><h2>{{ pool.name }}</h2><p class="muted mb-0">Local storage pool details and volumes.</p></div><div class="hero-actions"><a class="btn btn-outline-light" href="/storage"><i class="fa-solid fa-arrow-left"></i>Storage</a><form method="post" action="/storage/{{ pool.name }}/refresh"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-arrows-rotate"></i>Refresh</button></form></div></section>
+<section class="atlas-stat-grid storage-kpi-grid"><div class="atlas-stat-card"><span class="atlas-stat-icon {{ 'success' if pool.active else 'slate' }}"><i class="fa-solid fa-circle-play"></i></span><div><span>Active</span><strong>{{ pool.active }}</strong><small>pool state</small></div></div><div class="atlas-stat-card"><span class="atlas-stat-icon info"><i class="fa-solid fa-hard-drive"></i></span><div><span>Capacity</span><strong>{{ pool.capacity_gb }} GB</strong><small>total</small></div></div><div class="atlas-stat-card"><span class="atlas-stat-icon success"><i class="fa-solid fa-chart-pie"></i></span><div><span>Available</span><strong>{{ pool.available_gb }} GB</strong><small>free</small></div></div><div class="atlas-stat-card"><span class="atlas-stat-icon slate"><i class="fa-solid fa-folder"></i></span><div><span>Path</span><strong>Pool</strong><small>{{ pool.path }}</small></div></div></section>
+<section class="panel atlas-panel"><div class="section-title"><h2><i class="fa-solid fa-boxes-stacked"></i> Volumes</h2></div><div class="atlas-table-wrap"><table class="atlas-data-table storage-table"><thead><tr><th>Name</th><th>Capacity</th><th>Allocated</th><th>Path</th></tr></thead><tbody>{% for vol in pool.volumes %}<tr><td>{{ vol.name }}</td><td>{{ vol.capacity_gb }} GB</td><td>{{ vol.allocation_gb }} GB</td><td><code>{{ vol.path }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="4">No volumes found.</td></tr>{% endfor %}</tbody></table></div></section>
 {% endif %}
 {% endblock %}

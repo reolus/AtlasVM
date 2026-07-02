@@ -1,48 +1,49 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
-    <h2>Networks</h2>
-    <div style="display:flex; gap:0.5rem;">
-      <form method="post" action="/networks/reconcile" style="margin:0;">
-        <button type="submit">Reconcile Networks</button>
-      </form>
-      <form method="get" action="/networks/new" style="margin:0;">
-        <button type="submit">New Network</button>
-      </form>
-    </div>
+<section class="atlas-hero network-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-network-wired"></i> Network</div>
+    <h2>Virtual Networks</h2>
+    <p class="muted mb-0">Local libvirt networks, bridges, VLAN-backed networks, and reconciliation status.</p>
   </div>
+  <div class="hero-actions">
+    <form method="post" action="/networks/reconcile"><button class="btn btn-outline-info" type="submit"><i class="fa-solid fa-arrows-rotate"></i>Reconcile</button></form>
+    <a class="btn btn-primary" href="/networks/new"><i class="fa-solid fa-plus"></i>New Network</a>
+  </div>
+</section>
 
-  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
-  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
+{% if error %}<div class="alert danger"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+{% if message %}<div class="alert success"><i class="fa-solid fa-circle-check"></i> {{ message }}</div>{% endif %}
 
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Type</th>
-        <th>Bridge</th>
-        <th>Parent</th>
-        <th>VLAN</th>
-        <th>Active</th>
-        <th>Autostart</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for network in networks %}
-      <tr>
-        <td><a href="/networks/{{ network.name }}">{{ network.name }}</a></td>
-        <td>{{ network.type or '-' }}</td>
-        <td>{{ network.bridge or '-' }}</td>
-        <td>{{ network.parent_interface or '-' }}</td>
-        <td>{% if network.vlan_tag %}{{ network.vlan_tag }}{% else %}<span class="muted">untagged</span>{% endif %}</td>
-        <td>{{ network.active }}</td>
-        <td>{{ network.autostart }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="7">No networks found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<section class="atlas-stat-grid network-kpi-grid">
+  <div class="atlas-stat-card"><span class="atlas-stat-icon info"><i class="fa-solid fa-diagram-project"></i></span><div><span>Total Networks</span><strong>{{ networks|length }}</strong><small>local node</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon success"><i class="fa-solid fa-circle-play"></i></span><div><span>Active</span><strong>{{ networks|selectattr('active')|list|length }}</strong><small>currently running</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon warn"><i class="fa-solid fa-ethernet"></i></span><div><span>VLAN-backed</span><strong>{{ networks|selectattr('vlan_tag')|list|length }}</strong><small>tagged networks</small></div></div>
+</section>
+
+<section class="panel atlas-panel">
+  <div class="section-title">
+    <div><h2><i class="fa-solid fa-list"></i> Network Inventory</h2><p class="muted">Click a network to view attached VMs, metadata, and XML.</p></div>
+  </div>
+  <div class="atlas-table-wrap">
+    <table class="atlas-data-table network-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Bridge</th><th>Parent</th><th>VLAN</th><th>Active</th><th>Autostart</th></tr></thead>
+      <tbody>
+        {% for network in networks %}
+        <tr>
+          <td><div class="atlas-name-cell"><span class="atlas-stat-icon {{ 'success' if network.active else 'slate' }}"><i class="fa-solid fa-network-wired"></i></span><div><a href="/networks/{{ network.name }}"><strong>{{ network.name }}</strong></a><small>{{ network.cidr or 'no CIDR recorded' }}</small></div></div></td>
+          <td><span class="pill">{{ network.type or '-' }}</span></td>
+          <td><code>{{ network.bridge or '-' }}</code></td>
+          <td><code>{{ network.parent_interface or '-' }}</code></td>
+          <td>{% if network.vlan_tag %}<span class="pill warning">VLAN {{ network.vlan_tag }}</span>{% else %}<span class="muted">untagged</span>{% endif %}</td>
+          <td><span class="state-pill {{ 'running' if network.active else 'shutoff' }}">{{ 'active' if network.active else 'stopped' }}</span></td>
+          <td>{{ network.autostart }}</td>
+        </tr>
+        {% else %}
+        <tr><td class="empty-cell" colspan="7">No networks found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}
