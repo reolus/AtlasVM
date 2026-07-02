@@ -27,7 +27,7 @@ a:hover { text-decoration: underline; }
 .login-copy { margin-bottom: 1rem; }
 .login-copy h1 { margin-bottom: .5rem; }
 .login-copy p { margin: 0 0 .5rem 0; }
-.login-subcopy { color: var(--muted); font-size: .4rem !important; padding: 0 0 1rem 0;}
+.login-subcopy { color: var(--muted); font-size: .7rem !important; padding: 1rem 0 0 0;}
 .login-form { display: grid; gap: .9rem; }
 .login-button { width: fit-content; min-width: 120px; }
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 260px minmax(0, 1fr); }
