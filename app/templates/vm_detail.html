@@ -83,7 +83,7 @@
     <div class="section-title vm-section-title">
       <div>
         <h2><i class="fa-solid fa-gears"></i>Settings</h2>
-        <p class="muted">Description is metadata-safe. CPU and memory are applied through snapshot-safe libvirt setters.</p>
+        <p class="muted">Description is metadata-safe. CPU and memory are applied through snapshot-safe setters.</p>
       </div>
     </div>
     <form method="post" action="/vms/{{ vm.name }}/edit" class="stacked-form">
@@ -100,7 +100,7 @@
     <div class="section-title vm-section-title">
       <div>
         <h2><i class="fa-solid fa-copy"></i>Template status</h2>
-        <p class="muted">Stored in VM metadata without undefine/redefine, because snapshots are not decorative.</p>
+        <p class="muted">Stored in VM metadata without undefine/redefine.</p>
       </div>
     </div>
     <div class="template-status-card">
@@ -141,7 +141,7 @@
     <div class="section-title vm-section-title">
       <div>
         <h2><i class="fa-solid fa-network-wired"></i>Network</h2>
-        <p class="muted">Guest interfaces. VLAN handling belongs on host/libvirt bridges, not VM XML.</p>
+        <p class="muted">Guest interfaces.</p>
       </div>
       <a class="btn btn-outline-light" href="/vms/{{ vm.name }}/network"><i class="fa-solid fa-network-wired"></i>Manage NICs</a>
     </div>
@@ -298,7 +298,7 @@
   <div class="section-title vm-section-title">
     <div>
       <h2><i class="fa-solid fa-camera"></i>Snapshots</h2>
-      <p class="muted">Create, revert, and delete VM snapshots. Revert is destructive to current state, because time travel remains badly implemented.</p>
+      <p class="muted">Create, revert, and delete VM snapshots.</p>
     </div>
   </div>
   <form class="inline-form vm-snapshot-form" method="post" action="/vms/{{ vm.name }}/snapshots">
@@ -340,7 +340,7 @@
     <div class="section-title vm-section-title">
       <div>
         <h2><i class="fa-solid fa-triangle-exclamation"></i>Danger Zone</h2>
-        <p class="muted">Deletion is isolated behind a confirmation page. A shocking outbreak of good judgment.</p>
+        <p class="muted">Deletion is isolated behind a confirmation page.</p>
       </div>
       <a class="btn btn-danger" href="/vms/{{ vm.name }}/delete-confirm"><i class="fa-solid fa-trash"></i>Delete VM</a>
     </div>
