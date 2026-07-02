@@ -479,6 +479,7 @@ button.btn, .btn { width:auto; min-height:auto; }
 .backup-target-table { min-width:980px; }
 .users-table { min-width:1180px; }
 .doctor-table { min-width:860px; }
+.doctor-check-text { font-weight: bold; font-size: .88rem;}
 .admin-mini-form { min-width:13rem; }
 .admin-mini-form input,
 .admin-mini-form select { min-width:12rem; }
