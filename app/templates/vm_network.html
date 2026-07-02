@@ -1,130 +1,80 @@
 {% extends "base.html" %}
 {% block content %}
-
-<section>
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
-    <div>
-      <h2>Network Interfaces: {{ name }}</h2>
-      <p>VM NICs attach to AtlasVM networks. VLAN tags are owned by the network and inherited by the VM NIC.</p>
-    </div>
-    <form method="get" action="/vms/{{ name }}" style="margin:0;"><button type="submit">Back to VM</button></form>
-  </div>
-
-  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
-  {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
-</section>
-
-<section>
-  <h3>Current Interfaces</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>MAC</th>
-        <th>Type</th>
-        <th>Network</th>
-        <th>Model</th>
-        <th>NIC VLAN</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for iface in interfaces %}
-      <tr>
-        <td>{{ iface.index }}</td>
-        <td><code>{{ iface.mac }}</code></td>
-        <td>{{ iface.type }}</td>
-        <td>{{ iface.source }}</td>
-        <td>{{ iface.model }}</td>
-        <td>{% if iface.vlan_tag %}{{ iface.vlan_tag }}{% else %}<span class="muted">untagged</span>{% endif %}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6">No network interfaces found.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-
-<section class="grid two">
+<section class="atlas-hero vm-page-hero">
   <div>
-    <h3>Switch Existing NIC</h3>
-    <form method="post" action="/vms/{{ name }}/network">
-      <label>
-        Interface
-        <select name="mac_address" required>
-          {% for iface in interfaces %}
-          <option value="{{ iface.mac }}">{{ iface.mac }}{% if iface.source %} - current: {{ iface.source }}{% endif %}</option>
-          {% endfor %}
+    <div class="atlas-kicker"><i class="fa-solid fa-network-wired"></i> VM Networking</div>
+    <h2>Network Interfaces: {{ name }}</h2>
+    <p class="muted mb-0">VM NICs attach to AtlasVM networks. VLAN tags are owned by the network and inherited by the VM NIC.</p>
+  </div>
+  <a class="btn btn-outline-light" href="/vms/{{ name }}"><i class="fa-solid fa-arrow-right"></i>Back to VM</a>
+</section>
+
+<section class="panel atlas-panel vm-detail-card">
+  <div class="section-title"><h2><i class="fa-solid fa-ethernet"></i> Current Interfaces</h2></div>
+  <div class="resource-list nic-resource-list vm-resource-card-list">
+    {% for iface in interfaces %}
+    <div class="resource-row vm-nic-card-row">
+      <div><span class="resource-label">#</span><strong>{{ iface.index }}</strong></div>
+      <div><span class="resource-label">MAC</span><code class="wrap-code">{{ iface.mac }}</code></div>
+      <div><span class="resource-label">Type</span><strong>{{ iface.type or '-' }}</strong></div>
+      <div><span class="resource-label">Network</span><code class="wrap-code">{{ iface.source or '-' }}</code></div>
+      <div><span class="resource-label">Model</span><strong>{{ iface.model or '-' }}</strong></div>
+      <div><span class="resource-label">NIC VLAN</span>{% if iface.vlan_tag %}<span class="badge bg-warning text-dark">{{ iface.vlan_tag }}</span>{% else %}<span class="muted">untagged</span>{% endif %}</div>
+    </div>
+    {% else %}<div class="empty-cell">No network interfaces found.</div>{% endfor %}
+  </div>
+</section>
+
+<section class="grid two vm-management-grid">
+  <div class="panel atlas-panel vm-form-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-rotate"></i> Switch Existing NIC</h2></div>
+    <form method="post" action="/vms/{{ name }}/network" class="stacked-form atlas-vm-form">
+      <label>Interface
+        <select class="form-select" name="mac_address" required>
+          {% for iface in interfaces %}<option value="{{ iface.mac }}">{{ iface.mac }}{% if iface.source %} - current: {{ iface.source }}{% endif %}</option>{% endfor %}
         </select>
       </label>
-
-      <label>
-        New Network
-        <select name="network_name" required>
-          {% for net in networks %}
-          <option value="{{ net.name }}">{{ net.name }}{% if net.vlan_tag %} - VLAN {{ net.vlan_tag }}{% else %} - untagged{% endif %}</option>
-          {% endfor %}
+      <label>New Network
+        <select class="form-select" name="network_name" required>
+          {% for net in networks %}<option value="{{ net.name }}">{{ net.name }}{% if net.vlan_tag %} - VLAN {{ net.vlan_tag }}{% else %} - untagged{% endif %}</option>{% endfor %}
         </select>
       </label>
-
-      <label class="check">
-        <input name="live_switch" type="checkbox" value="true">
-        Apply live if the VM is running
-      </label>
-
-      <button type="submit">Update NIC</button>
+      <label class="check"><input class="form-check-input" name="live_switch" type="checkbox" value="true"> Apply live if the VM is running</label>
+      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-rotate"></i>Update NIC</button>
     </form>
   </div>
 
-  <div>
-    <h3>Add NIC</h3>
-    <form method="post" action="/vms/{{ name }}/network/add">
-      <label>
-        Network
-        <select name="network_name" required>
-          {% for net in networks %}
-          <option value="{{ net.name }}">{{ net.name }}{% if net.vlan_tag %} - VLAN {{ net.vlan_tag }}{% else %} - untagged{% endif %}</option>
-          {% endfor %}
+  <div class="panel atlas-panel vm-form-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-plus"></i> Add NIC</h2></div>
+    <form method="post" action="/vms/{{ name }}/network/add" class="stacked-form atlas-vm-form">
+      <label>Network
+        <select class="form-select" name="network_name" required>
+          {% for net in networks %}<option value="{{ net.name }}">{{ net.name }}{% if net.vlan_tag %} - VLAN {{ net.vlan_tag }}{% else %} - untagged{% endif %}</option>{% endfor %}
         </select>
       </label>
-
-      <label>
-        Model
-        <select name="model_type">
+      <label>Model
+        <select class="form-select" name="model_type">
           <option value="virtio" selected>virtio</option>
           <option value="e1000e">e1000e</option>
           <option value="rtl8139">rtl8139</option>
         </select>
       </label>
-
-      <label class="check">
-        <input name="apply_live" type="checkbox" value="true">
-        Apply live if the VM is running
-      </label>
-
-      <button type="submit">Add NIC</button>
+      <label class="check"><input class="form-check-input" name="apply_live" type="checkbox" value="true"> Apply live if the VM is running</label>
+      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i>Add NIC</button>
     </form>
   </div>
 </section>
 
-<section>
-  <h3>Remove NIC</h3>
-  <form method="post" action="/vms/{{ name }}/network/remove">
-    <label>
-      Interface
-      <select name="mac_address" required>
-        {% for iface in interfaces %}
-        <option value="{{ iface.mac }}">{{ iface.mac }}{% if iface.source %} - {{ iface.source }}{% endif %}</option>
-        {% endfor %}
+<section class="panel atlas-panel danger-zone vm-form-panel">
+  <div class="section-title"><h2><i class="fa-solid fa-trash"></i> Remove NIC</h2></div>
+  <form method="post" action="/vms/{{ name }}/network/remove" class="stacked-form atlas-vm-form">
+    <label>Interface
+      <select class="form-select" name="mac_address" required>
+        {% for iface in interfaces %}<option value="{{ iface.mac }}">{{ iface.mac }}{% if iface.source %} - {{ iface.source }}{% endif %}</option>{% endfor %}
       </select>
     </label>
-
-    <label class="check">
-      <input name="apply_live" type="checkbox" value="true">
-      Apply live if the VM is running
-    </label>
-
-    <button class="danger" type="submit">Remove NIC</button>
+    <label class="check"><input class="form-check-input" name="apply_live" type="checkbox" value="true"> Apply live if the VM is running</label>
+    <button class="btn btn-danger" type="submit"><i class="fa-solid fa-trash"></i>Remove NIC</button>
   </form>
 </section>
-
 {% endblock %}

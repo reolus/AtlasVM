@@ -1,16 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <div class="section-title"><h2>Metrics: {{ metrics.name }}</h2><a class="button muted" href="/vms/{{ metrics.name }}">Back to VM</a></div>
-  <div class="grid cards">
-    <div class="card"><strong>State</strong><span class="pill {{ metrics.state }}">{{ metrics.state }}</span></div>
-    <div class="card"><strong>vCPU</strong><span>{{ metrics.vcpus or '' }}</span></div>
-    <div class="card"><strong>Memory</strong><span>{{ metrics.memory_mb or '' }} MB</span></div>
-    <div class="card"><strong>CPU Time</strong><small>{{ metrics.cpu_time_ns or 'n/a' }} ns</small></div>
+<section class="atlas-hero vm-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-chart-line"></i> VM Metrics</div>
+    <h2>{{ metrics.name }}</h2>
+    <p class="muted mb-0">Live-ish counters from libvirt. Not prophecy, just telemetry trying its best.</p>
   </div>
+  <a class="btn btn-outline-light" href="/vms/{{ metrics.name }}"><i class="fa-solid fa-arrow-right"></i>Back to VM</a>
 </section>
-<section class="grid two">
-  <div><h2>Disk I/O</h2><table><thead><tr><th>Device</th><th>Read</th><th>Write</th><th>Path</th></tr></thead><tbody>{% for d in metrics.disks %}<tr><td>{{ d.device }}</td><td>{{ d.rd_bytes or 0 }} bytes</td><td>{{ d.wr_bytes or 0 }} bytes</td><td><code>{{ d.path }}</code></td></tr>{% else %}<tr><td colspan="4">No disk metrics available.</td></tr>{% endfor %}</tbody></table></div>
-  <div><h2>Network I/O</h2><table><thead><tr><th>Device</th><th>RX</th><th>TX</th><th>MAC</th></tr></thead><tbody>{% for n in metrics.interfaces %}<tr><td>{{ n.device or 'inactive' }}</td><td>{{ n.rx_bytes or 0 }} bytes</td><td>{{ n.tx_bytes or 0 }} bytes</td><td>{{ n.mac }}</td></tr>{% else %}<tr><td colspan="4">No network metrics available.</td></tr>{% endfor %}</tbody></table></div>
+
+<section class="atlas-stat-grid mb-3">
+  <div class="atlas-stat-card"><span class="atlas-stat-icon {{ 'success' if metrics.state == 'running' else 'slate' }}"><i class="fa-solid {{ 'fa-play' if metrics.state == 'running' else 'fa-stop' }}"></i></span><div><span>State</span><strong>{{ metrics.state }}</strong><small>power state</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon info"><i class="fa-solid fa-microchip"></i></span><div><span>vCPU</span><strong>{{ metrics.vcpus or '-' }}</strong><small>allocated cores</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon purple"><i class="fa-solid fa-memory"></i></span><div><span>Memory</span><strong>{{ metrics.memory_mb or '-' }}</strong><small>MB</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon warn"><i class="fa-solid fa-clock"></i></span><div><span>CPU Time</span><strong>{{ metrics.cpu_time_ns or 'n/a' }}</strong><small>nanoseconds</small></div></div>
+</section>
+
+<section class="grid two vm-management-grid">
+  <div class="panel atlas-panel vm-detail-card">
+    <div class="section-title"><h2><i class="fa-solid fa-hard-drive"></i> Disk I/O</h2></div>
+    <div class="table-responsive atlas-table-wrap"><table class="table table-hover atlas-data-table vm-compact-table"><thead><tr><th>Device</th><th>Read</th><th>Write</th><th>Path</th></tr></thead><tbody>{% for d in metrics.disks %}<tr><td>{{ d.device }}</td><td>{{ d.rd_bytes or 0 }} bytes</td><td>{{ d.wr_bytes or 0 }} bytes</td><td><code>{{ d.path }}</code></td></tr>{% else %}<tr><td colspan="4" class="empty-cell">No disk metrics available.</td></tr>{% endfor %}</tbody></table></div>
+  </div>
+  <div class="panel atlas-panel vm-detail-card">
+    <div class="section-title"><h2><i class="fa-solid fa-network-wired"></i> Network I/O</h2></div>
+    <div class="table-responsive atlas-table-wrap"><table class="table table-hover atlas-data-table vm-compact-table"><thead><tr><th>Device</th><th>RX</th><th>TX</th><th>MAC</th></tr></thead><tbody>{% for n in metrics.interfaces %}<tr><td>{{ n.device or 'inactive' }}</td><td>{{ n.rx_bytes or 0 }} bytes</td><td>{{ n.tx_bytes or 0 }} bytes</td><td><code>{{ n.mac }}</code></td></tr>{% else %}<tr><td colspan="4" class="empty-cell">No network metrics available.</td></tr>{% endfor %}</tbody></table></div>
+  </div>
 </section>
 {% endblock %}

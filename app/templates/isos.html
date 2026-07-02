@@ -1,15 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <div class="section-title"><h2>ISO Library</h2><span><code>{{ iso_path }}</code></span></div>
-  <form method="post" action="/isos/upload" enctype="multipart/form-data" class="inline-form">
-    <input type="file" name="file" accept=".iso,.img" required>
-    <button>Upload ISO</button>
+<section class="atlas-hero vm-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-compact-disc"></i> ISO Library</div>
+    <h2>Install Media</h2>
+    <p class="muted mb-0"><code>{{ iso_path }}</code></p>
+  </div>
+  <a class="btn btn-outline-light" href="/vms"><i class="fa-solid fa-desktop"></i>VM Inventory</a>
+</section>
+
+<section class="panel atlas-panel vm-form-panel">
+  <div class="section-title"><h2><i class="fa-solid fa-cloud-arrow-up"></i> Upload ISO</h2></div>
+  <form method="post" action="/isos/upload" enctype="multipart/form-data" class="inline-form vm-upload-form">
+    <input class="form-control" type="file" name="file" accept=".iso,.img" required>
+    <button class="btn btn-primary" type="submit"><i class="fa-solid fa-cloud-arrow-up"></i>Upload ISO</button>
   </form>
-  <table><thead><tr><th>Name</th><th>Size</th><th>Path</th><th>Actions</th></tr></thead><tbody>
+</section>
+
+<section class="panel atlas-panel vm-detail-card">
+  <div class="section-title"><h2><i class="fa-solid fa-compact-disc"></i> Available Media</h2></div>
+  <div class="table-responsive atlas-table-wrap"><table class="table table-hover atlas-data-table"><thead><tr><th>Name</th><th>Size</th><th>Path</th><th>Actions</th></tr></thead><tbody>
     {% for iso in isos %}
-      <tr><td>{{ iso.name }}</td><td>{{ iso.size_mb }} MB</td><td><code>{{ iso.path }}</code></td><td><form method="post" action="/isos/{{ iso.name }}/delete"><button class="danger">Delete</button></form></td></tr>
-    {% else %}<tr><td colspan="4">No ISOs found. Download one, because VMs rarely install themselves out of sheer optimism.</td></tr>{% endfor %}
-  </tbody></table>
+      <tr><td><div class="atlas-name-cell"><i class="fa-solid fa-compact-disc text-warning"></i><div><strong>{{ iso.name }}</strong><small>ISO / IMG media</small></div></div></td><td>{{ iso.size_mb }} MB</td><td><code>{{ iso.path }}</code></td><td><form method="post" action="/isos/{{ iso.name }}/delete" onsubmit="return confirm('Delete ISO {{ iso.name }}?');"><button class="btn btn-danger btn-sm" type="submit"><i class="fa-solid fa-trash"></i>Delete</button></form></td></tr>
+    {% else %}<tr><td colspan="4" class="empty-cell">No ISOs found. Download one, because VMs rarely install themselves out of sheer optimism.</td></tr>{% endfor %}
+  </tbody></table></div>
 </section>
 {% endblock %}

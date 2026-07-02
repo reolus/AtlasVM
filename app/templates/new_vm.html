@@ -1,45 +1,71 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="form-card">
-  <h2>Create Virtual Machine</h2>
-  <form method="post" action="/vms/new">
-    <label>Name <input name="name" required placeholder="debian-test-01" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}"></label>
-    <label>Description <input name="description" placeholder="Test VM, installer, workload, or whatever purpose this poor thing now has"></label>
-    <div class="grid three">
-      <label>Memory MB <input name="memory_mb" type="number" value="2048" min="256" required></label>
-      <label>vCPUs <input name="vcpus" type="number" value="2" min="1" required></label>
-      <label>Disk GB <input name="disk_gb" type="number" value="20" min="1" required></label>
+<section class="atlas-hero vm-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-plus"></i> VM Provisioning</div>
+    <h2>Create Virtual Machine</h2>
+    <p class="muted mb-0">Create a local KVM/libvirt guest on this single AtlasVM Community Edition node.</p>
+  </div>
+  <a class="btn btn-outline-light" href="/vms"><i class="fa-solid fa-desktop"></i>Back to VM Inventory</a>
+</section>
+
+<section class="panel atlas-panel vm-form-panel">
+  <div class="section-title vm-section-title">
+    <div>
+      <h2><i class="fa-solid fa-gears"></i> Guest Configuration</h2>
+      <p class="muted mb-0">Choose the basic resources, install media, storage pool, and network for the new guest.</p>
     </div>
+  </div>
+  <form method="post" action="/vms/new" class="stacked-form atlas-vm-form">
+    <div class="grid two">
+      <label>Name <input class="form-control" name="name" required placeholder="debian-test-01" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}"></label>
+      <label>Description <input class="form-control" name="description" placeholder="Purpose, owner, workload, or whatever destiny awaits this VM"></label>
+    </div>
+
+    <div class="atlas-resource-choice-grid">
+      <label><span><i class="fa-solid fa-memory"></i> Memory MB</span><input class="form-control" name="memory_mb" type="number" value="2048" min="256" required></label>
+      <label><span><i class="fa-solid fa-microchip"></i> vCPUs</span><input class="form-control" name="vcpus" type="number" value="2" min="1" required></label>
+      <label><span><i class="fa-solid fa-database"></i> Disk GB</span><input class="form-control" name="disk_gb" type="number" value="20" min="1" required></label>
+    </div>
+
     <div class="grid two">
       <label>Storage Pool
-        <select name="storage_pool">
+        <select class="form-select" name="storage_pool">
         {% for pool in pools %}<option value="{{ pool.name }}" {% if pool.name == default_pool %}selected{% endif %}>{{ pool.name }} - {{ pool.display_available_gb|default(pool.available_gb) }} GB {{ pool.display_available_label|default('free') }}</option>{% endfor %}
         </select>
-        <small>LVM-thin pools show thin-pool free space, not leftover VG space. Miracles, but with math.</small>
+        <small>LVM-thin pools show thin-pool free space, not leftover VG space. Math has opinions.</small>
       </label>
       <label>Network
-        <select name="network">
+        <select class="form-select" name="network">
         {% for net in networks %}<option value="{{ net.name }}" {% if net.name == default_network %}selected{% endif %}>{{ net.name }} {% if net.bridge %}({{ net.bridge }}){% endif %}</option>{% endfor %}
         </select>
       </label>
     </div>
+
     <div class="grid two">
       <label>Installer ISO
-        <select name="iso_path">
+        <select class="form-select" name="iso_path">
           <option value="">No ISO</option>
           {% for iso in isos %}<option value="{{ iso.path }}">{{ iso.name }} - {{ iso.size_mb }} MB</option>{% endfor %}
         </select>
       </label>
       <label>Firmware
-        <select name="firmware">
+        <select class="form-select" name="firmware">
           <option value="bios">BIOS</option>
           <option value="uefi">UEFI</option>
         </select>
       </label>
     </div>
-    <label class="check"><input name="start_after_create" type="checkbox" value="true"> Start VM after creation</label>
-    <label class="check"><input name="autostart" type="checkbox" value="true"> Start VM automatically with host</label>
-    <button class="button" type="submit">Create VM</button>
+
+    <div class="vm-option-row">
+      <label class="check"><input class="form-check-input" name="start_after_create" type="checkbox" value="true"> Start VM after creation</label>
+      <label class="check"><input class="form-check-input" name="autostart" type="checkbox" value="true"> Start VM automatically with host</label>
+    </div>
+
+    <div class="action-row">
+      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-play"></i>Create VM</button>
+      <a class="btn btn-outline-light" href="/vms"><i class="fa-solid fa-xmark"></i>Cancel</a>
+    </div>
   </form>
 </section>
 {% endblock %}

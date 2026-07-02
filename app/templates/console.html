@@ -1,13 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-  <div class="section-title"><h2>Console: {{ name }}</h2><a class="button" href="/vms/{{ name }}">Back to VM</a></div>
+<section class="atlas-hero vm-page-hero">
+  <div>
+    <div class="atlas-kicker"><i class="fa-solid fa-terminal"></i> Console</div>
+    <h2>{{ name }}</h2>
+    <p class="muted mb-0">Browser console access for the guest.</p>
+  </div>
+  <a class="btn btn-outline-light" href="/vms/{{ name }}"><i class="fa-solid fa-arrow-right"></i>Back to VM</a>
+</section>
+
+<section class="panel atlas-panel vm-console-page-panel">
   {% if console_url %}
-    <p>Console proxy started. If the embedded console is blank, open it directly. Browser security, the ancient enemy of convenience, may be involved.</p>
-    <p><a class="button" target="_blank" href="{{ console_url }}">Open Console in New Tab</a></p>
-    <iframe class="console-frame" src="{{ console_url }}"></iframe>
+    <div class="section-title"><h2><i class="fa-solid fa-terminal"></i> Console Session</h2><a class="btn btn-primary" target="_blank" href="{{ console_url }}"><i class="fa-solid fa-arrow-up-right-from-square"></i>Open in New Tab</a></div>
+    <p class="muted">If the embedded console is blank, open it directly. Browser security, the ancient enemy of convenience, may be involved.</p>
+    <iframe class="console-frame atlas-console-frame" src="{{ console_url }}"></iframe>
   {% else %}
-    <p>No console URL was provided. Start the console again from the VM details page.</p>
+    <div class="empty-cell">No console URL was provided. Start the console again from the VM details page.</div>
   {% endif %}
 </section>
 {% endblock %}

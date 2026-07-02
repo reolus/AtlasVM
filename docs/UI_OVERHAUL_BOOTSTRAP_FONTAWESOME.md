@@ -44,3 +44,22 @@ Additional static checks were performed for:
 - Jinja2 template parse validity.
 - Absence of active `/nodes` and `/api/node` routes in `app/main.py`.
 - Absence of CDN references in active app templates/static assets.
+
+## VM Associated Page Theme Pass
+
+This follow-up pass updates the VM detail satellite pages so they use the same local Bootstrap-compatible and Font Awesome-compatible AtlasVM CE theme introduced in the UI overhaul.
+
+Updated pages include:
+
+- `/vms/new` create VM form
+- `/vms/{name}` VM details polish
+- `/vms/{name}/disks` disk management
+- `/vms/{name}/network` NIC management
+- `/vms/{name}/metrics` VM metrics
+- `/vms/{name}/clone` clone confirmation/form
+- `/vms/{name}/delete-confirm` delete confirmation
+- `/templates` VM templates
+- `/isos` ISO library
+- `/vms/{name}/console` console page
+
+The patch is visual/template-focused. It does not introduce libvirt undefine/redefine flows for normal VM changes. Existing VM mutation behavior remains routed through the current service methods and route handlers.
