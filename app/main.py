@@ -26,6 +26,7 @@ from app.services.libvirt_service import LibvirtService, VMCreateRequest
 from app.services.network_phase8 import NetworkPhase8Service
 from app.services.dashboard_overview import dashboard_overview
 from app.services.vm_inventory import list_vm_inventory
+from app.services.ui_sidebar import build_sidebar_context
 from app.services.vm_disk_management import (
     add_disk_to_vm,
     get_vm_disks,
@@ -239,11 +240,14 @@ def _redirect(url: str, message: str | None = None, error: str | None = None) ->
 
 
 def _view_context(request: Request, user: str | None = None) -> dict:
+    current_path = request.url.path if request else ''
     return {
         'request': request,
         'app_name': settings.app_name,
         'current_user': user,
+        'user': user,
         'current_role': get_user_role(user) if user else None,
+        'sidebar': build_sidebar_context(current_path),
         'message': request.query_params.get('message'),
         'error': request.query_params.get('error'),
     }
@@ -369,8 +373,21 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: str = Depen
     backups = BackupService().list_backups()[:5]
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(10).all()
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(10).all()
-    return templates.TemplateResponse('dashboard.html', {
-            'dashboard': dashboard_overview(),'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'zfs': zfs, 'backups': backups, 'events': events, 'tasks': tasks, 'error': error})
+    context = _view_context(request, user)
+    context.update({
+        'dashboard': dashboard_overview(),
+        'host': host,
+        'vms': vms,
+        'pools': pools,
+        'networks': networks,
+        'isos': isos,
+        'zfs': zfs,
+        'backups': backups,
+        'events': events,
+        'tasks': tasks,
+        'error': error,
+    })
+    return templates.TemplateResponse('dashboard.html', context)
 
 
 @app.get('/vms/new', response_class=HTMLResponse)
@@ -1716,6 +1733,35 @@ def doctor_page(request: Request, user: str = Depends(require_user)):
     return templates.TemplateResponse('doctor.html', {'request': request, 'app_name': settings.app_name, 'checks': checks,
             'user': user,
         })
+
+
+
+@app.get('/admin', response_class=HTMLResponse)
+def admin_overview_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_admin)):
+    try:
+        user_count = db.query(UserAccount).count()
+    except Exception:
+        user_count = 0
+    try:
+        audit_count = db.query(EventLog).count()
+    except Exception:
+        audit_count = 0
+    try:
+        pending_tasks = db.query(TaskLog).filter(TaskLog.status.in_(['running', 'queued', 'waiting', 'in_progress'])).count()
+    except Exception:
+        pending_tasks = 0
+    try:
+        backup_count = len(BackupService().list_backups())
+    except Exception:
+        backup_count = 0
+    context = _view_context(request, user)
+    context.update({
+        'user_count': user_count,
+        'audit_count': audit_count,
+        'pending_tasks': pending_tasks,
+        'backup_count': backup_count,
+    })
+    return templates.TemplateResponse('admin.html', context)
 
 
 @app.get('/settings', response_class=HTMLResponse)

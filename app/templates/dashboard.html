@@ -1,56 +1,35 @@
 {% extends "base.html" %}
 {% block content %}
-{% include 'dashboard_phase9_widgets.html' %}
+{% set running_count = vms|selectattr('state','equalto','running')|list|length %}
+<section class="atlas-stat-grid mb-3">
+  <a class="atlas-stat-card" href="/vms"><span class="atlas-stat-icon success"><i class="fa-solid fa-play"></i></span><div><span>Running VMs</span><strong>{{ running_count }}</strong><small>View details <i class="fa-solid fa-arrow-right"></i></small></div></a>
+  <a class="atlas-stat-card" href="/vms"><span class="atlas-stat-icon slate"><i class="fa-solid fa-stop"></i></span><div><span>Stopped VMs</span><strong>{{ (vms|length) - running_count }}</strong><small>View details <i class="fa-solid fa-arrow-right"></i></small></div></a>
+  <a class="atlas-stat-card" href="/storage"><span class="atlas-stat-icon info"><i class="fa-solid fa-database"></i></span><div><span>Storage Pools</span><strong>{{ pools|length }}</strong><small>View details <i class="fa-solid fa-arrow-right"></i></small></div></a>
+  <a class="atlas-stat-card" href="/networks"><span class="atlas-stat-icon purple"><i class="fa-solid fa-network-wired"></i></span><div><span>Networks</span><strong>{{ networks|length }}</strong><small>View details <i class="fa-solid fa-arrow-right"></i></small></div></a>
+  <a class="atlas-stat-card" href="/backups"><span class="atlas-stat-icon success"><i class="fa-solid fa-shield-halved"></i></span><div><span>Backup Status</span><strong>Ready</strong><small>View details <i class="fa-solid fa-arrow-right"></i></small></div></a>
+  <a class="atlas-stat-card" href="/doctor"><span class="atlas-stat-icon warn"><i class="fa-solid fa-triangle-exclamation"></i></span><div><span>Doctor</span><strong>Check</strong><small>Run checks <i class="fa-solid fa-arrow-right"></i></small></div></a>
+</section>
 
-<section>
-  <div class="section-title"><h2>Host Overview</h2><a class="button muted" href="/doctor">Run Doctor</a></div>
-  <div class="grid cards">
-    <div class="card"><strong>CPU</strong><span>{{ host.cpu_percent }}%</span><small>{{ host.cpu_count }} logical CPUs</small></div>
-    <div class="card"><strong>Memory</strong><span>{{ host.memory_percent }}%</span><small>{{ host.memory_used_mb }} / {{ host.memory_total_mb }} MB</small></div>
-    <div class="card"><strong>Root Disk</strong><span>{{ host.disk_percent }}%</span><small>{{ host.disk_used_gb }} / {{ host.disk_total_gb }} GB</small></div>
-    <div class="card"><strong>VMs</strong><span>{{ vms|length }}</span><small>{{ vms|selectattr('state','equalto','running')|list|length }} running</small></div>
+<section class="grid two atlas-dashboard-grid">
+  <div class="panel atlas-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-server"></i> Host Overview</h2><a class="atlas-link" href="/doctor">Run Doctor <i class="fa-solid fa-arrow-right"></i></a></div>
+    <div class="atlas-metric-list">
+      <div><span>CPU Usage</span><strong>{{ host.cpu_percent }}%</strong><div class="atlas-progress"><span style="width: {{ host.cpu_percent }}%"></span></div><small>{{ host.cpu_count }} logical CPUs</small></div>
+      <div><span>Memory Usage</span><strong>{{ host.memory_percent }}%</strong><div class="atlas-progress warning"><span style="width: {{ host.memory_percent }}%"></span></div><small>{{ host.memory_used_mb }} / {{ host.memory_total_mb }} MB</small></div>
+      <div><span>Root Disk</span><strong>{{ host.disk_percent }}%</strong><div class="atlas-progress"><span style="width: {{ host.disk_percent }}%"></span></div><small>{{ host.disk_used_gb }} / {{ host.disk_total_gb }} GB</small></div>
+    </div>
   </div>
-</section>
-
-<section>
-  <div class="section-title"><h2>ZFS Health</h2><a href="/zfs">Manage ZFS</a></div>
-  {% if zfs.error %}<div class="alert">{{ zfs.error }}</div>{% endif %}
-  {% for warning in zfs.warnings or [] %}<div class="alert {{ 'failed' if warning.severity == 'critical' else 'warning' }}"><strong>{{ warning.target }}:</strong> {{ warning.message }}</div>{% endfor %}
-  <table><thead><tr><th>Pool</th><th>Health</th><th>Capacity</th><th>Size</th><th>Allocated</th><th>Free</th></tr></thead><tbody>
-    {% for pool in zfs.pools or [] %}
-      <tr><td>{{ pool.name }}</td><td><span class="pill {{ 'success' if pool.health == 'ONLINE' else 'failed' }}">{{ pool.health }}</span></td><td>{{ pool.capacity }}</td><td>{{ pool.size }}</td><td>{{ pool.allocated }}</td><td>{{ pool.free }}</td></tr>
-    {% else %}<tr><td colspan="6">No ZFS pool data. Either ZFS is absent or it is being dramatic.</td></tr>{% endfor %}
-  </tbody></table>
-</section>
-
-<section>
-  <div class="section-title"><h2>Virtual Machines</h2><a class="button" href="/vms/new">Create VM</a></div>
-  <table><thead><tr><th>Name</th><th>State</th><th>vCPU</th><th>Memory</th><th>Autostart</th></tr></thead><tbody>
-    {% for vm in vms %}
-      <tr><td><a href="/vms/{{ vm.name }}">{{ vm.name }}</a></td><td><span class="pill {{ vm.state }}">{{ vm.state }}</span></td><td>{{ vm.vcpus }}</td><td>{{ vm.memory_mb }} MB</td><td>{{ vm.autostart }}</td></tr>
-    {% else %}<tr><td colspan="5">No VMs found. The void is very scalable.</td></tr>{% endfor %}
-  </tbody></table>
-</section>
-
-<section class="grid two">
-  <div>
-    <div class="section-title"><h2>Recent Tasks</h2><a href="/tasks">View all</a></div>
-    <table><thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Status</th></tr></thead><tbody>
-      {% for task in tasks %}<tr><td>{{ task.created_at }}</td><td>{{ task.action }}</td><td>{{ task.target }}</td><td><span class="pill {{ task.status }}">{{ task.status }}</span></td></tr>{% else %}<tr><td colspan="4">No tasks yet.</td></tr>{% endfor %}
-    </tbody></table>
+  <div class="panel atlas-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-list-check"></i> Recent Tasks</h2><a class="atlas-link" href="/tasks">View all tasks <i class="fa-solid fa-arrow-right"></i></a></div>
+    <div class="table-responsive"><table class="table table-hover"><thead><tr><th>Task</th><th>Target</th><th>Status</th><th>Started</th></tr></thead><tbody>{% for task in tasks %}<tr><td>{{ task.action }}</td><td>{{ task.target }}</td><td><span class="badge {{ 'bg-success' if task.status == 'completed' else 'bg-info' }}">{{ task.status }}</span></td><td>{{ task.created_at }}</td></tr>{% else %}<tr><td colspan="4">No tasks yet.</td></tr>{% endfor %}</tbody></table></div>
   </div>
-  <div>
-    <div class="section-title"><h2>Recent Backups</h2><a href="/backups">View all</a></div>
-    <table><thead><tr><th>VM</th><th>Created</th><th>Archive</th></tr></thead><tbody>
-      {% for backup in backups %}<tr><td>{{ backup.vm_name }}</td><td>{{ backup.created_at }}</td><td>{{ 'yes' if backup.archive else 'no' }}</td></tr>{% else %}<tr><td colspan="3">No backups recorded.</td></tr>{% endfor %}
-    </tbody></table>
+  <div class="panel atlas-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-box-archive"></i> Recent Backups</h2><a class="atlas-link" href="/backups">View all backups <i class="fa-solid fa-arrow-right"></i></a></div>
+    <div class="table-responsive"><table class="table table-hover"><thead><tr><th>VM</th><th>Created</th><th>Archive</th></tr></thead><tbody>{% for backup in backups %}<tr><td>{{ backup.vm_name }}</td><td>{{ backup.created_at }}</td><td><span class="badge bg-success">{{ 'yes' if backup.archive else 'no' }}</span></td></tr>{% else %}<tr><td colspan="3">No backups recorded.</td></tr>{% endfor %}</tbody></table></div>
   </div>
-</section>
-
-<section>
-  <div class="section-title"><h2>Recent Audit Events</h2><a href="/events">View all</a></div>
-  <table><thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Message</th></tr></thead><tbody>
-    {% for event in events %}<tr><td>{{ event.created_at }}</td><td>{{ event.action }}</td><td>{{ event.target }}</td><td>{{ event.message }}</td></tr>{% else %}<tr><td colspan="4">No audit events yet.</td></tr>{% endfor %}
-  </tbody></table>
+  <div class="panel atlas-panel">
+    <div class="section-title"><h2><i class="fa-solid fa-file-lines"></i> Recent Audit Events</h2><a class="atlas-link" href="/audit">View all events <i class="fa-solid fa-arrow-right"></i></a></div>
+    <div class="table-responsive"><table class="table table-hover"><thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Message</th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at }}</td><td>{{ event.action }}</td><td>{{ event.target }}</td><td>{{ event.message }}</td></tr>{% else %}<tr><td colspan="4">No audit events yet.</td></tr>{% endfor %}</tbody></table></div>
+  </div>
 </section>
 {% endblock %}

@@ -1,204 +1,42 @@
 {% extends "base.html" %}
 {% block content %}
-
-<section class="hero-card vm-list-hero">
-  <div>
-    <div class="eyebrow">AtlasVM Community Edition</div>
-    <h1>Virtual Machines</h1>
-    <p class="muted">Local VM inventory for this host. Single-node virtualization management with AtlasVM Community Edition.</p>
-  </div>
-  <div class="hero-actions">
-    <a class="button" href="/vms/new">Create VM</a>
-  </div>
+<section class="atlas-stat-grid mb-3">
+  <div class="atlas-stat-card"><span class="atlas-stat-icon info"><i class="fa-solid fa-desktop"></i></span><div><span>Total VMs</span><strong>{{ inventory.total }}</strong><small>on this host</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon success"><i class="fa-solid fa-play"></i></span><div><span>Running</span><strong>{{ inventory.running }}</strong><small>currently online</small></div></div>
+  <div class="atlas-stat-card"><span class="atlas-stat-icon slate"><i class="fa-solid fa-stop"></i></span><div><span>Offline</span><strong>{{ inventory.offline }}</strong><small>shut off or unavailable</small></div></div>
+  <a class="atlas-stat-card" href="/vms/new"><span class="atlas-stat-icon warn"><i class="fa-solid fa-plus"></i></span><div><span>Create</span><strong>New VM</strong><small>Launch wizard</small></div></a>
 </section>
-
-{% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
-{% if message %}<div class="alert success">{{ message }}</div>{% endif %}
-
-<section class="stat-grid vm-kpi-grid">
-  <div class="stat-card vm-kpi-card">
-    <span>Total VMs</span>
-    <strong>{{ inventory.total }}</strong>
-    <small>on this host</small>
-  </div>
-  <div class="stat-card vm-kpi-card">
-    <span>Running</span>
-    <strong class="text-success">{{ inventory.running }}</strong>
-    <small>currently online</small>
-  </div>
-  <div class="stat-card vm-kpi-card">
-    <span>Offline</span>
-    <strong class="text-danger">{{ inventory.offline }}</strong>
-    <small>shut off or unavailable</small>
-  </div>
-</section>
-
-<section class="panel vm-console-panel">
+<section class="panel atlas-panel vm-console-panel">
   <div class="section-title vm-section-title">
-    <div>
-      <h2>Operating Console</h2>
-      <p class="muted">Filter, inspect, and jump into local VM operations without turning the list into a spreadsheet hostage situation.</p>
-    </div>
+    <div><h2><i class="fa-solid fa-desktop"></i> VM Inventory</h2><p class="muted mb-0">Manage and monitor virtual machines on this host.</p></div>
+    <div class="hero-actions"><a class="btn btn-primary" href="/vms/new"><i class="fa-solid fa-plus"></i>Create VM</a></div>
   </div>
-
-  <div class="vm-toolbar">
-    <label class="vm-search-label">
-      Search
-      <input id="vmSearch" type="search" placeholder="Search name, IP, disk, or network..." autocomplete="off">
-    </label>
-    <label>
-      State
-      <select id="vmStateFilter">
-        <option value="all">All states</option>
-        <option value="running">Running</option>
-        <option value="offline">Offline</option>
-      </select>
-    </label>
-    <button class="button secondary" type="button" id="vmClearFilters">Clear</button>
+  <div class="atlas-filterbar">
+    <div class="input-group"><span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span><input id="vmSearch" class="form-control" type="search" placeholder="Search VMs by name, IP, disk, or network..." autocomplete="off"></div>
+    <label>Power State<select id="vmStateFilter" class="form-select"><option value="all">All</option><option value="running">Running</option><option value="offline">Offline</option></select></label>
+    <button class="btn btn-outline-light" type="button" id="vmClearFilters"><i class="fa-solid fa-xmark"></i>Clear Filters</button>
   </div>
-
-  <div class="table-scroll vm-table-wrap">
-    <table class="data-table vm-inventory-table" id="vmInventoryTable">
-      <thead>
-        <tr>
-          <th class="vm-name-col">VM</th>
-          <th>State</th>
-          <th>Resources</th>
-          <th>Network</th>
-          <th>Storage</th>
-          <th class="vm-actions-col">Actions</th>
-        </tr>
-      </thead>
+  <div class="table-responsive atlas-table-wrap">
+    <table class="table table-hover atlas-data-table" id="vmInventoryTable">
+      <thead><tr><th>Name</th><th>Power State</th><th>Status</th><th>CPU</th><th>Memory</th><th>Network</th><th>Storage</th><th>Actions</th></tr></thead>
       <tbody>
-        {% for vm in inventory.vms %}
+      {% for vm in inventory.vms %}
         {% set state_text = vm.state or 'unknown' %}
         <tr class="vm-row" data-state="{{ 'running' if vm.running else 'offline' }}" data-search="{{ vm.name }} {{ vm.uuid }} {% for ip in vm.ips %}{{ ip }} {% endfor %}{% for d in vm.disks %}{{ d.source }} {{ d.target }} {{ d.format }} {% endfor %}{% for nic in vm.interfaces %}{{ nic.source }} {{ nic.mac }} {{ nic.model }} {% endfor %}">
-          <td class="vm-identity-cell">
-            <div class="vm-name-stack">
-              <a class="vm-name-link" href="/vms/{{ vm.name }}">{{ vm.name }}</a>
-              {% if vm.uuid %}<code>{{ vm.uuid }}</code>{% endif %}
-              {% if vm.autostart %}<span class="pill">autostart</span>{% endif %}
-            </div>
-          </td>
-
-          <td>
-            {% if vm.running %}
-            <span class="state-pill running">{{ state_text }}</span>
-            {% else %}
-            <span class="state-pill shutoff">{{ state_text }}</span>
-            {% endif %}
-            <div class="vm-autostart muted">Autostart: {{ "yes" if vm.autostart else "no" }}</div>
-          </td>
-
-          <td>
-            <div class="resource-stack">
-              <span><strong>{{ vm.vcpu or '-' }}</strong> vCPU</span>
-              <span>
-                <strong>
-                  {% if vm.memory %}{{ (vm.memory | int / 1024 / 1024) | round(1) }}{% else %}-{% endif %}
-                </strong> GiB RAM
-              </span>
-            </div>
-          </td>
-
-          <td class="vm-network-cell">
-            {% if vm.ips %}
-              {% for ip in vm.ips %}<code>{{ ip }}</code>{% endfor %}
-            {% else %}
-              <span class="muted">No guest IP</span>
-            {% endif %}
-            {% if vm.interfaces %}
-              <details class="vm-details-foldout">
-                <summary>{{ vm.interfaces | length }} interface(s)</summary>
-                {% for nic in vm.interfaces %}
-                <div class="foldout-line">
-                  <code>{{ nic.source or '-' }}</code>
-                  {% if nic.model %}<small>{{ nic.model }}</small>{% endif %}
-                  {% if nic.mac %}<small>{{ nic.mac }}</small>{% endif %}
-                </div>
-                {% endfor %}
-              </details>
-            {% endif %}
-          </td>
-
-          <td class="vm-storage-cell">
-            {% if vm.disks %}
-              <strong>{{ vm.disks | length }}</strong> device(s)
-              <details class="vm-details-foldout">
-                <summary>Show disks</summary>
-                {% for d in vm.disks %}
-                <div class="foldout-line">
-                  <span><strong>{{ d.target or d.device or 'disk' }}</strong> {{ d.format or '' }}</span>
-                  {% if d.source %}<code>{{ d.source }}</code>{% endif %}
-                </div>
-                {% endfor %}
-              </details>
-            {% else %}
-              <span class="muted">No disks reported</span>
-            {% endif %}
-          </td>
-
-          <td class="vm-action-cell">
-            <div class="action-cluster">
-              <a class="button compact" href="/vms/{{ vm.name }}">Open</a>
-              {% if vm.running %}
-              <a class="button compact secondary" href="/vms/{{ vm.name }}/console">Console</a>
-              <form method="post" action="/ui/vms/{{ vm.name }}/shutdown" onsubmit="return confirm('Gracefully shut down {{ vm.name }}?');"><button class="compact secondary" type="submit">Shutdown</button></form>
-              {% else %}
-              <form method="post" action="/ui/vms/{{ vm.name }}/start" onsubmit="return confirm('Start {{ vm.name }}?');"><button class="compact" type="submit">Start</button></form>
-              {% endif %}
-              <a class="button compact secondary" href="/vms/{{ vm.name }}/clone">Clone</a>
-            </div>
-          </td>
+          <td><div class="atlas-name-cell"><i class="fa-solid {{ 'fa-desktop text-success' if vm.running else 'fa-stop text-muted' }}"></i><div><a class="vm-name-link" href="/vms/{{ vm.name }}">{{ vm.name }}</a>{% if vm.uuid %}<small>{{ vm.uuid }}</small>{% endif %}</div></div></td>
+          <td>{% if vm.running %}<span class="badge bg-success"><i class="fa-solid fa-play"></i>{{ state_text }}</span>{% else %}<span class="badge bg-secondary"><i class="fa-solid fa-stop"></i>{{ state_text }}</span>{% endif %}</td>
+          <td>{% if vm.running %}<span class="text-success"><i class="fa-solid fa-circle"></i> Online</span>{% else %}<span class="text-muted"><i class="fa-solid fa-circle"></i> Offline</span>{% endif %}</td>
+          <td><strong>{{ vm.vcpu or '-' }}</strong><small> cores</small></td>
+          <td>{% if vm.memory %}{{ (vm.memory | int / 1024 / 1024) | round(1) }} GiB{% else %}-{% endif %}</td>
+          <td>{% if vm.ips %}{% for ip in vm.ips %}<code>{{ ip }}</code>{% endfor %}{% else %}<span class="muted">No guest IP</span>{% endif %}<small>{{ vm.interfaces|length }} interface(s)</small></td>
+          <td><strong>{{ vm.disks|length }}</strong> device(s)</td>
+          <td><div class="action-cluster"><a class="btn btn-sm btn-outline-light" href="/vms/{{ vm.name }}"><i class="fa-solid fa-eye"></i>Open</a>{% if vm.running %}<a class="btn btn-sm btn-outline-info" href="/vms/{{ vm.name }}/console"><i class="fa-solid fa-terminal"></i>Console</a><form method="post" action="/ui/vms/{{ vm.name }}/shutdown" onsubmit="return confirm('Gracefully shut down {{ vm.name }}?');"><button class="btn btn-sm btn-outline-warning" type="submit"><i class="fa-solid fa-power-off"></i>Shutdown</button></form>{% else %}<form method="post" action="/ui/vms/{{ vm.name }}/start" onsubmit="return confirm('Start {{ vm.name }}?');"><button class="btn btn-sm btn-primary" type="submit"><i class="fa-solid fa-play"></i>Start</button></form>{% endif %}<a class="btn btn-sm btn-outline-light" href="/vms/{{ vm.name }}/clone"><i class="fa-solid fa-copy"></i>Clone</a></div></td>
         </tr>
-        {% else %}
-        <tr><td class="empty-cell" colspan="6">No local VMs found on this host.</td></tr>
-        {% endfor %}
+      {% else %}<tr><td class="empty-cell" colspan="8">No local VMs found on this host.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>
   <div class="vm-table-footer muted"><span id="vmVisibleCount">{{ inventory.vms | length }}</span> visible of {{ inventory.vms | length }} VM(s)</div>
 </section>
-
-<script>
-(function () {
-  const search = document.getElementById('vmSearch');
-  const stateFilter = document.getElementById('vmStateFilter');
-  const clear = document.getElementById('vmClearFilters');
-  const rows = Array.from(document.querySelectorAll('#vmInventoryTable tbody tr.vm-row'));
-  const count = document.getElementById('vmVisibleCount');
-
-  function applyFilters() {
-    const q = (search && search.value || '').trim().toLowerCase();
-    const state = stateFilter ? stateFilter.value : 'all';
-    let visible = 0;
-
-    rows.forEach(function (row) {
-      const text = (row.dataset.search || '').toLowerCase();
-      const rowState = row.dataset.state || '';
-      const matchText = !q || text.indexOf(q) !== -1;
-      const matchState = state === 'all' || rowState === state;
-      const show = matchText && matchState;
-      row.hidden = !show;
-      if (show) visible += 1;
-    });
-
-    if (count) count.textContent = String(visible);
-  }
-
-  [search, stateFilter].forEach(function (el) {
-    if (el) el.addEventListener('input', applyFilters);
-    if (el) el.addEventListener('change', applyFilters);
-  });
-
-  if (clear) {
-    clear.addEventListener('click', function () {
-      if (search) search.value = '';
-      if (stateFilter) stateFilter.value = 'all';
-      applyFilters();
-    });
-  }
-})();
-</script>
-
+<script>(function(){const search=document.getElementById('vmSearch');const stateFilter=document.getElementById('vmStateFilter');const clear=document.getElementById('vmClearFilters');const rows=Array.from(document.querySelectorAll('#vmInventoryTable tbody tr.vm-row'));const count=document.getElementById('vmVisibleCount');function applyFilters(){const q=(search&&search.value||'').trim().toLowerCase();const state=stateFilter?stateFilter.value:'all';let visible=0;rows.forEach(function(row){const text=(row.dataset.search||'').toLowerCase();const rowState=row.dataset.state||'';const show=(!q||text.indexOf(q)!==-1)&&(state==='all'||rowState===state);row.hidden=!show;if(show)visible+=1;});if(count)count.textContent=String(visible);}[search,stateFilter].forEach(function(el){if(el){el.addEventListener('input',applyFilters);el.addEventListener('change',applyFilters);}});if(clear){clear.addEventListener('click',function(){if(search)search.value='';if(stateFilter)stateFilter.value='all';applyFilters();});}})();</script>
 {% endblock %}

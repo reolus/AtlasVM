@@ -13,10 +13,16 @@
   <link rel="icon" type="image/png" sizes="48x48" href="/static/favicon-48x48.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
   <link rel="manifest" href="/static/site.webmanifest">
+  <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js" defer></script>
 </head>
 <body>
   {% set current_path = request.url.path if request is defined else '' %}
+  {% set sb = sidebar if sidebar is defined else {} %}
+  {% set active_section = sb.get('active','dashboard') %}
+  {% set node_name = sb.get('host_name','atlas-node-01') %}
   {% set page_title = 'Dashboard' %}
   {% set page_hint = 'Host overview and virtualization health' %}
   {% if current_path.startswith('/vms') or current_path.startswith('/ui/vms') %}
@@ -24,10 +30,13 @@
     {% set page_hint = 'Manage guests, power state, hardware, snapshots, and backups' %}
   {% elif current_path.startswith('/storage') %}
     {% set page_title = 'Storage' %}
-    {% set page_hint = 'Pools, volumes, capacity, and backend health' %}
+    {% set page_hint = 'Pools, mounts, iSCSI, SMB, NFS, ZFS, and capacity' %}
   {% elif current_path.startswith('/networks') %}
-    {% set page_title = 'Networks' %}
-    {% set page_hint = 'Libvirt networks, bridges, and VM connectivity' %}
+    {% set page_title = 'Network' %}
+    {% set page_hint = 'Virtual networks, bridges, VLANs, and interfaces' %}
+  {% elif current_path.startswith('/admin') %}
+    {% set page_title = 'Admin Overview' %}
+    {% set page_hint = 'Administration, diagnostics, users, and operations' %}
   {% elif current_path.startswith('/templates') %}
     {% set page_title = 'Templates' %}
     {% set page_hint = 'Reusable VM images and clone sources' %}
@@ -49,7 +58,7 @@
   {% elif current_path.startswith('/doctor') %}
     {% set page_title = 'Doctor' %}
     {% set page_hint = 'Validation checks and repair guidance' %}
-  {% elif current_path.startswith('/audit') %}
+  {% elif current_path.startswith('/audit') or current_path.startswith('/events') %}
     {% set page_title = 'Audit' %}
     {% set page_hint = 'Security and operational event history' %}
   {% elif current_path.startswith('/settings') %}
@@ -58,62 +67,157 @@
   {% elif current_path.startswith('/users') %}
     {% set page_title = 'Users' %}
     {% set page_hint = 'Accounts, roles, and access control' %}
-  {% elif current_path.startswith('/login') %}
-    {% set page_title = 'Login' %}
-    {% set page_hint = 'Sign in to AtlasVM Community Edition' %}
   {% endif %}
 
-  <div class="app-shell">
-    <aside class="sidebar">
-      <a class="brand" href="/" aria-label="AtlasVM Community Edition dashboard">
-        <img src="/static/atlasvm-logo.png" alt="AtlasVM CE">
-      </a>
-      <nav class="side-nav" aria-label="Primary navigation">
-        <a class="{{ 'active' if current_path == '/' else '' }}" href="/">Dashboard</a>
-        <a class="{{ 'active' if current_path.startswith('/vms') or current_path.startswith('/ui/vms') else '' }}" href="/vms">Virtual Machines</a>
-        <a class="{{ 'active' if current_path.startswith('/storage') else '' }}" href="/storage">Storage</a>
-        <a class="{{ 'active' if current_path.startswith('/networks') else '' }}" href="/networks">Networks</a>
-        <a class="{{ 'active' if current_path.startswith('/templates') else '' }}" href="/templates">Templates</a>
-        <a class="{{ 'active' if current_path.startswith('/isos') else '' }}" href="/isos">ISOs</a>
-        <a class="{{ 'active' if current_path.startswith('/backups') else '' }}" href="/backups">Backups</a>
-        <a class="{{ 'active' if current_path.startswith('/tasks') else '' }}" href="/tasks">Tasks</a>
-        <a class="{{ 'active' if current_path.startswith('/host/network') else '' }}" href="/host/network">Host Network</a>
-        <a class="{{ 'active' if current_path.startswith('/zfs') else '' }}" href="/zfs">ZFS</a>
-        <a class="{{ 'active' if current_path.startswith('/doctor') else '' }}" href="/doctor">Doctor</a>
-        <a class="{{ 'active' if current_path.startswith('/audit') else '' }}" href="/audit">Audit</a>
-        <a class="{{ 'active' if current_path.startswith('/settings') else '' }}" href="/settings">Settings</a>
-        <a class="{{ 'active' if current_path.startswith('/users') else '' }}" href="/users">Users</a>
-      </nav>
-	  <div class="sidebar-footer">
-        <div class="sidebar-company">Rock Bluffs Labs, LLC</div>
+  <div class="atlas-app-shell">
+    <aside class="atlas-sidebar" aria-label="AtlasVM sidebar">
+      <div class="atlas-sidebar-top">
+        <a class="atlas-brand" href="/" aria-label="AtlasVM Community Edition dashboard">
+          <img src="/static/atlasvm-logo.png" alt="AtlasVM Community Edition">
+        </a>
+        <div class="atlas-product-tagline">Single-node virtualization management</div>
+
+        <nav class="atlas-primary-nav" aria-label="Primary navigation">
+          <a class="atlas-primary-link {{ 'active' if active_section == 'dashboard' else '' }}" href="/"><i class="fa-solid fa-house"></i><span>Dashboard</span></a>
+          <a class="atlas-primary-link {{ 'active' if active_section == 'vm' else '' }}" href="/vms"><i class="fa-solid fa-desktop"></i><span>VM</span></a>
+          <a class="atlas-primary-link {{ 'active' if active_section == 'network' else '' }}" href="/networks"><i class="fa-solid fa-network-wired"></i><span>Network</span></a>
+          <a class="atlas-primary-link {{ 'active' if active_section == 'storage' else '' }}" href="/storage"><i class="fa-solid fa-database"></i><span>Storage</span></a>
+          <a class="atlas-primary-link {{ 'active' if active_section == 'admin' else '' }}" href="/admin"><i class="fa-solid fa-shield-halved"></i><span>Admin</span></a>
+        </nav>
       </div>
+
+      <div class="atlas-sidebar-context">
+        {% if active_section == 'vm' %}
+          <div class="atlas-context-title">VM Explorer</div>
+          <div class="atlas-tree-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" id="atlasTreeSearch" placeholder="Search VMs..."></div>
+          <div class="atlas-tree">
+            <a class="atlas-tree-node {{ 'selected' if current_path == '/vms' else '' }}" href="/vms"><i class="fa-solid fa-server"></i><span>{{ node_name }}</span><i class="fa-solid fa-circle tree-status ok"></i></a>
+            <div class="atlas-tree-children">
+              {% for vm in sb.get('vm_inventory', {}).get('vms', []) %}
+                {% set issue = (vm.disks|length == 0 and vm.interfaces|length == 0) %}
+                <a class="atlas-tree-node atlas-tree-child {{ 'selected' if sb.get('current_vm') == vm.name else '' }}" href="/vms/{{ vm.name }}" data-tree-text="{{ vm.name|lower }}">
+                  <i class="fa-solid {{ 'fa-desktop' if vm.running else 'fa-stop' }}"></i>
+                  <span>{{ vm.name }}</span>
+                  {% if issue %}<i class="fa-solid fa-triangle-exclamation tree-status warn"></i>{% elif vm.running %}<i class="fa-solid fa-circle tree-status ok"></i>{% else %}<i class="fa-solid fa-circle tree-status off"></i>{% endif %}
+                </a>
+              {% else %}
+                <div class="atlas-tree-empty">No local VMs found.</div>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="atlas-context-actions">
+            <a href="/vms/new"><i class="fa-solid fa-plus"></i>Create VM</a>
+            <a href="/templates"><i class="fa-solid fa-copy"></i>Templates</a>
+            <a href="/isos"><i class="fa-solid fa-compact-disc"></i>ISOs</a>
+          </div>
+        {% elif active_section == 'network' %}
+          <div class="atlas-context-title">Network Explorer</div>
+          <div class="atlas-tree">
+            <a class="atlas-tree-node {{ 'selected' if current_path == '/networks' else '' }}" href="/networks"><i class="fa-solid fa-server"></i><span>{{ node_name }}</span><i class="fa-solid fa-circle tree-status ok"></i></a>
+            <div class="atlas-tree-children">
+              <div class="atlas-tree-branch"><i class="fa-solid fa-folder-open"></i>Virtual Networks</div>
+              {% for network in sb.get('networks', []) %}
+              <a class="atlas-tree-node atlas-tree-child" href="/networks/{{ network.name }}"><i class="fa-solid fa-network-wired"></i><span>{{ network.name }}</span><i class="fa-solid fa-circle tree-status {{ 'ok' if network.active else 'off' }}"></i></a>
+              {% else %}<div class="atlas-tree-empty">No networks reported.</div>{% endfor %}
+              <div class="atlas-tree-branch"><i class="fa-solid fa-folder-open"></i>Host Interfaces</div>
+              <a class="atlas-tree-node atlas-tree-child" href="/host/network"><i class="fa-solid fa-ethernet"></i><span>Host Network</span></a>
+            </div>
+          </div>
+          <div class="atlas-context-actions">
+            <a href="/networks/new"><i class="fa-solid fa-plus"></i>Add Network</a>
+            <a href="/host/network"><i class="fa-solid fa-ethernet"></i>Host Network</a>
+          </div>
+        {% elif active_section == 'storage' %}
+          <div class="atlas-context-title">Storage Explorer</div>
+          <div class="atlas-tree">
+            <a class="atlas-tree-node {{ 'selected' if current_path == '/storage' else '' }}" href="/storage"><i class="fa-solid fa-server"></i><span>{{ node_name }}</span><i class="fa-solid fa-circle tree-status ok"></i></a>
+            <div class="atlas-tree-children">
+              <div class="atlas-tree-branch"><i class="fa-solid fa-folder-open"></i>Local Storage</div>
+              {% for p in sb.get('storage', {}).get('libvirt_pools', []) %}<a class="atlas-tree-node atlas-tree-child" href="/storage"><i class="fa-solid fa-database"></i><span>{{ p.name }}</span></a>{% endfor %}
+              {% for p in sb.get('storage', {}).get('zfs_pools', []) %}<a class="atlas-tree-node atlas-tree-child" href="/zfs"><i class="fa-solid fa-layer-group"></i><span>{{ p.name }}</span></a>{% endfor %}
+              <div class="atlas-tree-branch"><i class="fa-solid fa-folder-open"></i>NFS</div>
+              {% for name, t in sb.get('storage', {}).get('nfs_targets', {}).items() %}<a class="atlas-tree-node atlas-tree-child" href="/storage"><i class="fa-solid fa-server"></i><span>{{ name }}</span></a>{% endfor %}
+              <div class="atlas-tree-branch"><i class="fa-solid fa-folder-open"></i>SMB</div>
+              {% for name, t in sb.get('storage', {}).get('smb_targets', {}).items() %}<a class="atlas-tree-node atlas-tree-child" href="/storage"><i class="fa-solid fa-folder"></i><span>{{ name }}</span></a>{% endfor %}
+              <div class="atlas-tree-branch"><i class="fa-solid fa-folder-open"></i>iSCSI</div>
+              {% for name, t in sb.get('storage', {}).get('iscsi_targets', {}).items() %}
+                <a class="atlas-tree-node atlas-tree-child" href="/storage"><i class="fa-solid fa-compact-disc"></i><span>{{ name }}</span></a>
+                {% for child in sb.get('storage', {}).get('iscsi_children', {}).get(name, []) %}<a class="atlas-tree-node atlas-tree-child atlas-tree-grandchild" href="/storage"><i class="fa-solid fa-database"></i><span>{{ child.name }}</span></a>{% endfor %}
+              {% endfor %}
+            </div>
+          </div>
+          <div class="atlas-context-actions">
+            <a href="/storage/nfs/new"><i class="fa-solid fa-plus"></i>NFS Target</a>
+            <a href="/storage/smb/new"><i class="fa-solid fa-plus"></i>SMB Target</a>
+            <a href="/storage/iscsi/new"><i class="fa-solid fa-plus"></i>iSCSI Target</a>
+          </div>
+        {% elif active_section == 'admin' %}
+          <div class="atlas-context-title">Administration</div>
+          <div class="atlas-tree atlas-admin-menu">
+            <a class="atlas-tree-node {{ 'selected' if current_path == '/admin' else '' }}" href="/admin"><i class="fa-solid fa-gauge"></i><span>Admin Overview</span></a>
+            <a class="atlas-tree-node {{ 'selected' if current_path.startswith('/backups') else '' }}" href="/backups"><i class="fa-solid fa-box-archive"></i><span>Backups</span></a>
+            <a class="atlas-tree-node {{ 'selected' if current_path.startswith('/doctor') else '' }}" href="/doctor"><i class="fa-solid fa-stethoscope"></i><span>Doctor</span></a>
+            <a class="atlas-tree-node {{ 'selected' if current_path.startswith('/tasks') else '' }}" href="/tasks"><i class="fa-solid fa-list-check"></i><span>Tasks</span></a>
+            <a class="atlas-tree-node {{ 'selected' if current_path.startswith('/audit') or current_path.startswith('/events') else '' }}" href="/audit"><i class="fa-solid fa-file-lines"></i><span>Audit</span></a>
+            <a class="atlas-tree-node {{ 'selected' if current_path.startswith('/users') else '' }}" href="/users"><i class="fa-solid fa-users"></i><span>Users</span></a>
+            <a class="atlas-tree-node {{ 'selected' if current_path.startswith('/settings') else '' }}" href="/settings"><i class="fa-solid fa-gear"></i><span>Settings</span></a>
+            <a class="atlas-tree-node {{ 'selected' if current_path.startswith('/zfs') else '' }}" href="/zfs"><i class="fa-solid fa-layer-group"></i><span>ZFS</span></a>
+            <a class="atlas-tree-node {{ 'selected' if current_path.startswith('/host/network') else '' }}" href="/host/network"><i class="fa-solid fa-ethernet"></i><span>Host Network</span></a>
+          </div>
+        {% else %}
+          <div class="atlas-context-title">Dashboard Shortcuts</div>
+          <div class="atlas-context-actions atlas-context-list">
+            <a href="/vms"><i class="fa-solid fa-desktop"></i>VM Inventory</a>
+            <a href="/storage"><i class="fa-solid fa-database"></i>Storage Overview</a>
+            <a href="/networks"><i class="fa-solid fa-network-wired"></i>Network Overview</a>
+            <a href="/backups"><i class="fa-solid fa-box-archive"></i>Backup Summary</a>
+            <a href="/doctor"><i class="fa-solid fa-stethoscope"></i>System Doctor</a>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="atlas-sidebar-footer"><i class="fa-solid fa-flask"></i><span>Rock Bluffs Labs, LLC</span></div>
     </aside>
 
-    <div class="main-shell">
-      <header class="topbar">
-        <!--<div>
-          <div class="eyebrow">AtlasVM Community Edition</div>
-          <div class="page-title">{{ page_title }}</div>
-          <div class="page-path">{{ page_hint }}</div>
-        </div>-->
-        <div class="userbar">
+    <div class="atlas-main-shell">
+      <header class="atlas-topbar">
+        <div class="atlas-page-heading">
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            <h1>{{ page_title }}</h1>
+            <span class="atlas-node-pill"><i class="fa-solid fa-server"></i>{{ node_name }} <i class="fa-solid fa-circle text-success"></i> Online</span>
+          </div>
+          <div class="atlas-page-hint">{{ page_hint }}</div>
+        </div>
+        <div class="atlas-userbar">
+          <div class="atlas-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" placeholder="Search..."><kbd>Ctrl K</kbd></div>
+          <a class="atlas-icon-btn" href="/tasks" title="Tasks"><i class="fa-solid fa-bell"></i></a>
+          <a class="atlas-icon-btn" href="/doctor" title="Help / Doctor"><i class="fa-solid fa-circle-question"></i></a>
           {% if request.url.path != '/login' %}
-          <span class="user-pill">{{ user if user is defined and user else 'Signed in' }}</span>
-          <form method="post" action="/logout"><button class="button secondary" type="submit">Logout</button></form>
-          {% else %}
-          <a class="button" href="/login">Login</a>
+          <span class="atlas-user-pill"><i class="fa-solid fa-user"></i>{{ user if user is defined and user else current_user if current_user is defined and current_user else 'admin' }}</span>
+          <form method="post" action="/logout"><button class="btn btn-sm btn-outline-light" type="submit"><i class="fa-solid fa-right-from-bracket"></i>Logout</button></form>
           {% endif %}
         </div>
       </header>
-
-      <main class="content">
+      <main class="atlas-content">
         {% set q_error = request.query_params.get('error') if request is defined else None %}
         {% set q_message = request.query_params.get('message') if request is defined else None %}
-        {% if error or q_error %}<div class="alert danger">{{ error or q_error }}</div>{% endif %}
-        {% if success or message or q_message %}<div class="alert success">{{ success or message or q_message }}</div>{% endif %}
+        {% if error or q_error %}<div class="alert alert-danger">{{ error or q_error }}</div>{% endif %}
+        {% if success or message or q_message %}<div class="alert alert-success">{{ success or message or q_message }}</div>{% endif %}
         {% block content %}{% endblock %}
       </main>
+      <footer class="atlas-main-footer"><span><strong>AtlasVM</strong> Community Edition</span><span class="footer-links"><a href="/doctor"><i class="fa-solid fa-book"></i>Documentation</a><a href="/doctor"><i class="fa-solid fa-headset"></i>Support</a><a href="/settings"><i class="fa-solid fa-circle-info"></i>About</a></span></footer>
     </div>
   </div>
+  <script>
+  (function(){
+    const search = document.getElementById('atlasTreeSearch');
+    if(!search) return;
+    const nodes = Array.from(document.querySelectorAll('[data-tree-text]'));
+    search.addEventListener('input', function(){
+      const q = this.value.trim().toLowerCase();
+      nodes.forEach(n => { n.hidden = !!q && !(n.dataset.treeText || '').includes(q); });
+    });
+  })();
+  </script>
 </body>
 </html>

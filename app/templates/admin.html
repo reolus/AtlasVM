@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="atlas-hero mb-3">
+  <div>
+    <div class="atlas-kicker">Administration</div>
+    <h2>Admin Overview</h2>
+    <p class="muted mb-0">System administration and management overview for AtlasVM Community Edition.</p>
+  </div>
+</section>
+
+<section class="atlas-card-grid admin-card-grid">
+  <a class="atlas-feature-card" href="/backups"><span class="atlas-feature-icon success"><i class="fa-solid fa-box-archive"></i></span><div><h3>Backups</h3><p>Manage VM and system backups and restore points.</p><span>Manage Backups <i class="fa-solid fa-arrow-right"></i></span></div></a>
+  <a class="atlas-feature-card" href="/doctor"><span class="atlas-feature-icon info"><i class="fa-solid fa-stethoscope"></i></span><div><h3>Doctor</h3><p>Run system diagnostics and health checks.</p><span>Run Doctor <i class="fa-solid fa-arrow-right"></i></span></div></a>
+  <a class="atlas-feature-card" href="/users"><span class="atlas-feature-icon purple"><i class="fa-solid fa-users"></i></span><div><h3>Users</h3><p>Manage local accounts, roles, and permissions.</p><span>Manage Users <i class="fa-solid fa-arrow-right"></i></span></div></a>
+  <a class="atlas-feature-card" href="/tasks"><span class="atlas-feature-icon info"><i class="fa-solid fa-list-check"></i></span><div><h3>Tasks</h3><p>View and manage system tasks and operations.</p><span>View Tasks <i class="fa-solid fa-arrow-right"></i></span></div></a>
+  <a class="atlas-feature-card" href="/audit"><span class="atlas-feature-icon purple"><i class="fa-solid fa-file-lines"></i></span><div><h3>Audit</h3><p>Review audit logs and system events.</p><span>View Audit <i class="fa-solid fa-arrow-right"></i></span></div></a>
+  <a class="atlas-feature-card" href="/settings"><span class="atlas-feature-icon slate"><i class="fa-solid fa-gear"></i></span><div><h3>Settings</h3><p>Configure system settings and platform behavior.</p><span>Manage Settings <i class="fa-solid fa-arrow-right"></i></span></div></a>
+  <a class="atlas-feature-card" href="/zfs"><span class="atlas-feature-icon success"><i class="fa-solid fa-layer-group"></i></span><div><h3>ZFS</h3><p>Manage ZFS pools, datasets, snapshots, and exports.</p><span>Manage ZFS <i class="fa-solid fa-arrow-right"></i></span></div></a>
+  <a class="atlas-feature-card" href="/host/network"><span class="atlas-feature-icon purple"><i class="fa-solid fa-ethernet"></i></span><div><h3>Host Network</h3><p>Configure host networking, bridges, and interfaces.</p><span>Manage Network <i class="fa-solid fa-arrow-right"></i></span></div></a>
+</section>
+
+<section class="panel atlas-panel mt-3">
+  <div class="section-title"><h2>Operational Summary</h2></div>
+  <div class="atlas-stat-grid">
+    <div class="atlas-stat-card"><span class="atlas-stat-icon success"><i class="fa-solid fa-shield-halved"></i></span><div><span>System Health</span><strong>Healthy</strong><small>Doctor checks available</small></div></div>
+    <div class="atlas-stat-card"><span class="atlas-stat-icon purple"><i class="fa-solid fa-file-lines"></i></span><div><span>Latest Audit</span><strong>{{ audit_count }}</strong><small>recent entries</small></div></div>
+    <div class="atlas-stat-card"><span class="atlas-stat-icon info"><i class="fa-solid fa-list-check"></i></span><div><span>Pending Tasks</span><strong>{{ pending_tasks }}</strong><small>running or waiting</small></div></div>
+    <div class="atlas-stat-card"><span class="atlas-stat-icon success"><i class="fa-solid fa-box-archive"></i></span><div><span>Backups</span><strong>{{ backup_count }}</strong><small>restore points found</small></div></div>
+    <div class="atlas-stat-card"><span class="atlas-stat-icon purple"><i class="fa-solid fa-users"></i></span><div><span>Users</span><strong>{{ user_count }}</strong><small>local accounts</small></div></div>
+  </div>
+</section>
+{% endblock %}
