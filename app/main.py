@@ -93,6 +93,7 @@ def favicon():
     return FileResponse('app/static/favicon.ico')
 
 templates = Jinja2Templates(directory='app/templates')
+templates.env.globals['build_sidebar_context'] = build_sidebar_context
 
 
 

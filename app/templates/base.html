@@ -20,8 +20,20 @@
 </head>
 <body>
   {% set current_path = request.url.path if request is defined else '' %}
-  {% set sb = sidebar if sidebar is defined else {} %}
-  {% set active_section = sb.get('active','dashboard') %}
+  {% set sb = sidebar if sidebar is defined else build_sidebar_context(current_path) %}
+  {% if current_path == '/' %}
+    {% set active_section = 'dashboard' %}
+  {% elif current_path.startswith('/vms') or current_path.startswith('/ui/vms') or current_path.startswith('/templates') or current_path.startswith('/isos') %}
+    {% set active_section = 'vm' %}
+  {% elif current_path.startswith('/storage') %}
+    {% set active_section = 'storage' %}
+  {% elif current_path.startswith('/networks') %}
+    {% set active_section = 'network' %}
+  {% elif current_path.startswith('/admin') or current_path.startswith('/backups') or current_path.startswith('/doctor') or current_path.startswith('/tasks') or current_path.startswith('/audit') or current_path.startswith('/events') or current_path.startswith('/users') or current_path.startswith('/settings') or current_path.startswith('/zfs') or current_path.startswith('/host/network') %}
+    {% set active_section = 'admin' %}
+  {% else %}
+    {% set active_section = sb.get('active','dashboard') %}
+  {% endif %}
   {% set node_name = sb.get('host_name','atlas-node-01') %}
   {% set page_title = 'Dashboard' %}
   {% set page_hint = 'Host overview and virtualization health' %}
