@@ -41,12 +41,11 @@
 			<td class="atlas-dashboard-border-0">{{ event.created_at }}</td>
 		  </tr>
 		  <tr>
-		    <td class="atlas-dashboard-th atlas-dashboard-border-0"></td>
-			<td class="atlas-dashboard-th atlas-dashboard-border-0" colspan="2">MESSAGE</td>
-		  </tr>
-		  <tr>
 		    <td></td>
-			<td colspan="2">{{ event.message }}</td>
+			<td colspan="2">
+			  <p class="atlas-dashboard-th">MESSAGE</p>
+			  {{ event.message }}
+			</td>
 		  </tr>
 		  {% else %}
 		  <tr><td colspan="3">No audit events yet.</td>
