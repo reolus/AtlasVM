@@ -41,13 +41,45 @@
   <div class="panel atlas-panel admin-form-panel">
     <div class="section-title"><h2><i class="fa-solid fa-plus"></i>Add Backup Target</h2></div>
     <form class="stacked-form" method="post" action="/backups/targets">
-      <div class="grid two"><label>Name <input name="name" placeholder="nas-backups" required></label><label>Label <input name="label" placeholder="NAS Backups"></label></div>
-      <div class="grid two"><label>Kind
-        <select name="kind"><option value="local">local</option><option value="nfs">nfs</option><option value="smb">smb</option><option value="custom" selected>custom</option></select>
-      </label><label>Path <input name="path" placeholder="/atlasvm-storage/backups" required></label></div>
-      <label class="form-check-row"><input type="checkbox" name="enabled" value="true" checked><span>Enabled</span></label>
-      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i>Save Target</button>
-    </form>
+  <div class="grid two">
+    <label>
+      Name
+      <input name="name" placeholder="nas-backups" required>
+    </label>
+
+    <label>
+      Label
+      <input name="label" placeholder="NAS Backups">
+    </label>
+  </div>
+
+  <div class="grid two">
+    <label>
+      Kind
+      <select name="kind">
+        <option value="local">local</option>
+        <option value="nfs">nfs</option>
+        <option value="smb">smb</option>
+        <option value="custom" selected>custom</option>
+      </select>
+    </label>
+
+    <label>
+      Path
+      <input name="path" placeholder="/atlasvm-storage/backups" required>
+    </label>
+  </div>
+
+  <label class="form-check-row">
+    <input type="checkbox" name="enabled" value="true" checked>
+    <span>Enabled</span>
+  </label>
+
+  <button class="btn btn-primary w-100" type="submit">
+    <i class="fa-solid fa-floppy-disk"></i>
+    Save Target
+  </button>
+</form>
   </div>
 </section>
 
