@@ -36,12 +36,16 @@
 		</thead>
 		<tbody>{% for event in events %}
 		  <tr>
+		    <td>{{ event.target }}</td>
 			<td>{{ event.action }}</td>
-			<td>{{ event.target }}</td>
 			<td>{{ event.created_at }}</td>
 		  </tr>
 		  <tr>
-		    <td>MESSAGE</td>
+		    <td class="atlas-dashboard-th"></td>
+			<td class="atlas-dashboard-th" colspan="2">MESSAGE</td>
+		  </tr>
+		  <tr>
+		    <td></td>
 			<td colspan="2">{{ event.message }}</td>
 		  </tr>
 		  {% else %}
