@@ -557,6 +557,66 @@ button.btn, .btn { width:auto; min-height:auto; }
   gap: 1rem;
 }
 
+.error-page {
+  min-height: calc(100vh - 8rem);
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.error-card {
+  width: min(720px, 100%);
+  padding: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background:
+    radial-gradient(circle at top left, rgba(255, 209, 0, .12), transparent 22rem),
+    linear-gradient(180deg, rgba(16, 31, 51, .96), rgba(7, 17, 31, .96));
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.error-code {
+  color: var(--accent);
+  font-size: clamp(3rem, 10vw, 7rem);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -.08em;
+  margin-bottom: .75rem;
+}
+
+.error-icon {
+  width: 4rem;
+  height: 4rem;
+  margin: 0 auto 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--accent);
+  background: rgba(255, 209, 0, .12);
+  border: 1px solid rgba(255, 209, 0, .28);
+  font-size: 1.5rem;
+}
+
+.error-card h1 {
+  margin: 0 0 .65rem;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+}
+
+.error-card p {
+  max-width: 52rem;
+  margin: 0 auto .75rem;
+  color: var(--text);
+}
+
+.error-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: .75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .backup-card {
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 18px;

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="error-page">
+  <div class="error-card">
+    <div class="error-code">{{ status_code }}</div>
+
+    <div class="error-icon">
+      {% if status_code == 403 %}
+        <i class="fa-solid fa-lock"></i>
+      {% elif status_code == 404 %}
+        <i class="fa-solid fa-map-signs"></i>
+      {% elif status_code >= 500 %}
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      {% else %}
+        <i class="fa-solid fa-circle-exclamation"></i>
+      {% endif %}
+    </div>
+
+    <h1>{{ title }}</h1>
+    <p>{{ message }}</p>
+
+    {% if status_code == 403 %}
+      <p class="muted">
+        Your current account does not have the required AtlasVM role for this area.
+      </p>
+    {% elif status_code == 401 %}
+      <p class="muted">
+        Your session may have expired.
+      </p>
+    {% elif status_code == 404 %}
+      <p class="muted">
+        The route may not exist, or the feature may not be enabled in this edition.
+      </p>
+    {% endif %}
+
+    <div class="error-actions">
+      <a class="button" href="/">
+        <i class="fa-solid fa-gauge"></i>
+        Dashboard
+      </a>
+
+      <button class="button secondary" type="button" onclick="history.back()">
+        <i class="fa-solid fa-arrow-left"></i>
+        Go Back
+      </button>
+
+      {% if status_code == 401 %}
+      <a class="button secondary" href="/login">
+        <i class="fa-solid fa-right-to-bracket"></i>
+        Sign In
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

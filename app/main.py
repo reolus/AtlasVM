@@ -2620,3 +2620,106 @@ def task_kill(task_id: int, db: Session = Depends(get_db), user: str = Depends(r
     finally:
         conn.close()
 
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+def _error_context(
+    request: Request,
+    status_code: int,
+    title: str,
+    message: str,
+    user: str | None = None,
+):
+    return {
+        "request": request,
+        "app_name": settings.app_name,
+        "status_code": status_code,
+        "title": title,
+        "message": message,
+        "user": user,
+    }
+
+
+def _current_user_from_request(request: Request) -> str | None:
+    """
+    Best-effort user lookup for error pages.
+
+    Do not enforce auth here. Error handlers must be able to render even when
+    the user is not logged in, has a bad session, or angered the permission goblin.
+    """
+    try:
+        return request.session.get("user")
+    except Exception:
+        return None
+
+
+@app.exception_handler(StarletteHTTPException)
+async def themed_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    status_code = int(exc.status_code)
+    detail = str(exc.detail or "")
+
+    titles = {
+        400: "Bad Request",
+        401: "Sign In Required",
+        403: "Access Denied",
+        404: "Page Not Found",
+        405: "Method Not Allowed",
+        409: "Conflict",
+        422: "Invalid Request",
+        500: "Server Error",
+    }
+
+    if status_code == 401:
+        title = "Sign In Required"
+        message = "You need to sign in before accessing this page."
+    elif status_code == 403:
+        title = "Access Denied"
+        message = detail or "Your account does not have permission to access this page."
+    elif status_code == 404:
+        title = "Page Not Found"
+        message = "The page you requested does not exist."
+    else:
+        title = titles.get(status_code, "Request Error")
+        message = detail or "AtlasVM could not complete the request."
+
+    return templates.TemplateResponse(
+        "error.html",
+        _error_context(
+            request=request,
+            status_code=status_code,
+            title=title,
+            message=message,
+            user=_current_user_from_request(request),
+        ),
+        status_code=status_code,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def themed_validation_exception_handler(request: Request, exc: RequestValidationError):
+    return templates.TemplateResponse(
+        "error.html",
+        _error_context(
+            request=request,
+            status_code=422,
+            title="Invalid Request",
+            message="The request was missing required information or included invalid values.",
+            user=_current_user_from_request(request),
+        ),
+        status_code=422,
+    )
+
+
+@app.exception_handler(Exception)
+async def themed_unhandled_exception_handler(request: Request, exc: Exception):
+    return templates.TemplateResponse(
+        "error.html",
+        _error_context(
+            request=request,
+            status_code=500,
+            title="AtlasVM Server Error",
+            message="AtlasVM hit an unexpected error while processing the request.",
+            user=_current_user_from_request(request),
+        ),
+        status_code=500,
+    )
