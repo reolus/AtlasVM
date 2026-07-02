@@ -24,7 +24,7 @@
     <tbody>{% for check in checks %}
 	  <tr>
 	    <td width="20%" class="doctor-check-text">{{ check.name }}</td>
-		<td width="10%"><span class="pill {{ 'success' if check.ok else 'failed' }}">{{ check.status }}</span></td>
+		<td width="8%"><span class="pill {{ 'success' if check.ok else 'failed' }}">{{ check.status }}</span></td>
 		<td><code>{{ check.detail }}</code></td></tr>{% else %}<tr><td class="empty-cell" colspan="3">No doctor checks returned.</td>
       </tr>{% endfor %}
 	</tbody>
