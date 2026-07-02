@@ -69,3 +69,23 @@ The patch is visual/template-focused. It does not introduce libvirt undefine/red
 The VM console page and start route were updated after a real-world failure where `/ui/vms/{name}/console` raised `RuntimeError: VM does not expose a VNC console`. AtlasVM now redirects to the themed console page with a useful error instead of throwing a server-side 500.
 
 This intentionally does not add or redefine VM graphics devices. Adding a VNC graphics device by undefining/redefining a domain is not snapshot-safe and remains outside normal UI behavior. The console page now explains that the VM must be running and must already expose an active VNC display.
+
+## Console query-string fix
+
+Follow-up console patch: fixed nested noVNC URL redirect handling.
+
+AtlasVM redirects to `/vms/{name}/console?url=...` after starting a noVNC proxy. The noVNC URL itself contains query parameters such as `host`, `port`, `autoconnect`, and `resize`. Those nested query characters must be fully percent-encoded before being placed into AtlasVM's outer `url=` parameter.
+
+Without full encoding, the browser could receive a truncated noVNC URL like:
+
+```text
+/vnc.html?host=10.21.50.34
+```
+
+instead of:
+
+```text
+/vnc.html?host=10.21.50.34&port=6090&autoconnect=1&resize=scale
+```
+
+The console redirect now uses a helper that encodes the entire noVNC URL as the value of the outer `url` parameter. This preserves the noVNC port and connection options.

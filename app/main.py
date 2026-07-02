@@ -1,5 +1,6 @@
 from pathlib import Path
 from shutil import copyfileobj
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -580,6 +581,21 @@ def _console_unavailable_message(name: str) -> str:
     )
 
 
+def _console_page_url(name: str, *, console_url: str = '', error: str = '') -> str:
+    """Build the console page redirect without leaking nested noVNC query args.
+
+    noVNC URLs contain their own ?, &, and = characters. Those must be
+    encoded as the value of AtlasVM's outer url= query parameter, otherwise
+    Starlette/FastAPI split the noVNC port/autoconnect parameters off and the
+    browser receives a broken URL such as vnc.html?host=HOST with no port.
+    """
+    if console_url:
+        return f'/vms/{quote(name, safe="")}/console?url={quote(console_url, safe="")}'
+    if error:
+        return f'/vms/{quote(name, safe="")}/console?error={quote(error, safe="")}'
+    return f'/vms/{quote(name, safe="")}/console'
+
+
 @app.post('/ui/vms/{name}/console')
 def vm_console_start(name: str, request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     lv = LibvirtService()
@@ -588,15 +604,15 @@ def vm_console_start(name: str, request: Request, db: Session = Depends(get_db),
         if not display:
             message = _console_unavailable_message(name)
             log_event(db, user, 'start_console_unavailable', name, message)
-            return RedirectResponse(url=f'/vms/{name}/console?error={quote(message)}', status_code=303)
+            return RedirectResponse(url=_console_page_url(name, error=message), status_code=303)
         host = request.url.hostname
         session = ConsoleService().start_novnc(name, display, request_host=host)
         log_event(db, user, 'start_console', name, session.url)
-        return RedirectResponse(url=f'/vms/{name}/console?url={quote(session.url, safe=":/?=&%")}', status_code=303)
+        return RedirectResponse(url=_console_page_url(name, console_url=session.url), status_code=303)
     except Exception as exc:
         message = f'Unable to start console for {name}: {exc}'
         log_event(db, user, 'start_console_failed', name, str(exc))
-        return RedirectResponse(url=f'/vms/{name}/console?error={quote(message)}', status_code=303)
+        return RedirectResponse(url=_console_page_url(name, error=message), status_code=303)
     finally:
         lv.close()
 
@@ -699,12 +715,12 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
                 message = _console_unavailable_message(name)
                 finish_task(db, task, 'failed', message)
                 log_event(db, user, 'open_console_unavailable', name, message)
-                return RedirectResponse(url=f'/vms/{name}/console?error={quote(message)}', status_code=303)
+                return RedirectResponse(url=_console_page_url(name, error=message), status_code=303)
             host = request.headers.get('host', '').split(':')[0]
             session = ConsoleService().start_novnc(name, display, request_host=host)
             finish_task(db, task, 'success', f'Console opened: {session.url}')
             log_event(db, user, 'open_console', name, session.url)
-            return RedirectResponse(url=f'/vms/{name}/console?url={quote(session.url, safe=":/?=&%")}', status_code=303)
+            return RedirectResponse(url=_console_page_url(name, console_url=session.url), status_code=303)
         elif action == 'delete-confirm':
             return RedirectResponse(url=f'/vms/{name}/delete-confirm', status_code=303)
 
