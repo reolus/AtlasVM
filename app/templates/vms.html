@@ -36,7 +36,7 @@
       </tbody>
     </table>
   </div>
-  <div class="vm-table-footer muted"><span id="vmVisibleCount">{{ inventory.vms | length }}</span>&nbsp; visible of {{ inventory.vms | length }} VM(s)</div>
+  <div class="vm-table-footer muted"><span id="vmVisibleCount">{{ inventory.vms | length }}</span>&nbsp;visible of {{ inventory.vms | length }} VM(s)</div>
 </section>
 <script>(function(){const search=document.getElementById('vmSearch');const stateFilter=document.getElementById('vmStateFilter');const clear=document.getElementById('vmClearFilters');const rows=Array.from(document.querySelectorAll('#vmInventoryTable tbody tr.vm-row'));const count=document.getElementById('vmVisibleCount');function applyFilters(){const q=(search&&search.value||'').trim().toLowerCase();const state=stateFilter?stateFilter.value:'all';let visible=0;rows.forEach(function(row){const text=(row.dataset.search||'').toLowerCase();const rowState=row.dataset.state||'';const show=(!q||text.indexOf(q)!==-1)&&(state==='all'||rowState===state);row.hidden=!show;if(show)visible+=1;});if(count)count.textContent=String(visible);}[search,stateFilter].forEach(function(el){if(el){el.addEventListener('input',applyFilters);el.addEventListener('change',applyFilters);}});if(clear){clear.addEventListener('click',function(){if(search)search.value='';if(stateFilter)stateFilter.value='all';applyFilters();});}})();</script>
 {% endblock %}
