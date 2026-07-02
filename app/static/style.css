@@ -502,6 +502,223 @@ button.btn, .btn { width:auto; min-height:auto; }
 .admin-compact-table { min-width:640px; }
 .backup-table { min-width:1480px; }
 .backup-target-table { min-width:980px; }
+.backup-card-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.backup-card {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.58);
+  padding: 1rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+
+.backup-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.backup-vm-name {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--avm-text, #f8fafc);
+  line-height: 1.2;
+}
+
+.backup-created {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  color: var(--avm-muted, #9fb4d0);
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.backup-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.backup-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.backup-meta-item {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  padding: 0.75rem;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.backup-meta-item span,
+.backup-path-block span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--avm-muted, #9fb4d0);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.backup-meta-item strong {
+  display: block;
+  color: var(--avm-text, #f8fafc);
+  font-size: 0.98rem;
+}
+
+.backup-meta-item small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--avm-muted, #9fb4d0);
+}
+
+.backup-path-block {
+  margin-top: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  padding: 0.75rem;
+  background: rgba(2, 6, 23, 0.34);
+}
+
+.backup-path-block code {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.backup-path-block small {
+  display: block;
+  margin-top: 0.55rem;
+  color: var(--avm-muted, #9fb4d0);
+}
+
+.backup-action-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.backup-restore-form {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.26);
+}
+
+.backup-form-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+  color: var(--avm-text, #f8fafc);
+  font-weight: 800;
+}
+
+.backup-restore-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #bfdbfe;
+  font-size: 0.9rem;
+}
+
+.backup-restore-form input,
+.backup-restore-form select {
+  width: 100%;
+}
+
+.backup-restore-form .form-check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  margin: 0.65rem 0 0.85rem;
+  color: var(--avm-text, #e8eefc);
+  font-weight: 500;
+}
+
+.backup-restore-form .form-check-row input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--avm-accent, #ffd43b);
+}
+
+.w-100 {
+  width: 100%;
+}
+
+.empty-state {
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: 18px;
+  padding: 2rem;
+  text-align: center;
+  color: var(--avm-muted, #9fb4d0);
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.empty-state i {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.empty-state h3 {
+  margin: 0 0 0.35rem;
+  color: var(--avm-text, #f8fafc);
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+@media (max-width: 1200px) {
+  .backup-action-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .backup-card-header {
+    flex-direction: column;
+  }
+
+  .backup-header-actions {
+    justify-content: flex-start;
+  }
+
+  .backup-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .backup-restore-form .grid.two {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .backup-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .users-table { min-width:1180px; }
 .doctor-table { min-width:860px; }
 .doctor-check-text { font-weight: bold; font-size: .88rem;}

@@ -103,35 +103,147 @@
 </section>
 
 <section class="panel atlas-panel">
-  <div class="section-title"><h2><i class="fa-solid fa-clock-rotate-left"></i>Available Backups</h2></div>
-  <div class="atlas-table-wrap"><table class="atlas-data-table admin-table backup-table">
-    <thead><tr><th>VM</th><th>Created</th><th>Target</th><th>State</th><th>Consistency</th><th>Disks</th><th>Size</th><th>Backup Path</th><th>Restore</th><th>Definition</th><th>Delete</th></tr></thead>
-    <tbody>
+  <div class="section-title">
+    <h2><i class="fa-solid fa-clock-rotate-left"></i> Available Backups</h2>
+  </div>
+
+  <div class="backup-card-list">
     {% for backup in backups %}
-      <tr>
-        <td><strong>{{ backup.vm_name }}</strong></td>
-        <td class="timestamp-cell">{{ backup.created_at }}</td>
-        <td>{{ backup.target_name }}<br><small>{{ backup.target_kind }}</small></td>
-        <td><span class="pill {{ 'success' if backup.state in ['complete','completed','success','ready'] else backup.state }}">{{ backup.state }}</span></td>
-        <td>{{ backup.consistency }}</td>
-        <td>{{ backup.disk_count }}</td>
-        <td>{{ backup.size_gb }} GiB</td>
-        <td><code>{{ backup.path }}</code>{% if backup.archive %}<br><small>Archive: <code>{{ backup.archive }}</code></small>{% endif %}</td>
-        <td>
-          <form class="stacked-form admin-mini-form" method="post" action="/backups/restore-as-new">
+      <article class="backup-card">
+        <div class="backup-card-header">
+          <div>
+            <div class="backup-vm-name">{{ backup.vm_name }}</div>
+            <div class="backup-created">
+              <i class="fa-solid fa-calendar-days"></i>
+              {{ backup.created_at }}
+            </div>
+          </div>
+
+          <div class="backup-header-actions">
+            <span class="pill {{ 'success' if backup.state in ['complete','completed','success','ready'] else backup.state }}">
+              {{ backup.state }}
+            </span>
+
+            <form method="post" action="/backups/delete" onsubmit="return confirm('Delete this backup and archive?');">
+              <input type="hidden" name="backup_dir" value="{{ backup.path }}">
+              <button class="btn btn-sm btn-danger danger" type="submit">
+                <i class="fa-solid fa-trash"></i>
+                Delete
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="backup-meta-grid">
+          <div class="backup-meta-item">
+            <span>Target</span>
+            <strong>{{ backup.target_name }}</strong>
+            <small>{{ backup.target_kind }}</small>
+          </div>
+
+          <div class="backup-meta-item">
+            <span>Consistency</span>
+            <strong>{{ backup.consistency }}</strong>
+          </div>
+
+          <div class="backup-meta-item">
+            <span>Disks</span>
+            <strong>{{ backup.disk_count }}</strong>
+          </div>
+
+          <div class="backup-meta-item">
+            <span>Size</span>
+            <strong>{{ backup.size_gb }} GiB</strong>
+          </div>
+        </div>
+
+        <div class="backup-path-block">
+          <span>Backup Path</span>
+          <code>{{ backup.path }}</code>
+
+          {% if backup.archive %}
+            <small>
+              Archive:
+              <code>{{ backup.archive }}</code>
+            </small>
+          {% endif %}
+        </div>
+
+        <div class="backup-action-grid">
+          <form class="backup-restore-form" method="post" action="/backups/restore-as-new">
             <input type="hidden" name="backup_dir" value="{{ backup.path }}">
-            <input name="new_name" placeholder="new-vm-name" required>
-            <select name="storage_pool"><option value="">Default storage</option>{% for pool in pools %}<option value="{{ pool.name }}" {% if pool.supported is defined and not pool.supported %}disabled{% endif %}>{{ pool.name }}{% if pool.mode is defined %} / {{ pool.mode }}{% endif %}</option>{% endfor %}</select>
-            <select name="network_name"><option value="">Keep backed-up network</option>{% for net in networks %}<option value="{{ net.name }}">{{ net.name }}</option>{% endfor %}</select>
-            <label class="check"><input type="checkbox" name="start_after_restore" value="true"> Start after restore</label>
-            <button class="btn btn-sm btn-primary" type="submit">Restore</button>
+
+            <div class="backup-form-title">
+              <i class="fa-solid fa-rotate-left"></i>
+              Restore as New VM
+            </div>
+
+            <div class="grid two">
+              <label>
+                New VM Name
+                <input name="new_name" placeholder="new-vm-name" required>
+              </label>
+
+              <label>
+                Storage Pool
+                <select name="storage_pool">
+                  <option value="">Default storage</option>
+                  {% for pool in pools %}
+                    <option value="{{ pool.name }}" {% if pool.supported is defined and not pool.supported %}disabled{% endif %}>
+                      {{ pool.name }}{% if pool.mode is defined %} / {{ pool.mode }}{% endif %}
+                    </option>
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Network
+              <select name="network_name">
+                <option value="">Keep backed-up network</option>
+                {% for net in networks %}
+                  <option value="{{ net.name }}">{{ net.name }}</option>
+                {% endfor %}
+              </select>
+            </label>
+
+            <label class="form-check-row">
+              <input type="checkbox" name="start_after_restore" value="true">
+              <span>Start after restore</span>
+            </label>
+
+            <button class="btn btn-primary w-100" type="submit">
+              <i class="fa-solid fa-rotate-left"></i>
+              Restore
+            </button>
           </form>
-        </td>
-        <td><form class="stacked-form admin-mini-form" method="post" action="/backups/restore-definition"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><input name="new_name" placeholder="optional-new-name"><button class="btn btn-sm btn-secondary" type="submit">Definition Only</button></form></td>
-        <td><form method="post" action="/backups/delete" onsubmit="return confirm('Delete this backup and archive?');"><input type="hidden" name="backup_dir" value="{{ backup.path }}"><button class="btn btn-sm btn-danger danger" type="submit"><i class="fa-solid fa-trash"></i>Delete</button></form></td>
-      </tr>
-    {% else %}<tr><td class="empty-cell" colspan="11">No backups found.</td></tr>{% endfor %}
-    </tbody>
-  </table></div>
+
+          <form class="backup-restore-form backup-definition-form" method="post" action="/backups/restore-definition">
+            <input type="hidden" name="backup_dir" value="{{ backup.path }}">
+
+            <div class="backup-form-title">
+              <i class="fa-solid fa-file-code"></i>
+              Restore Definition
+            </div>
+
+            <label>
+              Optional New Name
+              <input name="new_name" placeholder="optional-new-name">
+            </label>
+
+            <button class="btn btn-secondary w-100" type="submit">
+              Definition Only
+            </button>
+          </form>
+        </div>
+      </article>
+    {% else %}
+      <div class="empty-state">
+        <i class="fa-solid fa-box-open"></i>
+        <h3>No backups found</h3>
+        <p>No backup records are available yet.</p>
+      </div>
+    {% endfor %}
+  </div>
 </section>
 {% endblock %}
