@@ -6,8 +6,20 @@
     <h2>{{ name }}</h2>
     <p class="muted mb-0">Browser console access for the guest.</p>
   </div>
-  <a class="btn btn-outline-light" href="/vms/{{ name }}"><i class="fa-solid fa-arrow-right"></i>Back to VM</a>
+  <div class="hero-actions">
+    <a class="btn btn-outline-light" href="/vms/{{ name }}"><i class="fa-solid fa-arrow-right"></i>Back to VM</a>
+    <form method="post" action="/ui/vms/{{ name }}/console">
+      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-terminal"></i>Start Console</button>
+    </form>
+  </div>
 </section>
+
+{% if console_error %}
+<div class="alert danger vm-console-alert">
+  <strong><i class="fa-solid fa-triangle-exclamation"></i> Console unavailable</strong>
+  <p>{{ console_error }}</p>
+</div>
+{% endif %}
 
 <section class="panel atlas-panel vm-console-page-panel">
   {% if console_url %}
@@ -15,7 +27,31 @@
     <p class="muted">If the embedded console is blank, open it directly. Browser security, the ancient enemy of convenience, may be involved.</p>
     <iframe class="console-frame atlas-console-frame" src="{{ console_url }}"></iframe>
   {% else %}
-    <div class="empty-cell">No console URL was provided. Start the console again from the VM details page.</div>
+    <div class="console-empty-state">
+      <div class="empty-icon"><i class="fa-solid fa-terminal"></i></div>
+      <h3>No active console session</h3>
+      {% if vm and not vm.active %}
+        <p class="muted">This VM appears to be offline. Start the VM first, then start the console session.</p>
+        <form method="post" action="/ui/vms/{{ name }}/start"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-play"></i>Start VM</button></form>
+      {% else %}
+        <p class="muted">Start a console session from this page. If AtlasVM reports that no VNC display exists, the guest needs a VNC graphics device. This patch intentionally does not redefine the VM, because snapshots dislike that kind of reckless optimism.</p>
+        <form method="post" action="/ui/vms/{{ name }}/console"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-terminal"></i>Start Console</button></form>
+      {% endif %}
+    </div>
   {% endif %}
+</section>
+
+<section class="panel atlas-panel vm-console-help">
+  <div class="section-title"><h2><i class="fa-solid fa-circle-info"></i> Console requirements</h2></div>
+  <div class="grid two">
+    <div>
+      <h3>What AtlasVM expects</h3>
+      <p class="muted">The VM must be running and libvirt must expose an active VNC display, usually from a graphics device like <code>&lt;graphics type='vnc' autoport='yes' listen='127.0.0.1'&gt;</code>.</p>
+    </div>
+    <div>
+      <h3>What this page will not do</h3>
+      <p class="muted">It will not undefine/redefine the VM to add graphics. That keeps the console fix aligned with the snapshot-safe rule instead of detonating configuration history for convenience.</p>
+    </div>
+  </div>
 </section>
 {% endblock %}

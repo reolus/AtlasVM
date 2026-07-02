@@ -430,3 +430,10 @@ button.btn, .btn { width:auto; min-height:auto; }
   .vm-disk-card-row, .vm-nic-card-row, .vm-upload-form { grid-template-columns:1fr; }
   .vm-page-hero { flex-direction:column; }
 }
+
+.vm-console-alert { margin-bottom: 1rem; }
+.vm-console-alert p { margin: .35rem 0 0; color: var(--muted, #9ca3af); }
+.console-empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: .75rem; padding: 1.5rem; border: 1px dashed rgba(148, 163, 184, .35); border-radius: 1rem; background: rgba(15, 23, 42, .35); }
+.console-empty-state .empty-icon { width: 3rem; height: 3rem; display: grid; place-items: center; border-radius: 999px; background: rgba(59, 130, 246, .14); color: #93c5fd; font-size: 1.25rem; }
+.console-empty-state h3, .vm-console-help h3 { margin: 0; }
+.vm-console-help code { white-space: normal; }

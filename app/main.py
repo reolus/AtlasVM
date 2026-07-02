@@ -572,28 +572,53 @@ def vm_delete_confirm_legacy(name: str, confirm_name: str = Form(...), delete_di
     return RedirectResponse(url='/', status_code=303)
 
 
+def _console_unavailable_message(name: str) -> str:
+    return (
+        f'VM {name} does not currently expose an active VNC console. '
+        'Start the VM and confirm the guest has a VNC graphics device configured. '
+        'AtlasVM will not undefine/redefine the domain to add one because that is not snapshot-safe.'
+    )
+
+
 @app.post('/ui/vms/{name}/console')
 def vm_console_start(name: str, request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     lv = LibvirtService()
     try:
         display = lv.vnc_display(name)
         if not display:
-            raise RuntimeError('VM does not expose a VNC console')
+            message = _console_unavailable_message(name)
+            log_event(db, user, 'start_console_unavailable', name, message)
+            return RedirectResponse(url=f'/vms/{name}/console?error={quote(message)}', status_code=303)
         host = request.url.hostname
         session = ConsoleService().start_novnc(name, display, request_host=host)
         log_event(db, user, 'start_console', name, session.url)
-        return RedirectResponse(url=f'/vms/{name}/console?url={session.url}', status_code=303)
+        return RedirectResponse(url=f'/vms/{name}/console?url={quote(session.url, safe=":/?=&%")}', status_code=303)
+    except Exception as exc:
+        message = f'Unable to start console for {name}: {exc}'
+        log_event(db, user, 'start_console_failed', name, str(exc))
+        return RedirectResponse(url=f'/vms/{name}/console?error={quote(message)}', status_code=303)
     finally:
         lv.close()
 
 
 @app.get('/vms/{name}/console', response_class=HTMLResponse)
-def vm_console_page(name: str, request: Request, url: str = '', user: str = Depends(require_user)):
+def vm_console_page(name: str, request: Request, url: str = '', error: str = '', user: str = Depends(require_user)):
+    vm = None
+    try:
+        lv = LibvirtService()
+        try:
+            vm = lv.get_vm(name)
+        finally:
+            lv.close()
+    except Exception:
+        vm = None
     return templates.TemplateResponse('console.html', {'request': request,
             'public_host': _atlasvm_public_host(request),
             'public_scheme': _atlasvm_public_scheme(request),
             'console_base_url': _atlasvm_console_base_url(request), 'app_name': settings.app_name, 'name': name,
         'vlan_tag': _atlasvm_get_network_vlan_tag(name), 'console_url': url,
+            'console_error': error,
+            'vm': vm,
             'user': user,
         })
 
@@ -671,12 +696,15 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
         elif action == 'console':
             display = lv.vnc_display(name)
             if not display:
-                raise ValueError(f'VM {name} does not have an active VNC display. Make sure it is running and has VNC graphics enabled.')
+                message = _console_unavailable_message(name)
+                finish_task(db, task, 'failed', message)
+                log_event(db, user, 'open_console_unavailable', name, message)
+                return RedirectResponse(url=f'/vms/{name}/console?error={quote(message)}', status_code=303)
             host = request.headers.get('host', '').split(':')[0]
             session = ConsoleService().start_novnc(name, display, request_host=host)
             finish_task(db, task, 'success', f'Console opened: {session.url}')
             log_event(db, user, 'open_console', name, session.url)
-            return RedirectResponse(url=session.url, status_code=303)
+            return RedirectResponse(url=f'/vms/{name}/console?url={quote(session.url, safe=":/?=&%")}', status_code=303)
         elif action == 'delete-confirm':
             return RedirectResponse(url=f'/vms/{name}/delete-confirm', status_code=303)
 

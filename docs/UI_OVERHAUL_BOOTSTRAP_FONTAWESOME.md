@@ -63,3 +63,9 @@ Updated pages include:
 - `/vms/{name}/console` console page
 
 The patch is visual/template-focused. It does not introduce libvirt undefine/redefine flows for normal VM changes. Existing VM mutation behavior remains routed through the current service methods and route handlers.
+
+## Console handling follow-up
+
+The VM console page and start route were updated after a real-world failure where `/ui/vms/{name}/console` raised `RuntimeError: VM does not expose a VNC console`. AtlasVM now redirects to the themed console page with a useful error instead of throwing a server-side 500.
+
+This intentionally does not add or redefine VM graphics devices. Adding a VNC graphics device by undefining/redefining a domain is not snapshot-safe and remains outside normal UI behavior. The console page now explains that the VM must be running and must already expose an active VNC display.
