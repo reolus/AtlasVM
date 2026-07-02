@@ -29,7 +29,24 @@
   </div>
   <div class="panel atlas-panel">
     <div class="section-title"><h2><i class="fa-solid fa-file-lines"></i> Recent Audit Events</h2><a class="atlas-link" href="/audit">View all events <i class="fa-solid fa-arrow-right"></i></a></div>
-    <div class="table-responsive"><table class="table table-hover"><thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Message</th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at }}</td><td>{{ event.action }}</td><td>{{ event.target }}</td><td>{{ event.message }}</td></tr>{% else %}<tr><td colspan="4">No audit events yet.</td></tr>{% endfor %}</tbody></table></div>
+    <div class="table-responsive">
+	  <table class="table table-hover atlas-dashboard-audit-table">
+	    <thead>
+		  <tr><th>Time</th><th>Action</th><th>Target</th><th>Message</th></tr>
+		</thead>
+		<tbody>{% for event in events %}
+		  <tr>
+		    <td>{{ event.created_at }}</td>
+			<td>{{ event.action }}</td>
+			<td>{{ event.target }}</td>
+			<td>{{ event.message }}</td>
+		  </tr>
+		  {% else %}
+		  <tr><td colspan="4">No audit events yet.</td>
+		  </tr>{% endfor %}
+		</tbody>
+	  </table>
+	</div>
   </div>
 </section>
 {% endblock %}
