@@ -19,7 +19,7 @@
 
 <section class="panel atlas-panel vm-detail-card">
   <div class="section-title"><h2><i class="fa-solid fa-compact-disc"></i> Available Media</h2></div>
-  <div class="table-responsive atlas-table-wrap"><table class="table table-hover atlas-data-table"><thead><tr><th>Name</th><th width="10%">Size</th><th>Path</th><th width="5%">Action</th></tr></thead><tbody>
+  <div class="table-responsive atlas-table-wrap"><table class="table table-hover atlas-data-table"><thead><tr><th>Name</th><th width="10%">Size</th><th>Path</th><th width="8%">Action</th></tr></thead><tbody>
     {% for iso in isos %}
       <tr><td><div class="atlas-name-cell"><i class="fa-solid fa-compact-disc text-warning"></i><div><strong>{{ iso.name }}</strong><small>ISO / IMG media</small></div></div></td><td>{{ iso.size_mb }} MB</td><td><code>{{ iso.path }}</code></td><td><form method="post" action="/isos/{{ iso.name }}/delete" onsubmit="return confirm('Delete ISO {{ iso.name }}?');"><button class="btn btn-danger btn-sm" type="submit"><i class="fa-solid fa-trash"></i></button></form></td></tr>
     {% else %}<tr><td colspan="4" class="empty-cell">No ISOs found. Download one, because VMs rarely install themselves out of sheer optimism.</td></tr>{% endfor %}
