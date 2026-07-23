@@ -26,6 +26,7 @@ from app.services.libvirt_service import LibvirtService, VMCreateRequest
 from app.services.network_phase8 import NetworkPhase8Service
 from app.services.dashboard_overview import dashboard_overview
 from app.services.vm_inventory import list_vm_inventory
+from app.services.ui_sidebar import build_sidebar_context
 from app.services.vm_disk_management import (
     add_disk_to_vm,
     get_vm_disks,
@@ -107,6 +108,7 @@ def favicon():
     return FileResponse('app/static/favicon.ico')
 
 templates = Jinja2Templates(directory='app/templates')
+templates.env.globals['build_sidebar_context'] = build_sidebar_context
 
 
 
@@ -254,11 +256,14 @@ def _redirect(url: str, message: str | None = None, error: str | None = None) ->
 
 
 def _view_context(request: Request, user: str | None = None) -> dict:
+    current_path = request.url.path if request else ''
     return {
         'request': request,
         'app_name': settings.app_name,
         'current_user': user,
+        'user': user,
         'current_role': get_user_role(user) if user else None,
+        'sidebar': build_sidebar_context(current_path),
         'message': request.query_params.get('message'),
         'error': request.query_params.get('error'),
     }
