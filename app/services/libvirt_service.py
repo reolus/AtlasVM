@@ -4,6 +4,7 @@ import html
 import os
 import re
 import subprocess
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,9 @@ class VMCreateRequest:
     start_after_create: bool = False
     autostart: bool = False
     firmware: str = 'bios'
+    boot_order: str = 'disk'
+    boot_menu: bool = False
+    boot_delay_ms: int = 0
 
 
 class LibvirtService:
@@ -449,6 +453,21 @@ class LibvirtService:
         if domain.isActive():
             domain.reboot()
 
+    def reset_vm(self, name: str) -> None:
+        """Perform an immediate virtual hardware reset."""
+        domain = self.conn.lookupByName(name)
+        if not domain.isActive():
+            raise RuntimeError('VM is not running; start it instead of resetting it.')
+        domain.reset(0)
+
+    def power_cycle_vm(self, name: str, delay_seconds: int = 3) -> None:
+        """Force power off, wait briefly, then start the VM again."""
+        domain = self.conn.lookupByName(name)
+        if domain.isActive():
+            domain.destroy()
+            time.sleep(max(0, min(delay_seconds, 30)))
+        domain.create()
+
     def set_autostart(self, name: str, enabled: bool) -> None:
         domain = self.conn.lookupByName(name)
         domain.setAutostart(1 if enabled else 0)
@@ -570,6 +589,46 @@ class LibvirtService:
             libvirt.VIR_DOMAIN_AFFECT_CONFIG,
         )
 
+        return self.get_vm(name)
+
+    def update_vm_boot_options(self, name: str, boot_order: str = 'disk', boot_menu: bool = False, boot_delay_ms: int = 0) -> dict[str, Any]:
+        """Update persistent VM boot options.
+
+        Libvirt does not expose granular setters for BIOS/UEFI boot menu timeout,
+        so this updates the inactive domain XML. The VM must be shut down to keep
+        the live and persistent definitions from disagreeing.
+        """
+        domain = self.conn.lookupByName(name)
+        if domain.isActive():
+            raise RuntimeError('Boot option changes require the VM to be shut down.')
+
+        boot_order, boot_menu, boot_delay_ms = self._normalize_boot_settings(boot_order, boot_menu, boot_delay_ms)
+        xml_text = domain.XMLDesc(libvirt.VIR_DOMAIN_XML_INACTIVE)
+        root = ET.fromstring(xml_text)
+        os_el = root.find('./os')
+        if os_el is None:
+            os_el = ET.SubElement(root, 'os')
+            ET.SubElement(os_el, 'type', {'arch': 'x86_64'}).text = 'hvm'
+
+        for child in list(os_el):
+            if child.tag in {'boot', 'bootmenu'}:
+                os_el.remove(child)
+
+        for dev in self._boot_devices_for_order(boot_order):
+            ET.SubElement(os_el, 'boot', {'dev': dev})
+
+        if boot_menu or boot_delay_ms > 0:
+            attrs = {'enable': 'yes'}
+            if boot_delay_ms > 0:
+                attrs['timeout'] = str(boot_delay_ms)
+            ET.SubElement(os_el, 'bootmenu', attrs)
+        else:
+            ET.SubElement(os_el, 'bootmenu', {'enable': 'no'})
+
+        updated_xml = ET.tostring(root, encoding='unicode')
+        updated = self.conn.defineXML(updated_xml)
+        if updated is None:
+            raise RuntimeError('libvirt failed to update VM boot options')
         return self.get_vm(name)
 
 
@@ -1033,6 +1092,7 @@ class LibvirtService:
             raise ValueError('disk_gb must be at least 1')
         if req.firmware not in {'bios', 'uefi'}:
             raise ValueError('firmware must be bios or uefi')
+        req.boot_order, req.boot_menu, req.boot_delay_ms = self._normalize_boot_settings(req.boot_order, req.boot_menu, req.boot_delay_ms)
         if req.iso_path and not os.path.exists(req.iso_path):
             raise ValueError(f'ISO path does not exist: {req.iso_path}')
         self.conn.storagePoolLookupByName(req.storage_pool)
@@ -1042,6 +1102,34 @@ class LibvirtService:
             raise ValueError(f'VM already exists: {req.name}')
         except libvirt.libvirtError:
             pass
+
+    def _normalize_boot_settings(self, boot_order: str = 'disk', boot_menu: bool = False, boot_delay_ms: int = 0) -> tuple[str, bool, int]:
+        value = (boot_order or 'disk').strip().lower()
+        aliases = {
+            'hd': 'disk',
+            'disk': 'disk',
+            'cdrom': 'iso',
+            'iso': 'iso',
+            'network': 'pxe',
+            'net': 'pxe',
+            'pxe': 'pxe',
+        }
+        if value not in aliases:
+            raise ValueError('boot_order must be disk, iso, or pxe')
+        normalized = aliases[value]
+        try:
+            delay = int(boot_delay_ms or 0)
+        except Exception:
+            delay = 0
+        delay = max(0, min(delay, 60000))
+        return normalized, bool(boot_menu), delay
+
+    def _boot_devices_for_order(self, boot_order: str) -> list[str]:
+        if boot_order == 'pxe':
+            return ['network', 'hd', 'cdrom']
+        if boot_order == 'iso':
+            return ['cdrom', 'hd', 'network']
+        return ['hd', 'cdrom', 'network']
 
     def _validate_snapshot_name(self, name: str) -> None:
         if not re.match(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', name):
@@ -1063,7 +1151,12 @@ class LibvirtService:
     def _build_domain_xml(self, req: VMCreateRequest, disk_volume: dict[str, Any]) -> str:
         memory_kib = req.memory_mb * 1024
         cdrom_xml = ''
-        boot_order = "<boot dev='cdrom'/><boot dev='hd'/>" if req.iso_path else "<boot dev='hd'/>"
+        req.boot_order, req.boot_menu, req.boot_delay_ms = self._normalize_boot_settings(req.boot_order, req.boot_menu, req.boot_delay_ms)
+        boot_order_xml = ''.join(f"<boot dev='{dev}'/>" for dev in self._boot_devices_for_order(req.boot_order))
+        boot_menu_xml = ''
+        if req.boot_menu or req.boot_delay_ms > 0:
+            timeout_attr = f" timeout='{req.boot_delay_ms}'" if req.boot_delay_ms > 0 else ''
+            boot_menu_xml = f"<bootmenu enable='yes'{timeout_attr}/>"
         loader_xml = ''
         machine = 'q35' if req.firmware == 'uefi' else 'pc'
         if req.firmware == 'uefi':
@@ -1093,7 +1186,8 @@ class LibvirtService:
           <os>
             <type arch='x86_64' machine='{machine}'>hvm</type>
             {loader_xml}
-            {boot_order}
+            {boot_order_xml}
+            {boot_menu_xml}
           </os>
           <features>
             <acpi/>
@@ -1164,6 +1258,7 @@ class LibvirtService:
             'disks': self._domain_disk_paths(domain),
             'interfaces': self._domain_interfaces(domain),
             'graphics': self._domain_graphics(domain),
+            'boot': self._domain_boot_options(root),
         }
         if include_snapshots:
             try:
@@ -1173,6 +1268,38 @@ class LibvirtService:
         if include_xml:
             result['xml'] = xml
         return result
+
+    def _domain_boot_options(self, root: ET.Element) -> dict[str, Any]:
+        os_el = root.find('./os')
+        boot_devs: list[str] = []
+        boot_menu_enabled = False
+        boot_delay_ms = 0
+        if os_el is not None:
+            for boot in os_el.findall('./boot'):
+                dev = boot.attrib.get('dev')
+                if dev:
+                    boot_devs.append(dev)
+            bootmenu = os_el.find('./bootmenu')
+            if bootmenu is not None:
+                boot_menu_enabled = (bootmenu.attrib.get('enable') or '').lower() == 'yes'
+                try:
+                    boot_delay_ms = int(bootmenu.attrib.get('timeout') or '0')
+                except Exception:
+                    boot_delay_ms = 0
+        first = boot_devs[0] if boot_devs else 'hd'
+        if first == 'network':
+            boot_order = 'pxe'
+        elif first == 'cdrom':
+            boot_order = 'iso'
+        else:
+            boot_order = 'disk'
+        return {
+            'order': boot_order,
+            'devices': boot_devs,
+            'menu_enabled': boot_menu_enabled,
+            'delay_ms': boot_delay_ms,
+            'delay_seconds': round(boot_delay_ms / 1000, 1) if boot_delay_ms else 0,
+        }
 
     def _domain_disk_paths(self, domain: libvirt.virDomain) -> list[str]:
         return disk_sources_from_domain_xml(domain.XMLDesc())

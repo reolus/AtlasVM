@@ -14,6 +14,15 @@ class VMCreate(BaseModel):
     start_after_create: bool = False
     autostart: bool = False
     firmware: str = 'bios'
+    boot_order: str = 'disk'
+    boot_menu: bool = False
+    boot_delay_ms: int = Field(default=0, ge=0, le=60000)
+
+
+class VMBootOptions(BaseModel):
+    boot_order: str = 'disk'
+    boot_menu: bool = False
+    boot_delay_ms: int = Field(default=0, ge=0, le=60000)
 
 
 class DeleteVMOptions(BaseModel):

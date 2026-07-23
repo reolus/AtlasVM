@@ -6,7 +6,7 @@
 
 <section class="vm-detail-hero hero-card">
   <div class="vm-detail-title">
-    <div class="atlas-kicker"><i class="fa-solid fa-desktop"></i> Local Virtual Machine</div>
+    <div class="eyebrow">Local Virtual Machine</div>
     <h1>{{ vm.name }}</h1>
     <div class="vm-hero-meta">
       <span class="state-pill {{ vm.state }}">{{ vm.state }}</span>
@@ -17,9 +17,9 @@
     <p class="muted vm-description">{{ vm.description or 'No description provided.' }}</p>
   </div>
   <div class="vm-hero-actions">
-    <a class="btn btn-outline-light" href="/vms"><i class="fa-solid fa-desktop"></i>All VMs</a>
-    <form method="post" action="/ui/vms/{{ vm.name }}/console" target="_blank"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-terminal"></i>Console</button></form>
-    <a class="btn btn-outline-info" href="/vms/{{ vm.name }}/metrics"><i class="fa-solid fa-chart-line"></i>Metrics</a>
+    <a class="button secondary" href="/vms">All VMs</a>
+    <form method="post" action="/ui/vms/{{ vm.name }}/console" target="_blank"><button type="submit">Console</button></form>
+    <a class="button secondary" href="/vms/{{ vm.name }}/metrics">Metrics</a>
   </div>
 </section>
 
@@ -33,47 +33,53 @@
 </section>
 
 <nav class="vm-detail-tabs" aria-label="VM detail sections">
-  <a href="#power"><i class="fa-solid fa-power-off"></i>Power</a>
-  <a href="#settings"><i class="fa-solid fa-gears"></i>Settings</a>
-  <a href="#storage"><i class="fa-solid fa-database"></i>Storage</a>
-  <a href="#network"><i class="fa-solid fa-network-wired"></i>Network</a>
-  <a href="#media"><i class="fa-solid fa-compact-disc"></i>ISO</a>
-  <a href="#backup"><i class="fa-solid fa-box-archive"></i>Backup</a>
-  <a href="#snapshots"><i class="fa-solid fa-camera"></i>Snapshots</a>
-  <a href="#danger"><i class="fa-solid fa-triangle-exclamation"></i>Danger</a>
+  <a href="#power">Power</a>
+  <a href="#settings">Settings</a>
+  <a href="#storage">Storage</a>
+  <a href="#network">Network</a>
+  <a href="#media">ISO</a>
+  <a href="#backup">Backup</a>
+  <a href="#snapshots">Snapshots</a>
+  <a href="#danger">Danger</a>
 </nav>
 
 <section id="power" class="panel vm-operation-panel">
   <div class="section-title vm-section-title">
     <div>
-      <h2><i class="fa-solid fa-power-off"></i>Power and console</h2>
+      <h2>Power and console</h2>
       <p class="muted">Operational controls for this local VM. Force Stop is intentionally rude and should stay a last resort.</p>
     </div>
   </div>
   <div class="vm-action-grid">
     <form class="action-card" method="post" action="/ui/vms/{{ vm.name }}/start">
-      <strong>Start</strong><span>Boot the guest if it is shut off.</span><button class="btn btn-primary" type="submit"><i class="fa-solid fa-play"></i>Start VM</button>
+      <strong>Start</strong><span>Boot the guest if it is shut off.</span><button type="submit">Start VM</button>
     </form>
     <form class="action-card" method="post" action="/ui/vms/{{ vm.name }}/shutdown">
-      <strong>Shutdown</strong><span>Ask the guest OS to shut down cleanly.</span><button type="submit" class="btn btn-outline-warning"><i class="fa-solid fa-power-off"></i>Shutdown</button>
+      <strong>Shutdown</strong><span>Ask the guest OS to shut down cleanly.</span><button type="submit" class="secondary">Shutdown</button>
     </form>
     <form class="action-card" method="post" action="/ui/vms/{{ vm.name }}/reboot">
-      <strong>Reboot</strong><span>Restart the guest through libvirt.</span><button type="submit" class="btn btn-outline-light"><i class="fa-solid fa-rotate"></i>Reboot</button>
+      <strong>Reboot</strong><span>Ask the guest to restart through ACPI/libvirt.</span><button type="submit" class="secondary">Reboot</button>
+    </form>
+    <form class="action-card danger-card" method="post" action="/ui/vms/{{ vm.name }}/reset" onsubmit="return confirm('Immediately reset {{ vm.name }}? Unsaved guest data may be lost.');">
+      <strong>Reset</strong><span>Immediate virtual hardware reset. Useful when the guest will not reboot cleanly.</span><button type="submit" class="danger">Reset</button>
+    </form>
+    <form class="action-card danger-card" method="post" action="/ui/vms/{{ vm.name }}/power-cycle" onsubmit="return confirm('Force power cycle {{ vm.name }}? This is like pulling the plug and turning it back on.');">
+      <strong>Power Cycle</strong><span>Force off, wait briefly, then start again.</span><button type="submit" class="danger">Power Cycle</button>
     </form>
     <form class="action-card danger-card" method="post" action="/ui/vms/{{ vm.name }}/force-stop" onsubmit="return confirm('Force stop {{ vm.name }}?');">
-      <strong>Force Stop</strong><span>Hard power-off. Use when graceful shutdown fails.</span><button type="submit" class="btn btn-danger"><i class="fa-solid fa-stop"></i>Force Stop</button>
+      <strong>Force Stop</strong><span>Hard power-off. Use when graceful shutdown fails.</span><button type="submit" class="danger">Force Stop</button>
     </form>
     {% if vm.autostart %}
     <form class="action-card" method="post" action="/ui/vms/{{ vm.name }}/autostart-off">
-      <strong>Autostart</strong><span>Currently enabled for host boot.</span><button type="submit" class="btn btn-outline-light">Disable</button>
+      <strong>Autostart</strong><span>Currently enabled for host boot.</span><button type="submit" class="secondary">Disable</button>
     </form>
     {% else %}
     <form class="action-card" method="post" action="/ui/vms/{{ vm.name }}/autostart-on">
-      <strong>Autostart</strong><span>Currently disabled for host boot.</span><button type="submit" class="btn btn-outline-light">Enable</button>
+      <strong>Autostart</strong><span>Currently disabled for host boot.</span><button type="submit" class="secondary">Enable</button>
     </form>
     {% endif %}
     <form class="action-card" method="post" action="/ui/vms/{{ vm.name }}/console" target="_blank">
-      <strong>Console</strong><span>Open the browser console session.</span><button class="btn btn-primary" type="submit"><i class="fa-solid fa-terminal"></i>Open Console</button>
+      <strong>Console</strong><span>Open the browser console session.</span><button type="submit">Open Console</button>
     </form>
   </div>
 </section>
@@ -82,8 +88,8 @@
   <div id="settings" class="panel vm-settings-panel">
     <div class="section-title vm-section-title">
       <div>
-        <h2><i class="fa-solid fa-gears"></i>Settings</h2>
-        <p class="muted">Description is metadata-safe. CPU and memory are applied through snapshot-safe setters.</p>
+        <h2>Settings</h2>
+        <p class="muted">Description is metadata-safe. CPU and memory are applied through snapshot-safe libvirt setters.</p>
       </div>
     </div>
     <form method="post" action="/vms/{{ vm.name }}/edit" class="stacked-form">
@@ -92,25 +98,49 @@
         <label>vCPUs <input name="vcpus" type="number" min="1" value="{{ vm.vcpus }}" required></label>
       </div>
       <label>Description <textarea name="description" rows="4" placeholder="Describe the VM purpose, owner, or workload.">{{ vm.description }}</textarea></label>
-      <button class="btn btn-primary" type="submit"><i class="fa-solid fa-gears"></i>Save Settings</button>
+      <button type="submit">Save Settings</button>
+    </form>
+    <hr class="soft-divider">
+    <form method="post" action="/vms/{{ vm.name }}/boot" class="stacked-form">
+      <h3>Boot Options</h3>
+      <p class="muted">PXE/network boot and BIOS/UEFI boot menu delay. Changes require the VM to be shut off.</p>
+      <div class="grid two">
+        <label>Boot Priority
+          <select name="boot_order">
+            <option value="disk" {% if vm.boot.order == 'disk' %}selected{% endif %}>Disk first</option>
+            <option value="iso" {% if vm.boot.order == 'iso' %}selected{% endif %}>ISO first</option>
+            <option value="pxe" {% if vm.boot.order == 'pxe' %}selected{% endif %}>PXE / Network first</option>
+          </select>
+        </label>
+        <label>Boot Delay
+          <select name="boot_delay_seconds">
+            <option value="0" {% if not vm.boot.delay_ms %}selected{% endif %}>No delay</option>
+            <option value="3" {% if vm.boot.delay_ms == 3000 %}selected{% endif %}>3 seconds</option>
+            <option value="5" {% if vm.boot.delay_ms == 5000 %}selected{% endif %}>5 seconds</option>
+            <option value="10" {% if vm.boot.delay_ms == 10000 %}selected{% endif %}>10 seconds</option>
+          </select>
+        </label>
+      </div>
+      <label class="check"><input name="boot_menu" type="checkbox" value="true" {% if vm.boot.menu_enabled %}checked{% endif %}> Enable BIOS/UEFI boot menu</label>
+      <button type="submit" class="secondary">Save Boot Options</button>
     </form>
   </div>
 
   <div class="panel vm-template-panel">
     <div class="section-title vm-section-title">
       <div>
-        <h2><i class="fa-solid fa-copy"></i>Template status</h2>
-        <p class="muted">Stored in VM metadata without undefine/redefine.</p>
+        <h2>Template status</h2>
+        <p class="muted">Stored in VM metadata without undefine/redefine, because snapshots are not decorative.</p>
       </div>
     </div>
     <div class="template-status-card">
       <span class="state-pill {{ 'template' if vm.is_template else 'shutoff' }}">{{ 'Template' if vm.is_template else 'Normal VM' }}</span>
       {% if vm.is_template %}
       <p>This VM is marked as a reusable template.</p>
-      <form method="post" action="/vms/{{ vm.name }}/template"><input type="hidden" name="enabled" value="false"><button type="submit" class="btn btn-outline-light">Convert to Normal VM</button></form>
+      <form method="post" action="/vms/{{ vm.name }}/template"><input type="hidden" name="enabled" value="false"><button type="submit" class="secondary">Convert to Normal VM</button></form>
       {% else %}
       <p>This VM is a regular guest.</p>
-      <form method="post" action="/vms/{{ vm.name }}/template"><input type="hidden" name="enabled" value="true"><button type="submit" class="btn btn-primary"><i class="fa-solid fa-copy"></i>Convert to Template</button></form>
+      <form method="post" action="/vms/{{ vm.name }}/template"><input type="hidden" name="enabled" value="true"><button type="submit">Convert to Template</button></form>
       {% endif %}
     </div>
   </div>
@@ -120,10 +150,10 @@
   <div id="storage" class="panel vm-detail-card">
     <div class="section-title vm-section-title">
       <div>
-        <h2><i class="fa-solid fa-database"></i>Storage</h2>
+        <h2>Storage</h2>
         <p class="muted">Attached disk paths and device references.</p>
       </div>
-      <a class="btn btn-outline-light" href="/vms/{{ vm.name }}/disks"><i class="fa-solid fa-database"></i>Manage Disks</a>
+      <a class="button secondary" href="/vms/{{ vm.name }}/disks">Manage Disks</a>
     </div>
     <div class="resource-list disk-resource-list">
       {% for disk in vm.disks %}
@@ -140,10 +170,10 @@
   <div id="network" class="panel vm-detail-card">
     <div class="section-title vm-section-title">
       <div>
-        <h2><i class="fa-solid fa-network-wired"></i>Network</h2>
-        <p class="muted">Guest interfaces.</p>
+        <h2>Network</h2>
+        <p class="muted">Guest interfaces. VLAN handling belongs on host/libvirt bridges, not VM XML.</p>
       </div>
-      <a class="btn btn-outline-light" href="/vms/{{ vm.name }}/network"><i class="fa-solid fa-network-wired"></i>Manage NICs</a>
+      <a class="button secondary" href="/vms/{{ vm.name }}/network">Manage NICs</a>
     </div>
     <div class="resource-list nic-resource-list">
       {% for nic in vm.interfaces %}
@@ -170,141 +200,71 @@
 
 <section class="grid two">
   <div id="media" class="panel vm-detail-card">
-  <div class="section-title vm-section-title">
-    <div>
-      <h2><i class="fa-solid fa-compact-disc"></i> Installer Media</h2>
-      <p class="muted">Attach or eject ISO media using the snapshot-safe device update path.</p>
+    <div class="section-title vm-section-title">
+      <div>
+        <h2>Installer media</h2>
+        <p class="muted">Attach or eject ISO media using the snapshot-safe device update path.</p>
+      </div>
     </div>
-  </div>
-
-  <div class="current-media-card">
-    <span class="muted">Currently loaded</span>
-    <strong>
-      {% if current_iso %}
-        <code>{{ current_iso }}</code>
-      {% else %}
-        No ISO attached
-      {% endif %}
-    </strong>
-  </div>
-
-  <form class="stacked-form vm-media-form" method="post" action="/vms/{{ vm.name }}/iso/attach">
-    <label>
-      ISO image
-      <select name="iso_path" required>
-        <option value="" {% if current_iso is not defined or not current_iso %}selected{% endif %}>Choose ISO...</option>
-        {% for iso in isos %}
-          <option value="{{ iso.path }}" {% if current_iso is defined and current_iso and (current_iso == iso.path or current_iso.endswith('/' ~ iso.name)) %}selected{% endif %}>
-            {{ iso.name }}
-          </option>
-        {% endfor %}
-      </select>
-    </label>
-
-    <label class="form-check-row">
-      <input name="live" type="checkbox" value="true">
-      <span>Apply while VM is running</span>
-    </label>
-
-    <div class="action-row">
-      <button class="btn btn-primary" type="submit">
-        <i class="fa-solid fa-compact-disc"></i>
-        Attach ISO
-      </button>
+    <div class="current-media-card">
+      <span class="muted">Currently loaded</span>
+      <strong>{% if current_iso %}<code>{{ current_iso }}</code>{% else %}No ISO attached{% endif %}</strong>
     </div>
-  </form>
-
-  <form class="vm-eject-form" method="post" action="/vms/{{ vm.name }}/iso/eject">
-    <label class="form-check-row">
-      <input name="live" type="checkbox" value="true">
-      <span>Apply live</span>
-    </label>
-
-    <button type="submit" class="btn btn-outline-light">
-      Eject ISO
-    </button>
-  </form>
-</div>
-
-<div id="backup" class="panel vm-detail-card">
-  <div class="section-title vm-section-title">
-    <div>
-      <h2><i class="fa-solid fa-box-archive"></i> Backup</h2>
-      <p class="muted">Queue a backup job and review recent archives.</p>
-    </div>
-
-    <a class="btn btn-outline-light" href="/backups">
-      <i class="fa-solid fa-box-archive"></i>
-      Backup Console
-    </a>
-  </div>
-
-  <form class="stacked-form vm-backup-form" method="post" action="/vms/{{ vm.name }}/backup">
-    <label>
-      Target
-      <select name="target_name">
-        {% for target in backup_targets %}
-          <option value="{{ target.name }}" {% if not target.enabled or not target.writable %}disabled{% endif %}>
-            {{ target.name }} - {{ target.kind }}{% if not target.writable %} (not writable){% endif %}
-          </option>
-        {% endfor %}
-      </select>
-    </label>
-
-    <div class="form-check-grid">
-      <label class="form-check-row">
-        <input name="require_shutdown" type="checkbox" value="true" checked>
-        <span>Require shutdown</span>
+    <form class="stacked-form" method="post" action="/vms/{{ vm.name }}/iso/attach">
+      <label>ISO image
+        <select name="iso_path" required>
+          <option value="" {% if current_iso is not defined or not current_iso %}selected{% endif %}>Choose ISO...</option>
+          {% for iso in isos %}<option value="{{ iso.path }}" {% if current_iso is defined and current_iso and (current_iso == iso.path or current_iso.endswith('/' ~ iso.name)) %}selected{% endif %}>{{ iso.name }}</option>{% endfor %}
+        </select>
       </label>
-
-      <label class="form-check-row">
-        <input name="compress" type="checkbox" value="true" checked>
-        <span>Compress</span>
-      </label>
-    </div>
-
-    <button class="btn btn-primary w-100" type="submit">
-      <i class="fa-solid fa-box-archive"></i>
-      Queue Backup
-    </button>
-  </form>
-
-  <div class="table-scroll compact-table-wrap">
-    <table class="data-table vm-detail-table compact-table">
-      <thead>
-        <tr>
-          <th>Created</th>
-          <th>Archive</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for backup in backups[:5] %}
-          <tr>
-            <td>{{ backup.created_at }}</td>
-            <td><code>{{ backup.archive or backup.path }}</code></td>
-          </tr>
-        {% else %}
-          <tr>
-            <td colspan="2" class="empty-cell">No backups for this VM.</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+      <label class="check"><input name="live" type="checkbox" value="true"> Apply while VM is running</label>
+      <div class="action-row"><button type="submit">Attach ISO</button></div>
+    </form>
+    <form class="inline-form vm-inline-safe" method="post" action="/vms/{{ vm.name }}/iso/eject">
+      <label class="check"><input name="live" type="checkbox" value="true"> Apply live</label><button type="submit" class="secondary">Eject ISO</button>
+    </form>
   </div>
-</div>
+
+  <div id="backup" class="panel vm-detail-card">
+    <div class="section-title vm-section-title">
+      <div>
+        <h2>Backup</h2>
+        <p class="muted">Queue a backup job and review recent archives.</p>
+      </div>
+      <a class="button secondary" href="/backups">Backup Console</a>
+    </div>
+    <form class="stacked-form" method="post" action="/vms/{{ vm.name }}/backup">
+      <label>Target
+        <select name="target_name">
+          {% for target in backup_targets %}<option value="{{ target.name }}" {% if not target.enabled or not target.writable %}disabled{% endif %}>{{ target.name }} - {{ target.kind }}{% if not target.writable %} (not writable){% endif %}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="grid two">
+        <label class="check"><input name="require_shutdown" type="checkbox" value="true" checked> Require shutdown</label>
+        <label class="check"><input name="compress" type="checkbox" value="true" checked> Compress</label>
+      </div>
+      <button type="submit">Queue Backup</button>
+    </form>
+    <div class="table-scroll compact-table-wrap">
+      <table class="data-table vm-detail-table compact-table">
+        <thead><tr><th>Created</th><th>Archive</th></tr></thead>
+        <tbody>{% for backup in backups[:5] %}<tr><td>{{ backup.created_at }}</td><td><code>{{ backup.archive or backup.path }}</code></td></tr>{% else %}<tr><td colspan="2" class="empty-cell">No backups for this VM.</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </div>
 </section>
 
 <section id="snapshots" class="panel vm-snapshot-panel">
   <div class="section-title vm-section-title">
     <div>
-      <h2><i class="fa-solid fa-camera"></i>Snapshots</h2>
-      <p class="muted">Create, revert, and delete VM snapshots.</p>
+      <h2>Snapshots</h2>
+      <p class="muted">Create, revert, and delete VM snapshots. Revert is destructive to current state, because time travel remains badly implemented.</p>
     </div>
   </div>
   <form class="inline-form vm-snapshot-form" method="post" action="/vms/{{ vm.name }}/snapshots">
     <input name="snapshot_name" placeholder="snapshot-name" required>
     <input name="description" placeholder="optional description">
-    <button class="btn btn-primary" type="submit"><i class="fa-solid fa-camera"></i>Create Snapshot</button>
+    <button type="submit">Create Snapshot</button>
   </form>
   <div class="table-scroll">
     <table class="data-table vm-detail-table snapshot-table">
@@ -329,32 +289,32 @@
   <div class="panel vm-detail-card">
     <div class="section-title vm-section-title">
       <div>
-        <h2><i class="fa-solid fa-copy"></i>Clone</h2>
+        <h2>Clone</h2>
         <p class="muted">Use the dedicated clone page for validation before creating a new guest.</p>
       </div>
-      <a class="btn btn-outline-light" href="/vms/{{ vm.name }}/clone"><i class="fa-solid fa-copy"></i>Open Clone Page</a>
+      <a class="button secondary" href="/vms/{{ vm.name }}/clone">Open Clone Page</a>
     </div>
   </div>
 
   <div id="danger" class="panel danger-zone vm-detail-card">
     <div class="section-title vm-section-title">
       <div>
-        <h2><i class="fa-solid fa-triangle-exclamation"></i>Danger Zone</h2>
-        <p class="muted">Deletion is isolated behind a confirmation page.</p>
+        <h2>Danger Zone</h2>
+        <p class="muted">Deletion is isolated behind a confirmation page. A shocking outbreak of good judgment.</p>
       </div>
-      <a class="btn btn-danger" href="/vms/{{ vm.name }}/delete-confirm"><i class="fa-solid fa-trash"></i>Delete VM</a>
+      <a class="button danger" href="/vms/{{ vm.name }}/delete-confirm">Delete VM</a>
     </div>
   </div>
 </section>
 
-<!--<section class="panel vm-xml-panel">
+<section class="panel vm-xml-panel">
   <div class="section-title vm-section-title">
     <div>
-      <h2><i class="fa-solid fa-file-lines"></i>Raw libvirt XML</h2>
+      <h2>Raw libvirt XML</h2>
       <p class="muted">Advanced inspection only. Do not manually edit around snapshot-safe service methods.</p>
     </div>
   </div>
   <details><summary>Show XML</summary><pre>{{ vm.xml }}</pre></details>
-</section>-->
+</section>
 {% endif %}
 {% endblock %}

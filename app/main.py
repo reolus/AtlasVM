@@ -1,6 +1,5 @@
 from pathlib import Path
 from shutil import copyfileobj
-from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -27,7 +26,6 @@ from app.services.libvirt_service import LibvirtService, VMCreateRequest
 from app.services.network_phase8 import NetworkPhase8Service
 from app.services.dashboard_overview import dashboard_overview
 from app.services.vm_inventory import list_vm_inventory
-from app.services.ui_sidebar import build_sidebar_context
 from app.services.vm_disk_management import (
     add_disk_to_vm,
     get_vm_disks,
@@ -74,6 +72,21 @@ from app.services.host_mgmt_network import (
     save_plan,
 )
 from app.services.network_reconcile import reconcile_all
+from app.services.node_registry import (
+    delete_node,
+    ensure_local_node_registered,
+    get_node,
+    get_node_token,
+    list_nodes,
+    upsert_node,
+    validate_node_token,
+    local_node_self,
+)
+from app.services.node_inventory import host_health, node_inventory
+from app.services.node_client import enrich_nodes, node_inventory_remote, node_vm_detail_remote, node_vm_action_remote
+from app.services.multinode_vm_inventory import multinode_vm_inventory, local_multinode_inventory
+from app.services.node_compatibility import all_node_compatibility, compatibility_for_node_id
+from app.services.remote_vm_actions import local_vm_detail_payload, perform_local_vm_action
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -94,7 +107,6 @@ def favicon():
     return FileResponse('app/static/favicon.ico')
 
 templates = Jinja2Templates(directory='app/templates')
-templates.env.globals['build_sidebar_context'] = build_sidebar_context
 
 
 
@@ -242,14 +254,11 @@ def _redirect(url: str, message: str | None = None, error: str | None = None) ->
 
 
 def _view_context(request: Request, user: str | None = None) -> dict:
-    current_path = request.url.path if request else ''
     return {
         'request': request,
         'app_name': settings.app_name,
         'current_user': user,
-        'user': user,
         'current_role': get_user_role(user) if user else None,
-        'sidebar': build_sidebar_context(current_path),
         'message': request.query_params.get('message'),
         'error': request.query_params.get('error'),
     }
@@ -375,21 +384,8 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: str = Depen
     backups = BackupService().list_backups()[:5]
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(10).all()
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(10).all()
-    context = _view_context(request, user)
-    context.update({
-        'dashboard': dashboard_overview(),
-        'host': host,
-        'vms': vms,
-        'pools': pools,
-        'networks': networks,
-        'isos': isos,
-        'zfs': zfs,
-        'backups': backups,
-        'events': events,
-        'tasks': tasks,
-        'error': error,
-    })
-    return templates.TemplateResponse('dashboard.html', context)
+    return templates.TemplateResponse('dashboard.html', {
+            'dashboard': dashboard_overview(),'request': request, 'app_name': settings.app_name, 'host': host, 'vms': vms, 'pools': pools, 'networks': networks, 'isos': isos, 'zfs': zfs, 'backups': backups, 'events': events, 'tasks': tasks, 'error': error})
 
 
 @app.get('/vms/new', response_class=HTMLResponse)
@@ -401,11 +397,11 @@ def new_vm_form(request: Request, user: str = Depends(require_user)):
 
 
 @app.post('/vms/new')
-def create_vm_form(name: str = Form(...), memory_mb: int = Form(...), vcpus: int = Form(...), disk_gb: int = Form(...), storage_pool: str = Form(...), network: str = Form(...), iso_path: str = Form(''), description: str = Form(''), firmware: str = Form('bios'), start_after_create: bool = Form(False), autostart: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_operator)):
+def create_vm_form(name: str = Form(...), memory_mb: int = Form(...), vcpus: int = Form(...), disk_gb: int = Form(...), storage_pool: str = Form(...), network: str = Form(...), iso_path: str = Form(''), description: str = Form(''), firmware: str = Form('bios'), boot_order: str = Form('disk'), boot_menu: bool = Form(False), boot_delay_seconds: int = Form(0), start_after_create: bool = Form(False), autostart: bool = Form(False), db: Session = Depends(get_db), user: str = Depends(require_operator)):
     lv = LibvirtService()
     task = start_task(db, user, 'create_vm', name)
     try:
-        payload = VMCreate(name=name, memory_mb=memory_mb, vcpus=vcpus, disk_gb=disk_gb, storage_pool=storage_pool, network=network, iso_path=iso_path or None, description=description or None, firmware=firmware, start_after_create=start_after_create, autostart=autostart)
+        payload = VMCreate(name=name, memory_mb=memory_mb, vcpus=vcpus, disk_gb=disk_gb, storage_pool=storage_pool, network=network, iso_path=iso_path or None, description=description or None, firmware=firmware, boot_order=boot_order, boot_menu=boot_menu, boot_delay_ms=max(0, min(int(boot_delay_seconds or 0) * 1000, 60000)), start_after_create=start_after_create, autostart=autostart)
         lv.create_vm(VMCreateRequest(**payload.model_dump()))
         log_event(db, user, 'create_vm', name, 'Created VM from web form')
         finish_task(db, task, 'success', 'VM created')
@@ -458,6 +454,33 @@ def vm_edit_basic(name: str, memory_mb: int = Form(...), vcpus: int = Form(...),
     except Exception as exc:
         finish_task(db, task, 'failed', str(exc))
         log_event(db, user, 'edit_vm_failed', name, str(exc))
+        raise
+    finally:
+        lv.close()
+    return RedirectResponse(url=f'/vms/{name}', status_code=303)
+
+
+
+@app.post('/vms/{name}/boot')
+@app.post('/ui/vms/{name}/boot')
+def vm_update_boot_options(
+    name: str,
+    boot_order: str = Form('disk'),
+    boot_menu: bool = Form(False),
+    boot_delay_seconds: int = Form(0),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_operator),
+):
+    lv = LibvirtService()
+    task = start_task(db, user, 'update_boot_options', name)
+    try:
+        boot_delay_ms = max(0, min(int(boot_delay_seconds or 0) * 1000, 60000))
+        lv.update_vm_boot_options(name, boot_order=boot_order, boot_menu=boot_menu, boot_delay_ms=boot_delay_ms)
+        log_event(db, user, 'update_boot_options', name, f'Boot order={boot_order}, boot delay={boot_delay_ms}ms')
+        finish_task(db, task, 'success', 'Boot options updated')
+    except Exception as exc:
+        finish_task(db, task, 'failed', str(exc))
+        log_event(db, user, 'update_boot_options_failed', name, str(exc))
         raise
     finally:
         lv.close()
@@ -573,68 +596,28 @@ def vm_delete_confirm_legacy(name: str, confirm_name: str = Form(...), delete_di
     return RedirectResponse(url='/', status_code=303)
 
 
-def _console_unavailable_message(name: str) -> str:
-    return (
-        f'VM {name} does not currently expose an active VNC console. '
-        'Start the VM and confirm the guest has a VNC graphics device configured. '
-        'AtlasVM will not undefine/redefine the domain to add one because that is not snapshot-safe.'
-    )
-
-
-def _console_page_url(name: str, *, console_url: str = '', error: str = '') -> str:
-    """Build the console page redirect without leaking nested noVNC query args.
-
-    noVNC URLs contain their own ?, &, and = characters. Those must be
-    encoded as the value of AtlasVM's outer url= query parameter, otherwise
-    Starlette/FastAPI split the noVNC port/autoconnect parameters off and the
-    browser receives a broken URL such as vnc.html?host=HOST with no port.
-    """
-    if console_url:
-        return f'/vms/{quote(name, safe="")}/console?url={quote(console_url, safe="")}'
-    if error:
-        return f'/vms/{quote(name, safe="")}/console?error={quote(error, safe="")}'
-    return f'/vms/{quote(name, safe="")}/console'
-
-
 @app.post('/ui/vms/{name}/console')
 def vm_console_start(name: str, request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     lv = LibvirtService()
     try:
         display = lv.vnc_display(name)
         if not display:
-            message = _console_unavailable_message(name)
-            log_event(db, user, 'start_console_unavailable', name, message)
-            return RedirectResponse(url=_console_page_url(name, error=message), status_code=303)
+            raise RuntimeError('VM does not expose a VNC console')
         host = request.url.hostname
         session = ConsoleService().start_novnc(name, display, request_host=host)
-        log_event(db, user, 'start_console_standalone', name, session.url)
-        return RedirectResponse(url=session.url, status_code=303)
-    except Exception as exc:
-        message = f'Unable to start console for {name}: {exc}'
-        log_event(db, user, 'start_console_failed', name, str(exc))
-        return RedirectResponse(url=_console_page_url(name, error=message), status_code=303)
+        log_event(db, user, 'start_console', name, session.url)
+        return RedirectResponse(url=f'/vms/{name}/console?url={session.url}', status_code=303)
     finally:
         lv.close()
 
 
 @app.get('/vms/{name}/console', response_class=HTMLResponse)
-def vm_console_page(name: str, request: Request, url: str = '', error: str = '', user: str = Depends(require_user)):
-    vm = None
-    try:
-        lv = LibvirtService()
-        try:
-            vm = lv.get_vm(name)
-        finally:
-            lv.close()
-    except Exception:
-        vm = None
+def vm_console_page(name: str, request: Request, url: str = '', user: str = Depends(require_user)):
     return templates.TemplateResponse('console.html', {'request': request,
             'public_host': _atlasvm_public_host(request),
             'public_scheme': _atlasvm_public_scheme(request),
             'console_base_url': _atlasvm_console_base_url(request), 'app_name': settings.app_name, 'name': name,
         'vlan_tag': _atlasvm_get_network_vlan_tag(name), 'console_url': url,
-            'console_error': error,
-            'vm': vm,
             'user': user,
         })
 
@@ -695,6 +678,10 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
             lv.force_stop_vm(name)
         elif action == 'reboot':
             lv.reboot_vm(name)
+        elif action == 'reset':
+            lv.reset_vm(name)
+        elif action == 'power-cycle':
+            lv.power_cycle_vm(name)
         elif action == 'autostart-on':
             lv.set_autostart(name, True)
         elif action == 'autostart-off':
@@ -712,14 +699,11 @@ def vm_action(request: Request, name: str, action: str, db: Session = Depends(ge
         elif action == 'console':
             display = lv.vnc_display(name)
             if not display:
-                message = _console_unavailable_message(name)
-                finish_task(db, task, 'failed', message)
-                log_event(db, user, 'open_console_unavailable', name, message)
-                return RedirectResponse(url=_console_page_url(name, error=message), status_code=303)
+                raise ValueError(f'VM {name} does not have an active VNC display. Make sure it is running and has VNC graphics enabled.')
             host = request.headers.get('host', '').split(':')[0]
             session = ConsoleService().start_novnc(name, display, request_host=host)
-            finish_task(db, task, 'success', f'Console opened standalone: {session.url}')
-            log_event(db, user, 'open_console_standalone', name, session.url)
+            finish_task(db, task, 'success', f'Console opened: {session.url}')
+            log_event(db, user, 'open_console', name, session.url)
             return RedirectResponse(url=session.url, status_code=303)
         elif action == 'delete-confirm':
             return RedirectResponse(url=f'/vms/{name}/delete-confirm', status_code=303)
@@ -1525,13 +1509,14 @@ def iscsi_lvm_thin_apply(
 @app.get('/vms', response_class=HTMLResponse)
 def vms_page(
     request: Request,
-    user: str = Depends(require_operator),
+    node: str = Query('all'),
+    user: str = Depends(require_admin),
 ):
     return templates.TemplateResponse(
         'vms.html',
         {
             **_view_context(request, user),
-            'inventory': list_vm_inventory(),
+            'inventory': multinode_vm_inventory(selected_node_id=node),
         },
     )
 
@@ -1577,17 +1562,17 @@ def vm_disk_remove(
 @app.get('/events', response_class=HTMLResponse)
 def events_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     events = db.query(EventLog).order_by(EventLog.id.desc()).limit(250).all()
-    context = _view_context(request, user)
-    context.update({'events': events})
-    return templates.TemplateResponse('events.html', context)
+    return templates.TemplateResponse('events.html', {'request': request, 'app_name': settings.app_name, 'events': events,
+            'user': user,
+        })
 
 
 @app.get('/tasks', response_class=HTMLResponse)
 def tasks_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_user)):
     tasks = db.query(TaskLog).order_by(TaskLog.id.desc()).limit(250).all()
-    context = _view_context(request, user)
-    context.update({'tasks': tasks})
-    return templates.TemplateResponse('tasks.html', context)
+    return templates.TemplateResponse('tasks.html', {'request': request, 'app_name': settings.app_name, 'tasks': tasks,
+            'user': user,
+        })
 
 
 @app.get('/backups', response_class=HTMLResponse)
@@ -1696,7 +1681,8 @@ def restore_backup_as_new(
 @app.get('/zfs', response_class=HTMLResponse)
 def zfs_page(request: Request, user: str = Depends(require_user)):
     return templates.TemplateResponse('zfs.html', {
-            **_view_context(request, user),
+            'request': request,
+            'app_name': settings.app_name,
             'zfs': zfs_service.pool_status(),
             'datasets': zfs_service.datasets(),
             'snapshots': zfs_service.snapshots(),
@@ -1769,43 +1755,225 @@ def backups_prune(vm_name: str = Form(''), keep_last: int | None = Form(None), t
 
 
 
+def _require_node_token(request: Request) -> None:
+    token = request.headers.get('X-AtlasVM-Node-Token') or request.query_params.get('node_token')
+    if not validate_node_token(token):
+        raise HTTPException(status_code=401, detail='Invalid or missing AtlasVM node token.')
 
+
+@app.get('/api/node/self')
+def api_node_self(request: Request):
+    _require_node_token(request)
+    return local_node_self()
+
+
+@app.get('/api/node/health')
+def api_node_health(request: Request):
+    _require_node_token(request)
+    return {'ok': True, 'self': local_node_self(), 'health': host_health()}
+
+
+@app.get('/api/node/inventory')
+def api_node_inventory(request: Request):
+    _require_node_token(request)
+    data = node_inventory()
+    data['ok'] = True
+    return data
+
+
+
+@app.get('/api/node/vms')
+def api_node_vms(request: Request):
+    _require_node_token(request)
+    data = local_multinode_inventory()
+    return {'ok': True, 'self': local_node_self(), 'vm_inventory': data}
+
+
+
+
+@app.get('/api/node/vms/{vm_name}')
+def api_node_vm_detail(vm_name: str, request: Request):
+    _require_node_token(request)
+    try:
+        return local_vm_detail_payload(vm_name)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.post('/api/node/vms/{vm_name}/{action}')
+def api_node_vm_action(vm_name: str, action: str, request: Request):
+    _require_node_token(request)
+    try:
+        return perform_local_vm_action(vm_name, action)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+@app.get('/api/node/doctor')
+def api_node_doctor(request: Request):
+    _require_node_token(request)
+    return {'ok': True, 'self': local_node_self(), 'checks': run_doctor()}
+
+
+@app.get('/api/node/compatibility')
+def api_node_compatibility(request: Request):
+    _require_node_token(request)
+    return {'ok': True, 'self': local_node_self(), 'compatibility': all_node_compatibility()}
+
+
+@app.get('/nodes', response_class=HTMLResponse)
+def nodes_page(request: Request, user: str = Depends(require_admin)):
+    ensure_local_node_registered()
+    nodes = enrich_nodes(list_nodes(), include_inventory=False)
+    return templates.TemplateResponse(
+        'nodes.html',
+        {
+            **_view_context(request, user),
+            'nodes': nodes,
+            'local_token': get_node_token(),
+        },
+    )
+
+
+@app.get('/nodes/new', response_class=HTMLResponse)
+def node_new_page(request: Request, user: str = Depends(require_admin)):
+    return templates.TemplateResponse('node_form.html', {**_view_context(request, user)})
+
+
+@app.post('/nodes')
+def node_save(
+    name: str = Form(''),
+    api_url: str = Form(...),
+    token: str = Form(''),
+    role: str = Form('worker'),
+    enabled: str = Form(''),
+    user: str = Depends(require_admin),
+):
+    try:
+        node = upsert_node(name=name, api_url=api_url, token=token, role=role, enabled=str(enabled).lower() in {'1','true','yes','on'})
+        return _redirect('/nodes', message=f"Saved node {node.get('name')}.")
+    except Exception as exc:
+        return _redirect('/nodes/new', error=str(exc))
+
+
+@app.post('/nodes/register-local')
+def nodes_register_local(user: str = Depends(require_admin)):
+    try:
+        node = ensure_local_node_registered()
+        return _redirect('/nodes', message=f"Registered local node {node.get('name')}.")
+    except Exception as exc:
+        return _redirect('/nodes', error=str(exc))
+
+
+
+@app.get('/nodes/compatibility', response_class=HTMLResponse)
+def nodes_compatibility_page(request: Request, user: str = Depends(require_admin)):
+    result = all_node_compatibility()
+    return templates.TemplateResponse(
+        'node_compatibility.html',
+        {
+            **_view_context(request, user),
+            'mode': 'all',
+            'result': result,
+        },
+    )
+
+
+@app.get('/nodes/{node_id}/compatibility', response_class=HTMLResponse)
+def node_compatibility_page(node_id: str, request: Request, user: str = Depends(require_admin)):
+    node = get_node(node_id)
+    if not node:
+        return _redirect('/nodes', error='Node not found.')
+    result = compatibility_for_node_id(node_id)
+    return templates.TemplateResponse(
+        'node_compatibility.html',
+        {
+            **_view_context(request, user),
+            'mode': 'single',
+            'node': node,
+            'result': result,
+        },
+    )
+
+
+
+@app.get('/nodes/{node_id}/vms/{vm_name}', response_class=HTMLResponse)
+def remote_vm_detail_page(node_id: str, vm_name: str, request: Request, user: str = Depends(require_operator)):
+    node = get_node(node_id)
+    if not node:
+        return _redirect('/nodes', error='Node not found.')
+
+    local_self = local_node_self()
+    if node.get('node_id') == local_self.get('node_id') or node.get('local'):
+        return RedirectResponse(url=f'/vms/{vm_name}', status_code=303)
+
+    result = node_vm_detail_remote(node, vm_name)
+    return templates.TemplateResponse(
+        'remote_vm_detail.html',
+        {
+            **_view_context(request, user),
+            'node': node,
+            'vm_name': vm_name,
+            'result': result,
+            'vm': result.get('vm') if result.get('ok') else None,
+            'error': request.query_params.get('error') or ('' if result.get('ok') else result.get('error', 'Remote VM lookup failed.')),
+            'message': request.query_params.get('message'),
+        },
+    )
+
+
+@app.post('/nodes/{node_id}/vms/{vm_name}/{action}')
+def remote_vm_action(node_id: str, vm_name: str, action: str, user: str = Depends(require_operator)):
+    from urllib.parse import quote
+
+    node = get_node(node_id)
+    if not node:
+        return _redirect('/nodes', error='Node not found.')
+
+    if action not in {'start', 'shutdown', 'reboot', 'poweroff'}:
+        return _redirect(f'/nodes/{node_id}/vms/{vm_name}', error=f'Unsupported remote VM action: {action}')
+
+    local_self = local_node_self()
+    try:
+        if node.get('node_id') == local_self.get('node_id') or node.get('local'):
+            result = perform_local_vm_action(vm_name, action)
+        else:
+            result = node_vm_action_remote(node, vm_name, action)
+
+        if not result.get('ok'):
+            raise RuntimeError(result.get('error') or 'Remote VM action failed.')
+
+        message = result.get('message') or f'{action} completed for {vm_name}.'
+        return RedirectResponse(
+            url=f'/nodes/{node_id}/vms/{quote(vm_name, safe="")}?message={quote(message)}',
+            status_code=303,
+        )
+    except Exception as exc:
+        return RedirectResponse(
+            url=f'/nodes/{node_id}/vms/{quote(vm_name, safe="")}?error={quote(str(exc))}',
+            status_code=303,
+        )
+
+@app.get('/nodes/{node_id}', response_class=HTMLResponse)
+def node_detail_page(node_id: str, request: Request, user: str = Depends(require_admin)):
+    node = get_node(node_id)
+    if not node:
+        return _redirect('/nodes', error='Node not found.')
+    inventory = node_inventory_remote(node)
+    compatibility = compatibility_for_node_id(node_id)
+    return templates.TemplateResponse('node_detail.html', {**_view_context(request, user), 'node': node, 'inventory': inventory, 'compatibility': compatibility})
+
+
+@app.post('/nodes/{node_id}/delete')
+def node_delete(node_id: str, user: str = Depends(require_admin)):
+    delete_node(node_id)
+    return _redirect('/nodes', message='Node deleted from registry.')
 
 @app.get('/doctor', response_class=HTMLResponse)
 def doctor_page(request: Request, user: str = Depends(require_user)):
     checks = run_doctor()
-    context = _view_context(request, user)
-    context.update({'checks': checks})
-    return templates.TemplateResponse('doctor.html', context)
-
-
-
-@app.get('/admin', response_class=HTMLResponse)
-def admin_overview_page(request: Request, db: Session = Depends(get_db), user: str = Depends(require_admin)):
-    try:
-        user_count = db.query(UserAccount).count()
-    except Exception:
-        user_count = 0
-    try:
-        audit_count = db.query(EventLog).count()
-    except Exception:
-        audit_count = 0
-    try:
-        pending_tasks = db.query(TaskLog).filter(TaskLog.status.in_(['running', 'queued', 'waiting', 'in_progress'])).count()
-    except Exception:
-        pending_tasks = 0
-    try:
-        backup_count = len(BackupService().list_backups())
-    except Exception:
-        backup_count = 0
-    context = _view_context(request, user)
-    context.update({
-        'user_count': user_count,
-        'audit_count': audit_count,
-        'pending_tasks': pending_tasks,
-        'backup_count': backup_count,
-    })
-    return templates.TemplateResponse('admin.html', context)
+    return templates.TemplateResponse('doctor.html', {'request': request, 'app_name': settings.app_name, 'checks': checks,
+            'user': user,
+        })
 
 
 @app.get('/settings', response_class=HTMLResponse)
@@ -1857,7 +2025,7 @@ def settings_update(
 ):
     try:
         updates = {
-            'app_name': app_name.strip() or 'AtlasVM Community Edition',
+            'app_name': app_name.strip() or 'AtlasVM',
             'default_storage_pool': default_storage_pool.strip(),
             'iso_pool': iso_pool.strip(),
             'default_network': default_network.strip(),
@@ -2024,13 +2192,17 @@ def audit_page(
     except Exception as exc:
         error = str(exc)
 
-    context = _view_context(request, user)
-    context.update({
-        'events': events,
-        'error': error,
-        'message': request.query_params.get('message'),
-    })
-    return templates.TemplateResponse('audit.html', context)
+    return templates.TemplateResponse(
+        'audit.html',
+        {
+            'request': request,
+            'app_name': settings.app_name,
+            'events': events,
+            'user': user,
+            'error': error,
+            'message': request.query_params.get('message'),
+        },
+    )
 
 @app.get('/vms/{name}/delete-confirm')
 def vm_delete_confirm(
@@ -2297,7 +2469,7 @@ def _atlasvm_build_interface_xml(network_name: str, mac: str = '', model_type: s
     # VM-side VLAN tags are intentionally not written into the guest interface XML.
     # VLAN placement belongs on the host bridge/libvirt network layer, not inside
     # each VM NIC definition. Keeping it out avoids libvirt warnings and gives
-    # VM networking one sane place to reason about tags.
+    # multi-node networking one sane place to reason about tags.
     iface = ET.Element("interface", {"type": "network"})
 
     if mac:
@@ -2620,106 +2792,3 @@ def task_kill(task_id: int, db: Session = Depends(get_db), user: str = Depends(r
     finally:
         conn.close()
 
-from fastapi.exceptions import RequestValidationError
-from starlette.exceptions import HTTPException as StarletteHTTPException
-
-def _error_context(
-    request: Request,
-    status_code: int,
-    title: str,
-    message: str,
-    user: str | None = None,
-):
-    return {
-        "request": request,
-        "app_name": settings.app_name,
-        "status_code": status_code,
-        "title": title,
-        "message": message,
-        "user": user,
-    }
-
-
-def _current_user_from_request(request: Request) -> str | None:
-    """
-    Best-effort user lookup for error pages.
-
-    Do not enforce auth here. Error handlers must be able to render even when
-    the user is not logged in, has a bad session, or angered the permission goblin.
-    """
-    try:
-        return request.session.get("user")
-    except Exception:
-        return None
-
-
-@app.exception_handler(StarletteHTTPException)
-async def themed_http_exception_handler(request: Request, exc: StarletteHTTPException):
-    status_code = int(exc.status_code)
-    detail = str(exc.detail or "")
-
-    titles = {
-        400: "Bad Request",
-        401: "Sign In Required",
-        403: "Access Denied",
-        404: "Page Not Found",
-        405: "Method Not Allowed",
-        409: "Conflict",
-        422: "Invalid Request",
-        500: "Server Error",
-    }
-
-    if status_code == 401:
-        title = "Sign In Required"
-        message = "You need to sign in before accessing this page."
-    elif status_code == 403:
-        title = "Access Denied"
-        message = detail or "Your account does not have permission to access this page."
-    elif status_code == 404:
-        title = "Page Not Found"
-        message = "The page you requested does not exist."
-    else:
-        title = titles.get(status_code, "Request Error")
-        message = detail or "AtlasVM could not complete the request."
-
-    return templates.TemplateResponse(
-        "error.html",
-        _error_context(
-            request=request,
-            status_code=status_code,
-            title=title,
-            message=message,
-            user=_current_user_from_request(request),
-        ),
-        status_code=status_code,
-    )
-
-
-@app.exception_handler(RequestValidationError)
-async def themed_validation_exception_handler(request: Request, exc: RequestValidationError):
-    return templates.TemplateResponse(
-        "error.html",
-        _error_context(
-            request=request,
-            status_code=422,
-            title="Invalid Request",
-            message="The request was missing required information or included invalid values.",
-            user=_current_user_from_request(request),
-        ),
-        status_code=422,
-    )
-
-
-@app.exception_handler(Exception)
-async def themed_unhandled_exception_handler(request: Request, exc: Exception):
-    return templates.TemplateResponse(
-        "error.html",
-        _error_context(
-            request=request,
-            status_code=500,
-            title="AtlasVM Server Error",
-            message="AtlasVM hit an unexpected error while processing the request.",
-            user=_current_user_from_request(request),
-        ),
-        status_code=500,
-    )

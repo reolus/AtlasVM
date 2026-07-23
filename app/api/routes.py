@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.models import DeleteVMOptions, SnapshotCreate, VMBackupRequest, VMCloneRequest, VMCreate, VMEdit
+from app.api.models import DeleteVMOptions, SnapshotCreate, VMBootOptions, VMBackupRequest, VMCloneRequest, VMCreate, VMEdit
 from app.core.auth import require_user
 from app.core.database import EventLog, TaskLog, get_db
 from app.core.logging import log_event
@@ -187,6 +187,24 @@ def clone_vm(name: str, payload: VMCloneRequest, db: Session = Depends(get_db), 
         lv.close()
 
 
+
+@router.put('/vms/{name}/boot')
+def update_vm_boot_options(name: str, payload: VMBootOptions, db: Session = Depends(get_db), user: str = Depends(require_user)) -> dict:
+    lv = libvirt_or_500()
+    task = start_task(db, user, 'update_boot_options', name)
+    try:
+        vm = lv.update_vm_boot_options(name, payload.boot_order, payload.boot_menu, payload.boot_delay_ms)
+        log_event(db, user, 'update_boot_options', name, f'Boot order={payload.boot_order}, boot delay={payload.boot_delay_ms}ms')
+        finish_task(db, task, 'success', 'Boot options updated')
+        return vm
+    except Exception as exc:
+        log_event(db, user, 'update_boot_options_failed', name, str(exc))
+        finish_task(db, task, 'failed', str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        lv.close()
+
+
 @router.post('/vms/{name}/backup')
 def backup_vm(name: str, payload: VMBackupRequest = VMBackupRequest(), db: Session = Depends(get_db), user: str = Depends(require_user)) -> dict:
     task = start_task(db, user, 'backup_vm', name)
@@ -213,6 +231,10 @@ def vm_action(name: str, action: str, db: Session = Depends(get_db), user: str =
             lv.force_stop_vm(name)
         elif action == 'reboot':
             lv.reboot_vm(name)
+        elif action == 'reset':
+            lv.reset_vm(name)
+        elif action == 'power-cycle':
+            lv.power_cycle_vm(name)
         elif action == 'autostart-on':
             lv.set_autostart(name, True)
         elif action == 'autostart-off':
