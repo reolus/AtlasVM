@@ -1,5 +1,6 @@
 from pathlib import Path
 from shutil import copyfileobj
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -611,7 +612,7 @@ def vm_console_start(name: str, request: Request, db: Session = Depends(get_db),
         host = request.url.hostname
         session = ConsoleService().start_novnc(name, display, request_host=host)
         log_event(db, user, 'start_console', name, session.url)
-        return RedirectResponse(url=f'/vms/{name}/console?url={session.url}', status_code=303)
+        return RedirectResponse(url=f'/vms/{name}/console?url={quote(session.url, safe="")}', status_code=303)
     finally:
         lv.close()
 
